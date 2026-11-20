@@ -855,14 +855,14 @@ export default function App() {
           <div className="project-history-list">
             {projectHistory.map((entry, index) => {
               const changes = entry.details?.changes;
-              const title = entry.action === "project.updated" ? "Архив обновлён" : entry.action === "project.created" ? "Проект добавлен" : entry.action === "project.renamed" ? "Название изменено" : "Проект изменён";
+              const title = entry.action === "project.updated" ? "Архив обновлён" : entry.action === "project.created" ? "Проект добавлен" : entry.action === "project.renamed" ? "Название изменено" : entry.action === "project.file_updated" ? "Файл отредактирован" : "Проект изменён";
               return <article className="project-history-item" key={entry.action + entry.created_at + index}>
                 <div className="project-history-item-top"><b>{title}</b><time>{formatDate(entry.created_at)}</time></div>
                 {changes ? <>
                   <div className="project-change-stats"><span className="added">+{changes.added_count || 0} добавлено</span><span className="changed">~{changes.changed_count || 0} изменено</span><span className="removed">−{changes.removed_count || 0} удалено</span></div>
                   {(["added_files", "changed_files", "removed_files"] as const).map((key) => (changes[key] || []).length > 0 && <div className="project-change-group" key={key}><small>{key === "added_files" ? "ДОБАВЛЕННЫЕ" : key === "changed_files" ? "ИЗМЕНЁННЫЕ" : "УДАЛЁННЫЕ"}</small>{(changes[key] || []).slice(0, 8).map(path => <code key={path}>{path}</code>)}</div>)}
                   {changes.sample_truncated && <small className="project-history-muted">Показаны первые 50 путей каждой категории.</small>}
-                </> : <p className="project-history-muted">{entry.details?.file_count ? `${entry.details.file_count} файлов · ${((entry.details.expanded_bytes || 0) / 1048576).toFixed(1)} MiB` : entry.details?.name || "Событие библиотеки проектов"}</p>}
+                </> : <p className="project-history-muted">{entry.details?.file_count ? `${entry.details.file_count} файлов · ${((entry.details.expanded_bytes || 0) / 1048576).toFixed(1)} MiB` : entry.details?.path || entry.details?.name || "Событие библиотеки проектов"}</p>}
               </article>;
             })}
             {projectHistory.length === 0 && <p className="project-history-muted">История пока пуста. После обновления ZIP здесь появится сравнение версий.</p>}
