@@ -104,7 +104,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         raw_items = parsed.get("explanations", [])
         if not isinstance(raw_items, list):
             raise ValueError("explanations must be an array")
-    except (httpx.HTTPError, KeyError, IndexError, TypeError, json.JSONDecodeError, ValueError) as exc:
+    except (ExplanationGatewayError, httpx.HTTPError, KeyError, IndexError, TypeError, json.JSONDecodeError, ValueError) as exc:
         return {
             "status": "failed",
             "message": "AI explanation provider failed or returned an invalid response.",
