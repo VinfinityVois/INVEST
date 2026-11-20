@@ -214,3 +214,5 @@ def test_engine_reports_node_timing_and_progress():
     assert progress[0]["completed_nodes"] == 1
     assert progress[0]["total_nodes"] == 1
     assert progress[0]["status"] == "running"
+    assert progress[0]["total_findings"] == 0
+    assert progress[0]["severity"] == {}
