@@ -3,8 +3,9 @@ import time
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
+from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
 from app.sources.archive import ArchiveValidationError, extract_project_archive
+from app.sources.run_files import RunSourceFileError, resolve_run_source_file
+from app.scanners.presentation import _redact
 from app.db import SessionLocal
 from app.models import AuditLog, Finding, FindingState, Workflow, WorkflowRun, WorkflowVersion
 from app.workflows.registry import registry
@@ -369,6 +372,69 @@ def list_run_findings(run_id: UUID):
             }
             for item in rows
         ]
+
+
+@app.get("/api/runs/{run_id}/findings/{fingerprint}/source")
+def get_finding_source(
+    run_id: UUID,
+    fingerprint: str,
+    start_line: int | None = Query(default=None, ge=1),
+    end_line: int | None = Query(default=None, ge=1),
+):
+    """Return a bounded, redacted source window for a finding belonging to this run."""
+    if not fingerprint or len(fingerprint) > 64:
+        raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
+    if start_line is not None and end_line is not None and end_line < start_line:
+        raise HTTPException(status_code=422, detail="end_line must be >= start_line")
+    if start_line is not None and end_line is not None and end_line - start_line + 1 > 300:
+        raise HTTPException(status_code=422, detail="Source window is limited to 300 lines")
+
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        finding = session.scalar(
+            select(Finding).where(Finding.run_id == run_id, Finding.fingerprint == fingerprint).limit(1)
+        )
+        if finding is None:
+            raise HTTPException(status_code=404, detail="Finding not found in this run")
+        payload = finding.payload if isinstance(finding.payload, dict) else {}
+        try:
+            source_file = resolve_run_source_file(
+                settings.workspace_root, run.graph_snapshot, run.result or {}, finding.path
+            )
+            if source_file.stat().st_size > 1_000_000:
+                raise RunSourceFileError("Source file exceeds the 1 MiB preview limit")
+            content = source_file.read_text(encoding="utf-8")
+        except (RunSourceFileError, OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Source file is unavailable for this run") from exc
+
+        lines = content.splitlines()
+        total_lines = len(lines)
+        center = finding.line or 1
+        first = start_line if start_line is not None else max(1, center - 40)
+        last = end_line if end_line is not None else min(total_lines, first + 99)
+        if first > max(total_lines, 1):
+            raise HTTPException(status_code=416, detail="Requested source window is outside the file")
+        last = min(last, first + 299, total_lines)
+        redact_entire_file = str(payload.get("category", "")).upper() == "SECRET"
+        window = [
+            {
+                "line": number,
+                "text": "[REDACTED: secret-bearing source file]" if redact_entire_file else _redact(lines[number - 1])[:1000],
+                "is_finding": number == finding.line,
+            }
+            for number in range(first, last + 1)
+        ]
+        return {
+            "path": finding.path,
+            "finding_line": finding.line,
+            "start_line": first,
+            "end_line": last,
+            "total_lines": total_lines,
+            "redacted": redact_entire_file,
+            "lines": window,
+        }
 
 
 @app.post("/api/workflows/run")
