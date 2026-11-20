@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.scanners.secrets import scan_directory
+from app.scanners.sca import scan_gradle_project
 from app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
@@ -100,7 +101,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
             else:
                 findings = scan_directory(artifacts[source_node])
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
-        elif node.type in {"scan.sca", "scan.sast"}:
+        elif node.type == "scan.sca":
+            source_node = next(
+                (parent for parent in incoming[node_id] if parent in artifacts), None
+            )
+            if source_node is None:
+                output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
+            else:
+                findings = scan_gradle_project(artifacts[source_node])
+                output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
+        elif node.type == "scan.sast":
             output = {"status": "scanner_pending", "findings": []}
         elif node.type == "findings.merge":
             merged = []
