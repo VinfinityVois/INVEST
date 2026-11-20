@@ -9,10 +9,13 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
+type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
+type ProjectFile = { path: string; size: number };
+type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; lines: Array<{ line: number; text: string }> };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
@@ -115,6 +118,13 @@ export default function App() {
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [projectWorkspaceOpen, setProjectWorkspaceOpen] = useState(false);
+  const [projectFilesLoading, setProjectFilesLoading] = useState(false);
+  const [uploadingProjectId, setUploadingProjectId] = useState<string | null>(null);
   const [gitUrl, setGitUrl] = useState("");
   const [gitRef, setGitRef] = useState("");
   const [search, setSearch] = useState("");
@@ -287,6 +297,88 @@ export default function App() {
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
   }), [nodes, edges]);
 
+
+  const refreshProjects = async () => {
+    const response = await fetch("/api/projects");
+    if (!response.ok) throw new Error("Не удалось обновить библиотеку проектов");
+    setProjects(await response.json());
+  };
+  const uploadProjectArchive = async (file: File | undefined, projectId?: string) => {
+    if (!file) return;
+    setUploading(true); setUploadingProjectId(projectId || "new");
+    try {
+      const form = new FormData(); form.append("file", file);
+      const response = await fetch(projectId ? `/api/projects/${projectId}/archive` : "/api/projects", {
+        method: projectId ? "PUT" : "POST", body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+      await refreshProjects();
+      if (activeProject?.id === data.id) {
+        setActiveProject(data);
+        const filesResponse = await fetch(`/api/projects/${data.id}/files`);
+        if (filesResponse.ok) setProjectFiles((await filesResponse.json()).files || []);
+        setProjectFilePreview(null);
+      }
+      setResult((projectId ? "Проект обновлён" : "Проект добавлен") + " · " + data.name + " · " + data.file_count + " файлов");
+    } catch (error) { setResult("Ошибка загрузки проекта: " + String(error)); }
+    finally { setUploading(false); setUploadingProjectId(null); }
+  };
+  const openProject = async (project: Project) => {
+    setProjectFilesLoading(true);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/files`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось открыть проект");
+      setActiveProject(data.project || project);
+      setProjectFiles(data.files || []);
+      setProjectFilePreview(null);
+      const sourceNode = nodes.find(node => node.data.category === "Source");
+      if (sourceNode) updateNode(sourceNode.id, {
+        nodeType: "source.upload", label: project.name, description: "Постоянный проект из библиотеки. Источник доступен всем связанным сканерам.",
+        config: { path: project.workspace_path }, executionStatus: "idle", executionDetail: "", executionNotes: [], executionSeverity: undefined,
+      });
+      setProjectWorkspaceOpen(true);
+      setResult("Открыт проект · " + project.name + " · источник подключён к workflow.");
+    } catch (error) { setResult("Не удалось открыть проект: " + String(error)); }
+    finally { setProjectFilesLoading(false); }
+  };
+  const renameProject = async (project: Project) => {
+    const name = window.prompt("Новое название проекта:", project.name);
+    if (name === null || !name.trim()) return;
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось переименовать проект");
+      await refreshProjects();
+      if (activeProject?.id === project.id) setActiveProject(data);
+      setResult("Проект переименован · " + data.name);
+    } catch (error) { setResult("Ошибка переименования: " + String(error)); }
+  };
+  const deleteProject = async (project: Project) => {
+    if (!window.confirm(`Удалить проект «${project.name}» и все его файлы? Это действие необратимо.`)) return;
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Не удалось удалить проект");
+      await refreshProjects();
+      if (activeProject?.id === project.id) {
+        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectWorkspaceOpen(false);
+      }
+      setResult("Проект удалён · " + project.name);
+    } catch (error) { setResult("Ошибка удаления: " + String(error)); }
+  };
+  const openProjectFile = async (file: ProjectFile) => {
+    if (!activeProject) return;
+    setProjectFilesLoading(true);
+    try {
+      const params = new URLSearchParams({ path: file.path });
+      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
+      setProjectFilePreview(data);
+    } catch (error) { setResult("Просмотр файла: " + String(error)); }
+    finally { setProjectFilesLoading(false); }
+  };
   const uploadArchive = async (file?: File) => {
     if (!file) return;
     setUploading(true); setFindings([]);
