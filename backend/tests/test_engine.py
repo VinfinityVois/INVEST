@@ -96,8 +96,8 @@ def test_git_source_is_passed_to_secrets_scanner(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     repository = workspace / "git-test"
     repository.mkdir(parents=True)
-    (repository / "application.properties").write_text(
-        'spring.datasource.password=GitSourcePasswordValue123',
+    (repository / "application.yml").write_text(
+        'spring:\n  datasource:\n    password: "GitSourcePasswordValue123"',
         encoding="utf-8",
     )
     monkeypatch.setattr(settings, "workspace_root", str(workspace))
