@@ -31,6 +31,15 @@ type SecurityTrend = {
   summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
 };
 type RunComparison = {
+  source_comparison?: {
+    status: "complete" | "partial" | "unavailable";
+    comparable_sources: number;
+    added_count: number | null; removed_count: number | null; modified_count: number | null;
+    added_files: string[]; removed_files: string[]; modified_files: string[];
+    sample_truncated: boolean;
+    sources: Array<{ node_id: string; status: string; added_count: number | null; removed_count: number | null; modified_count: number | null; added_files: string[]; removed_files: string[]; modified_files: string[] }>;
+    correlation_note: string;
+  };
   cache_comparison?: { before_hits: number; after_hits: number; delta_hits: number; before_scanners: number; after_scanners: number };
   scanner_comparison?: Array<{ node_id: string; type: string; before_present: boolean; after_present: boolean; before_cached: boolean | null; after_cached: boolean | null; before_cache_age_seconds?: number | null; after_cache_age_seconds?: number | null; source_changed: boolean | null; before_findings: number; after_findings: number; added_findings: number; removed_findings: number }>;
   from_run: { id: string; status: string; finished_at?: string | null };
@@ -1281,6 +1290,27 @@ export default function App() {
               <div><span>ПОПАДАНИЯ В КЭШ</span><b>{runComparison.cache_comparison.before_hits} → {runComparison.cache_comparison.after_hits}</b><small>{runComparison.cache_comparison.delta_hits > 0 ? "+" : ""}{runComparison.cache_comparison.delta_hits} к предыдущему запуску</small></div>
               <div><span>СКАНЕРОВ</span><b>{runComparison.cache_comparison.before_scanners} → {runComparison.cache_comparison.after_scanners}</b><small>сопоставление по ID блока</small></div>
             </div>}
+            {runComparison.source_comparison && <div className="run-diff-group run-source-diff">
+              <b>ИЗМЕНЕНИЯ ИСХОДНИКОВ</b>
+              {runComparison.source_comparison.status === "unavailable" ? <p>Снимки файлов недоступны для одного или обоих запусков. Для старых запусков сравнение исходников не восстанавливается задним числом.</p> : <>
+                <div className="run-source-stats">
+                  <span><strong>+{runComparison.source_comparison.added_count ?? "—"}</strong> добавлено</span>
+                  <span><strong>~{runComparison.source_comparison.modified_count ?? "—"}</strong> изменено</span>
+                  <span><strong>−{runComparison.source_comparison.removed_count ?? "—"}</strong> удалено</span>
+                </div>
+                {runComparison.source_comparison.sources.map(source => <div className="run-source-node" key={source.node_id}>
+                  <code>{source.node_id}</code>
+                  <small>{source.status === "compared" ? "снимки сопоставлены" : source.status === "manifest_incomplete" ? "снимок неполный — точный diff недоступен" : source.status === "source_added" ? "источник появился только в новом запуске" : "источник отсутствует в новом запуске"}</small>
+                </div>)}
+                {(["added_files", "modified_files", "removed_files"] as const).map(kind => runComparison.source_comparison[kind].length > 0 && <div className="run-source-file-list" key={kind}>
+                  <span>{kind === "added_files" ? "ДОБАВЛЕННЫЕ ФАЙЛЫ" : kind === "modified_files" ? "ИЗМЕНЁННЫЕ ФАЙЛЫ" : "УДАЛЁННЫЕ ФАЙЛЫ"}</span>
+                  {runComparison.source_comparison[kind].slice(0, 20).map(file => <code key={file}>{file}</code>)}
+                </div>)}
+                {runComparison.source_comparison.sample_truncated && <small>Список файлов ограничен первыми 100 путями в каждой категории.</small>}
+                {runComparison.source_comparison.status === "partial" && <p className="run-diff-warning">Часть источников не имеет полного снимка; выводы по этим источникам не делаются.</p>}
+              </>}
+              <small className="run-diff-footnote">{runComparison.source_comparison.correlation_note}</small>
+            </div>}
             {runComparison.scanner_comparison && runComparison.scanner_comparison.length > 0 && <div className="run-diff-group run-scanner-diff">
               <b>СКАНЕРЫ · КЭШ И ИЗМЕНЕНИЯ НАХОДОК</b>
               {runComparison.scanner_comparison.map(item => <div key={item.node_id}>
@@ -1295,7 +1325,7 @@ export default function App() {
             {(runComparison.limitations.before_findings_truncated || runComparison.limitations.after_findings_truncated) && <p className="run-diff-warning">Один из отчётов содержит более 5000 находок: сравнение ограничено сохранённой выборкой.</p>}
             {(["new", "not_observed_before", "persisting", "disappeared", "not_observed"] as const).map(kind => runComparison.findings[kind].length > 0 && <div className="run-diff-group" key={kind}>
               <b>{kind === "new" ? "НОВЫЕ НАХОДКИ" : kind === "not_observed_before" ? "НЕ ПОДТВЕРЖДЕНЫ ПРЕДЫДУЩИМ СКАНОМ" : kind === "persisting" ? "СОХРАНЯЮЩИЕСЯ НАХОДКИ" : kind === "disappeared" ? "ОТСУТСТВУЮТ В ПОЛНОМ СКАНЕ" : "НЕ НАБЛЮДАЛИСЬ В ЧАСТИЧНОМ ЗАПУСКЕ"}</b>
-              {runComparison.findings[kind].slice(0, 30).map(item => <div key={item.fingerprint}><span>{item.severity || "—"}</span><code>{item.rule_id || item.fingerprint.slice(0, 12)}</code><small>{item.path}{item.line ? ":" + item.line : ""}</small>{kind === "persisting" && (item as RunComparison["findings"]["persisting"][number]).severity_changed && <i>{(item as RunComparison["findings"]["persisting"][number]).previous_severity || "—"} → {item.severity || "—"}</i>}</div>)}
+              {runComparison.findings[kind].slice(0, 30).map(item => <div key={item.fingerprint}><span>{item.severity || "—"}</span><code>{item.rule_id || item.fingerprint.slice(0, 12)}</code><small>{item.path}{item.line ? ":" + item.line : ""}{item.source_relation && item.source_relation !== "unknown" ? " · " + (item.source_relation === "added_file" ? "новый файл" : item.source_relation === "modified_file" ? "изменённый файл" : item.source_relation === "removed_file" ? "удалённый файл" : "без изменений") : ""}</small>{kind === "persisting" && (item as RunComparison["findings"]["persisting"][number]).severity_changed && <i>{(item as RunComparison["findings"]["persisting"][number]).previous_severity || "—"} → {item.severity || "—"}</i>}</div>)}
               {runComparison.findings[kind].length > 30 && <small>Показаны первые 30 из {runComparison.findings[kind].length}.</small>}
             </div>)}
             {runComparison.nodes.length > 0 && <div className="run-diff-group"><b>ИЗМЕНЕНИЯ ПО БЛОКАМ</b>{runComparison.nodes.map(item => <div key={item.node_id}><code>{item.node_id}</code><small>{item.change === "changed" ? Object.keys(item.fields || {}).join(" · ") : item.change === "added_to_trace" ? "появился в трассировке" : "нет в трассировке нового запуска"}</small></div>)}</div>}
