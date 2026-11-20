@@ -1,15 +1,20 @@
 import json
+import httpx
 
 from app.ai import explanations
 from app.config import settings
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self.payload = payload
+        self.status_code = status_code
 
     def raise_for_status(self):
-        return None
+        if self.status_code >= 400:
+            request = httpx.Request("POST", "https://llm.example/v1/chat/completions")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError("provider error", request=request, response=response)
 
     def json(self):
         return self.payload
@@ -124,7 +129,6 @@ def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch)
         response = httpx.Response(401, request=request)
         raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
 
-    import httpx
     monkeypatch.setattr(explanations.httpx, "post", fake_post)
     result = explanations.explain_findings([{"fingerprint": "abc"}])
 
