@@ -3,7 +3,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
-from app.sources.archive import ArchiveValidationError, extract_project_archive
+from app.sources.archive import MAX_ARCHIVE_BYTES, ArchiveValidationError, extract_project_archive
 
 
 def make_zip(entries):
@@ -60,3 +60,25 @@ def test_rejects_duplicate_paths(tmp_path):
         extract_project_archive(archive, tmp_path)
 
     assert list(tmp_path.iterdir()) == []
+
+
+
+def test_archive_upload_limit_is_300_mib():
+    assert MAX_ARCHIVE_BYTES == 300 * 1024 * 1024
+
+
+def test_extracts_into_nested_project_library_path(tmp_path):
+    archive = make_zip([("src/Main.kt", "fun main() = Unit")])
+    result = extract_project_archive(archive, tmp_path, "projects/project-demo")
+
+    assert result["path"] == "projects/project-demo"
+    assert (tmp_path / "projects" / "project-demo" / "src" / "Main.kt").exists()
+
+
+def test_rejects_existing_extraction_destination(tmp_path):
+    destination = tmp_path / "projects" / "project-existing"
+    destination.mkdir(parents=True)
+    archive = make_zip([("src/Main.kt", "fun main() = Unit")])
+
+    with pytest.raises(ArchiveValidationError):
+        extract_project_archive(archive, tmp_path, "projects/project-existing")
