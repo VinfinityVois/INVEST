@@ -1260,7 +1260,6 @@ export default function App() {
           <small className="upload-hint">Только HTTPS и точное совпадение с ALLOWED_TARGETS в корневом .env. Клонирование выполняется worker при запуске.</small>
         </div>
           </div>}
-        </section>
         </section>}
         {leftTab === "nodes" && <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
           <button className="palette-folder-head components-folder-head" onClick={() => setComponentsFolderOpen(value => !value)} aria-expanded={componentsFolderOpen}>
