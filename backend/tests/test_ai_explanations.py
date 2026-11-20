@@ -245,3 +245,30 @@ def test_gateway_configuration_required_reports_not_attempted(monkeypatch):
     assert result["analyzed_count"] == 0
     assert result["skipped_count"] == 2
     assert result["coverage"] == 0.0
+
+
+
+def test_provider_status_redacts_credentials_and_query_from_base_url(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://user:embedded-secret@llm.example/v1?token=query-secret")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "separate-secret")
+
+    status = explanations.provider_configuration()
+
+    assert status["endpoint_valid"] is False
+    assert status["base_url"] == "https://llm.example/v1"
+    assert "embedded-secret" not in str(status)
+    assert "query-secret" not in str(status)
+    assert "separate-secret" not in str(status)
+
+
+def test_gateway_rejects_credentials_embedded_in_base_url(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://user:secret@llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert result["status"] == "failed"
+    assert "не должен содержать логин" in result["message"]
+    assert "secret" not in result["message"]
