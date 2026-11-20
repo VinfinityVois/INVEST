@@ -50,7 +50,8 @@ def scan_text(text,path):
   concat=re.search(r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\+\s*([A-Za-z_]\w*)",text)
   if concat and concat.group(2) in declarations and concat.group(3) in declarations:
    first,first_line=declarations[concat.group(2)]; second,second_line=declarations[concat.group(3)]
-   add("reconstructed_auth_token","recoverable-token",first_line,first+second,"MEDIUM",.91,max(first_line,second_line))
+   use_line=next((i for i,line in enumerate(lines,1) if re.search(r"setBearerAuth\\s*\\(\\s*"+re.escape(concat.group(1))+r"\\s*\\)",line)),max(first_line,second_line))
+   add("reconstructed_auth_token","recoverable-token",first_line,first+second,"MEDIUM",.91,use_line)
  return sorted(findings,key=lambda x:(x["line"],x["rule_id"]))
 def scan_directory(root):
  root=Path(root).resolve(); results=[]; count=0
