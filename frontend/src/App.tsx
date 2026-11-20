@@ -16,6 +16,7 @@ type Manifest = { type: string; title: string; category: string; description: st
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
+type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
 type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; lines: Array<{ line: number; text: string }> };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
@@ -125,6 +126,8 @@ export default function App() {
   const [projectFileQuery, setProjectFileQuery] = useState("");
   const [expandedProjectDirs, setExpandedProjectDirs] = useState<Set<string>>(new Set());
   const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryEntry[]>([]);
+  const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   const [projectWorkspaceOpen, setProjectWorkspaceOpen] = useState(false);
   const [projectFilesLoading, setProjectFilesLoading] = useState(false);
   const [uploadingProjectId, setUploadingProjectId] = useState<string | null>(null);
@@ -337,6 +340,8 @@ export default function App() {
           })));
         }
         setProjectFilePreview(null);
+        const historyResponse = await fetch(`/api/projects/${data.id}/history`);
+        if (historyResponse.ok) setProjectHistory(await historyResponse.json());
       }
       setResult((projectId ? "Проект обновлён" : "Проект добавлен") + " · " + data.name + " · " + data.file_count + " файлов");
     } catch (error) { setResult("Ошибка загрузки проекта: " + String(error)); }
@@ -351,6 +356,10 @@ export default function App() {
       setActiveProject(data.project || project);
       setProjectFiles(data.files || []);
       setProjectFilePreview(null);
+      setProjectHistoryOpen(false);
+      const historyResponse = await fetch(`/api/projects/${project.id}/history`);
+      if (historyResponse.ok) setProjectHistory(await historyResponse.json());
+      else setProjectHistory([]);
       const sourceNode = nodes.find(node => node.data.category === "Source");
       if (sourceNode) updateNode(sourceNode.id, {
         nodeType: "source.upload", label: project.name, description: "Постоянный проект из библиотеки. Источник доступен всем связанным сканерам.",
@@ -389,7 +398,7 @@ export default function App() {
           label: "Project source", description: "Выбери ZIP из библиотеки или настрой Git-источник.", config: {},
           executionStatus: "idle", executionDetail: "", executionNotes: [], executionSeverity: undefined,
         });
-        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectWorkspaceOpen(false);
+        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectHistory([]); setProjectHistoryOpen(false); setProjectWorkspaceOpen(false);
       }
       setResult("Проект удалён · " + project.name);
     } catch (error) { setResult("Ошибка удаления: " + String(error)); }
@@ -781,7 +790,7 @@ export default function App() {
     </div>
     {projectWorkspaceOpen && activeProject && <div className="project-workspace-backdrop">
       <section className="project-workspace">
-        <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
+        <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectHistoryOpen(value => !value)}><RefreshCw size={13}/> История {projectHistory.length ? `· ${projectHistory.length}` : ""}</button><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
         <div className="project-workspace-body">
           <aside className="project-file-tree"><div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>{projectFilesLoading && <small className="source-loading">Загрузка…</small>}
             {projectFiles.length > 0 && projectTree.length > 0 && <div className="project-tree-list">{renderProjectTree(projectTree)}</div>}
@@ -792,6 +801,24 @@ export default function App() {
             {projectFilePreview ? <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
         </div>
+        {projectHistoryOpen && <aside className="project-history-drawer">
+          <div className="project-history-head"><div><b>История проекта</b><small>Последние 30 событий · сравнение ZIP</small></div><button className="ghost" onClick={() => setProjectHistoryOpen(false)}><X size={13}/></button></div>
+          <div className="project-history-list">
+            {projectHistory.map((entry, index) => {
+              const changes = entry.details?.changes;
+              const title = entry.action === "project.updated" ? "Архив обновлён" : entry.action === "project.created" ? "Проект добавлен" : entry.action === "project.renamed" ? "Название изменено" : "Проект изменён";
+              return <article className="project-history-item" key={entry.action + entry.created_at + index}>
+                <div className="project-history-item-top"><b>{title}</b><time>{formatDate(entry.created_at)}</time></div>
+                {changes ? <>
+                  <div className="project-change-stats"><span className="added">+{changes.added_count || 0} добавлено</span><span className="changed">~{changes.changed_count || 0} изменено</span><span className="removed">−{changes.removed_count || 0} удалено</span></div>
+                  {(["added_files", "changed_files", "removed_files"] as const).map((key) => (changes[key] || []).length > 0 && <div className="project-change-group" key={key}><small>{key === "added_files" ? "ДОБАВЛЕННЫЕ" : key === "changed_files" ? "ИЗМЕНЁННЫЕ" : "УДАЛЁННЫЕ"}</small>{(changes[key] || []).slice(0, 8).map(path => <code key={path}>{path}</code>)}</div>)}
+                  {changes.sample_truncated && <small className="project-history-muted">Показаны первые 50 путей каждой категории.</small>}
+                </> : <p className="project-history-muted">{entry.details?.file_count ? `${entry.details.file_count} файлов · ${((entry.details.expanded_bytes || 0) / 1048576).toFixed(1)} MiB` : entry.details?.name || "Событие библиотеки проектов"}</p>}
+              </article>;
+            })}
+            {projectHistory.length === 0 && <p className="project-history-muted">История пока пуста. После обновления ZIP здесь появится сравнение версий.</p>}
+          </div>
+        </aside>}
         <footer className="project-workspace-footer"><span>READ-ONLY SOURCE VIEW · SECRET MASKING ENABLED</span><span>Запуск анализа доступен на основном холсте</span></footer>
       </section>
     </div>}
