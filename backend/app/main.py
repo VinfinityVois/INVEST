@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.background import BackgroundTask
@@ -989,6 +989,75 @@ def execute_saved_workflow(workflow_id: UUID, force_full_scan: bool = Query(defa
             "workflow_version": version.version,
             "status": "queued",
             "findings_count": 0,
+        }
+
+
+def _require_ci_token(provided_token: str) -> None:
+    configured_token = settings.ci_trigger_token
+    if not configured_token:
+        raise HTTPException(status_code=503, detail="CI trigger is not configured")
+    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
+        raise HTTPException(status_code=401, detail="Invalid CI token")
+
+
+@app.post("/api/ci/workflows/{workflow_id}/runs", status_code=202)
+def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
+    """Queue a saved workflow for CI; requires a dedicated secret and an explicit Security Gate."""
+    _require_ci_token(x_ci_token)
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        version = session.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        gate_nodes = [node for node in graph.nodes if node.type == "ci.gate"]
+        if len(gate_nodes) != 1:
+            raise HTTPException(status_code=422, detail="CI workflow must contain exactly one Security Gate node")
+        snapshot = graph.model_dump(mode="json")
+        snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": False}
+        run = WorkflowRun(
+            workflow_id=workflow_id,
+            status="queued",
+            source="ci",
+            graph_snapshot=snapshot,
+        )
+        session.add(run)
+        session.commit()
+        return {
+            "run_id": str(run.id),
+            "workflow_id": str(workflow_id),
+            "workflow_version": version.version,
+            "status": "queued",
+        }
+
+
+@app.get("/api/ci/runs/{run_id}")
+def get_ci_run(run_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
+    """Return a minimal CI polling contract without exposing findings or source excerpts."""
+    _require_ci_token(x_ci_token)
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        result = run.result if isinstance(run.result, dict) else {}
+        gate = result.get("security_gate") if isinstance(result, dict) else None
+        return {
+            "id": str(run.id),
+            "workflow_id": str(run.workflow_id) if run.workflow_id else None,
+            "status": run.status,
+            "security_gate": gate,
+            "error": run.error,
+            "finished_at": run.finished_at,
         }
 
 
