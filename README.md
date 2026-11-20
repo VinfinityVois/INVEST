@@ -67,3 +67,17 @@ ALLOWED_TARGETS=https://github.com/example/training
 - Секреты не должны попадать в логи, API-ответы или AI-контекст в открытом виде.
 - Git scanning разрешён только для точных URL из allowlist.
 - ZIP/Git checkout выполняется в workspace; запуск проектных файлов запрещён.
+
+
+## Security Gate
+
+The `ci.gate` node evaluates the merged findings using explicit severity thresholds.
+By default, `CRITICAL` and `HIGH` findings produce `BLOCK` and fail the workflow;
+`MEDIUM`, `LOW`, and `INFO` produce `WARN`; no findings produce `PASS`.
+The node accepts `block_on` and `warn_on` arrays in its configuration. The run
+response and telemetry expose the decision, severity counts, and active thresholds.
+Invalid severity names are rejected instead of silently weakening the policy.
+
+The gate is deterministic and does not suppress or alter scanner findings. Finding
+lifecycle states (accepted risk, fixed, false positive) and their audit history are
+a separate persistence/API stage and are not yet applied to gate decisions.
