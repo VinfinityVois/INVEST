@@ -235,6 +235,8 @@ export default function App() {
   const [showResult, setShowResult] = useState(true);
   const [configText, setConfigText] = useState("{}");
   const [configError, setConfigError] = useState("");
+  const [scheduleStatus, setScheduleStatus] = useState<{enabled:boolean;configured:boolean;cron?:string;timezone?:string;next_run_at?:string|null;last_run_at?:string|null} | null>(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
