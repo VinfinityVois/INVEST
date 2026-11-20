@@ -113,6 +113,29 @@ def _parse_response(response: httpx.Response) -> list:
     return raw_items
 
 
+def _source_evidence(finding: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build evidence only from scanner-provided context; never from model prose."""
+    rows = finding.get("code_context")
+    if not isinstance(rows, list):
+        return []
+    evidence = []
+    for row in rows[:7]:
+        if not isinstance(row, dict):
+            continue
+        line = row.get("line")
+        if not isinstance(line, int) or line < 1:
+            continue
+        text = str(row.get("text", "")).strip()
+        if not text:
+            continue
+        evidence.append({
+            "line": line,
+            "text": text[:350],
+            "is_finding": bool(row.get("is_finding", line == finding.get("line"))),
+        })
+    return evidence
+
+
 def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
     provider = provider_configuration()
     if not provider["configured"]:
@@ -205,13 +228,23 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             confidence = max(0.0, min(1.0, float(item.get("confidence", 0.0))))
         except (TypeError, ValueError):
             confidence = 0.0
+        source_finding = next(
+            (finding for finding in selected if str(finding.get("fingerprint")) == fingerprint),
+            {},
+        )
+        root_cause = str(item.get("root_cause", "")).strip()[:3000]
+        impact = str(item.get("impact", "")).strip()[:2000]
+        recommendation = str(item.get("recommendation", "")).strip()[:3000]
+        if not root_cause or not impact or not recommendation:
+            continue
         normalized.append({
             "fingerprint": fingerprint,
-            "root_cause": str(item.get("root_cause", ""))[:3000],
-            "impact": str(item.get("impact", ""))[:2000],
-            "recommendation": str(item.get("recommendation", ""))[:3000],
+            "root_cause": root_cause,
+            "impact": impact,
+            "recommendation": recommendation,
             "confidence": confidence,
-            "evidence_limits": str(item.get("evidence_limits", ""))[:2000],
+            "evidence_limits": str(item.get("evidence_limits", "")).strip()[:2000],
+            "source_evidence": _source_evidence(source_finding),
         })
         seen.add(fingerprint)
 
@@ -220,7 +253,12 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "findings": findings,
         "explanations": normalized,
         "explained_count": len(normalized),
+        "unexplained_count": len(selected) - len(normalized),
+        "coverage": round(len(normalized) / len(selected), 3),
         "provider": "openai-compatible",
         "model": settings.llm_model,
-        "message": None if normalized else "Провайдер ответил, но не вернул объяснения с совпадающими fingerprint.",
+        "message": (
+            None if len(normalized) == len(selected)
+            else f"Модель дала проверенные объяснения для {len(normalized)} из {len(selected)} находок. Остальные оставлены без AI-вывода."
+        ),
     }
