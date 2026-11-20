@@ -31,7 +31,7 @@ type SecurityTrend = {
   summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
 };
 type RunComparison = {
-  source_comparison?: {
+  source_comparison: {
     status: "complete" | "partial" | "unavailable";
     comparable_sources: number;
     added_count: number | null; removed_count: number | null; modified_count: number | null;
@@ -45,11 +45,11 @@ type RunComparison = {
   from_run: { id: string; status: string; finished_at?: string | null };
   to_run: { id: string; status: string; finished_at?: string | null };
   findings: {
-    new: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
-    not_observed_before: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
-    persisting: Array<{ fingerprint: string; rule_id?: string; severity?: string; previous_severity?: string; severity_changed: boolean; path?: string; line?: number | null }>;
-    disappeared: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
-    not_observed: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
+    new: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null; source_relation?: "added_file" | "modified_file" | "removed_file" | "unchanged_file" | "unknown" }>;
+    not_observed_before: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null; source_relation?: "added_file" | "modified_file" | "removed_file" | "unchanged_file" | "unknown" }>;
+    persisting: Array<{ fingerprint: string; rule_id?: string; severity?: string; previous_severity?: string; severity_changed: boolean; path?: string; line?: number | null; source_relation?: "added_file" | "modified_file" | "removed_file" | "unchanged_file" | "unknown" }>;
+    disappeared: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null; source_relation?: "added_file" | "modified_file" | "removed_file" | "unchanged_file" | "unknown" }>;
+    not_observed: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null; source_relation?: "added_file" | "modified_file" | "removed_file" | "unchanged_file" | "unknown" }>;
     absence_confirmed: boolean;
     summary: { new: number; not_observed_before: number; persisting: number; disappeared: number; not_observed: number };
   };
