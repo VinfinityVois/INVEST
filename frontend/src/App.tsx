@@ -1008,7 +1008,7 @@ export default function App() {
       if (expiryInput === null) return;
       if (expiryInput.trim()) {
         const parsedExpiry = new Date(expiryInput.trim());
-        if (Number.isNaN(parsedExpiry.getTime()) || !/(Z|[+-]\\d{2}:?\\d{2})$/i.test(expiryInput.trim())) {
+        if (Number.isNaN(parsedExpiry.getTime()) || !/(Z|[+-][0-9]{2}:?[0-9]{2})$/i.test(expiryInput.trim())) {
           window.alert("Укажите корректную дату ISO 8601 с часовым поясом, например 2027-01-31T23:59:59Z.");
           return;
         }
