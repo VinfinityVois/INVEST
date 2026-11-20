@@ -109,3 +109,110 @@ def test_due_schedule_enqueues_one_regular_workflow_run(monkeypatch):
     assert runs[0].graph_snapshot == version.graph
     assert schedule.next_run_at > now
     assert schedule.last_run_at is not None
+
+
+def test_due_schedule_is_enqueued_once_and_next_run_is_advanced(monkeypatch):
+    from datetime import timedelta
+    from uuid import uuid4
+
+    import app.queue as queue
+    from app.models import WorkflowRun
+
+    now = datetime.now(timezone.utc)
+    schedule = type("Schedule", (), {
+        "enabled": True,
+        "next_run_at": now - timedelta(seconds=1),
+        "timezone": "UTC",
+        "cron_expression": "* * * * *",
+        "workflow_id": uuid4(),
+        "last_run_at": None,
+    })()
+    version = type("Version", (), {"graph": {"name": "scheduled demo", "nodes": [], "edges": []}})()
+
+    class Rows:
+        def all(self):
+            return [schedule]
+
+    class Session:
+        def __init__(self):
+            self.added = []
+            self.committed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def scalars(self, _statement):
+            return Rows()
+
+        def scalar(self, _statement):
+            return version
+
+        def add(self, item):
+            self.added.append(item)
+
+        def commit(self):
+            self.committed = True
+
+    session = Session()
+    monkeypatch.setattr(queue, "SessionLocal", lambda: session)
+
+    count = queue.enqueue_due_schedules()
+
+    assert count == 1
+    assert session.committed is True
+    assert schedule.next_run_at > now
+    assert schedule.last_run_at is not None
+    runs = [item for item in session.added if isinstance(item, WorkflowRun)]
+    assert len(runs) == 1
+    assert runs[0].status == "queued"
+    assert runs[0].source == "schedule"
+    assert runs[0].graph_snapshot == version.graph
+
+
+def test_due_schedule_with_missing_version_is_disabled(monkeypatch):
+    from datetime import timedelta
+
+    import app.queue as queue
+
+    schedule = type("Schedule", (), {
+        "enabled": True,
+        "next_run_at": datetime.now(timezone.utc) - timedelta(seconds=1),
+        "timezone": "UTC",
+        "cron_expression": "* * * * *",
+        "workflow_id": None,
+        "last_run_at": None,
+    })()
+
+    class Rows:
+        def all(self):
+            return [schedule]
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def scalars(self, _statement):
+            return Rows()
+
+        def scalar(self, _statement):
+            return None
+
+        def add(self, _item):
+            raise AssertionError("No run should be created without a saved workflow version")
+
+        def commit(self):
+            self.committed = True
+
+    session = Session()
+    monkeypatch.setattr(queue, "SessionLocal", lambda: session)
+
+    assert queue.enqueue_due_schedules() == 0
+    assert schedule.enabled is False
+    assert schedule.next_run_at is None
+    assert session.committed is True
