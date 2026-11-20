@@ -32,7 +32,7 @@ type Telemetry = {
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
-  trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
+  trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; duration_ms?: number; findings?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
@@ -186,6 +186,7 @@ export default function App() {
   const [category, setCategory] = useState("Все");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("source");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [traceFilter, setTraceFilter] = useState("all");
   const [showResult, setShowResult] = useState(true);
   const [configText, setConfigText] = useState("{}");
   const [configError, setConfigError] = useState("");
@@ -1057,7 +1058,10 @@ export default function App() {
         {telemetry?.trace && telemetry.trace.length > 0 && <section className="execution-timeline">
           <div className="run-history-heading"><div><span className="section-caption">EXECUTION TRACE</span><b>Хронология выполнения</b></div><span>{telemetry.trace.length} этапов</span></div>
           <p className="execution-timeline-hint">Этапы показаны в порядке, который вернул исполнитель. Выбери запись, чтобы открыть соответствующий блок графа.</p>
-          <ol>{telemetry.trace.map((step, index) => {
+          <div className="trace-filters" role="group" aria-label="Фильтр событий">
+            {[["all","Все"],["error","Ошибки"],["warning","Предупреждения"],["blocked","Блокировки"]].map(([value,label]) => <button type="button" key={value} className={traceFilter === value ? "is-active" : ""} onClick={() => setTraceFilter(value)}>{label}</button>)}
+          </div>
+          <ol>{telemetry.trace.filter(step => traceFilter === "all" || (step.diagnostic_level || (step.status === "failed" ? "error" : step.status === "blocked" ? "blocked" : "info")) === traceFilter).map((step, index) => {
             const result = telemetry.node_results?.[step.node_id];
             const node = nodes.find(item => item.id === step.node_id);
             const status = step.status || result?.status || "unknown";
@@ -1065,8 +1069,8 @@ export default function App() {
             return <li key={step.node_id + "-" + index} className={"trace-item trace-" + status}>
               <button type="button" onClick={() => { setSelectedNodeId(step.node_id); setSelectedEdgeId(null); }} className={selectedNodeId === step.node_id ? "trace-item-button is-selected" : "trace-item-button"}>
                 <span className="trace-index">{String(index + 1).padStart(2, "0")}</span>
-                <span className="trace-main"><b>{node?.data.label || step.type || step.node_id}</b><small>{step.type || step.node_id}</small>{result?.message && <em>{result.message}</em>}</span>
-                <span className="trace-meta"><strong>{label}</strong>{step.duration_ms != null && <small>{formatDuration(step.duration_ms)}</small>}{typeof step.findings === "number" && <small>{step.findings} находок</small>}</span>
+                <span className="trace-main"><b>{node?.data.label || step.type || step.node_id}</b><small>{step.type || step.node_id}{step.reason_code ? " · " + step.reason_code : ""}</small>{(step.reason || result?.message || step.message) && <em>{step.reason || result?.message || step.message}</em>}</span>
+                <span className="trace-meta"><strong>{label}</strong>{step.diagnostic_level && <small>{step.diagnostic_level === "error" ? "КРИТИЧНОЕ СОБЫТИЕ" : step.diagnostic_level === "warning" ? "ТРЕБУЕТ ВНИМАНИЯ" : step.diagnostic_level === "blocked" ? "НЕТ ВХОДНЫХ ДАННЫХ" : "ИНФОРМАЦИЯ"}</small>}{step.duration_ms != null && <small>{formatDuration(step.duration_ms)}</small>}{typeof step.findings === "number" && <small>{step.findings} находок</small>}</span>
               </button>
             </li>;
           })}</ol>
