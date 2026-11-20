@@ -630,3 +630,46 @@ def test_git_source_rejects_parent_traversal_subdirectory(tmp_path, monkeypatch)
 
     assert result["status"] == "failed"
     assert result["outputs"]["source"]["status"] == "failed"
+
+
+
+def test_logic_compare_routes_matching_and_nonmatching_findings(tmp_path, monkeypatch):
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "high.txt").write_text("high", encoding="utf-8")
+    (project / "low.txt").write_text("low", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        "app.workflows.engine.scan_directory",
+        lambda *_args, **_kwargs: [
+            {"fingerprint": "high", "rule_id": "TEST_HIGH", "severity": "HIGH", "path": "high.txt", "line": 1},
+            {"fingerprint": "low", "rule_id": "TEST_LOW", "severity": "LOW", "path": "low.txt", "line": 1},
+        ],
+    )
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "compare", "type": "logic.compare", "config": {
+                "field": "severity", "operator": "equals", "value": "HIGH",
+            }},
+            {"id": "true", "type": "findings.merge"},
+            {"id": "false", "type": "findings.merge"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "compare"},
+            {"id": "e4", "source": "compare", "source_handle": "true", "target": "true"},
+            {"id": "e5", "source": "compare", "source_handle": "false", "target": "false"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert [item["fingerprint"] for item in result["outputs"]["true"]["findings"]] == ["high"]
+    assert [item["fingerprint"] for item in result["outputs"]["false"]["findings"]] == ["low"]
+    assert result["outputs"]["compare"]["summary"] == {"total": 2, "matched": 1, "unmatched": 1}
