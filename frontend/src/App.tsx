@@ -861,11 +861,12 @@ export default function App() {
     } catch { setResult("Не удалось связаться с API. Проверьте backend."); setShowResult(true); }
     finally { setBusy(false); }
   };
-  const runWorkflow = async (selectedNodeIds?: string[]) => {
+  const runWorkflow = async (selectedNodeIds?: string[], forceFullScan = false) => {
     setBusy(true); setFindings([]);
     try {
       const id = await persistWorkflow();
-      const response = await fetch(selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs", { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds }) } : {}) });
+      const endpoint = selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs";
+      const response = await fetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan }) } : {}) });
       const queued = await response.json();
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
@@ -1027,7 +1028,7 @@ export default function App() {
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
-        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button>
+        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
       </div>
     </header>
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
