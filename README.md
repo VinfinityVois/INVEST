@@ -78,6 +78,16 @@ The node accepts `block_on` and `warn_on` arrays in its configuration. The run
 response and telemetry expose the decision, severity counts, and active thresholds.
 Invalid severity names are rejected instead of silently weakening the policy.
 
-The gate is deterministic and does not suppress or alter scanner findings. Finding
-lifecycle states (accepted risk, fixed, false positive) and their audit history are
-a separate persistence/API stage and are not yet applied to gate decisions.
+The gate is deterministic and does not alter scanner findings. Workflow-scoped finding
+states are stored in `finding_states`; every transition is appended to `audit_log`.
+The API exposes:
+- `GET /api/workflows/{id}/finding-states`
+- `PUT /api/workflows/{id}/findings/{fingerprint}/state`
+- `GET /api/workflows/{id}/findings/{fingerprint}/history`
+
+Each transition requires a reason. `accepted_risk` can have an expiry date;
+expired exceptions stop suppressing the finding. Active `accepted_risk` and
+`false_positive` states are excluded from gate counts. A finding marked `fixed`
+is not hidden if it is detected again: the worker reopens it and records the
+transition in the audit log. Lifecycle controls and history are available from
+each finding card in the editor.
