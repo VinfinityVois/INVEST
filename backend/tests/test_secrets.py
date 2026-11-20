@@ -69,3 +69,10 @@ def test_entropy_rule_does_not_duplicate_existing_secret_assignment_finding():
     findings = scan_text('private val apiKey = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc"', "AuthConfig.kt")
     assert any(item["rule_id"] == "named_secret_literal" for item in findings)
     assert not any(item["rule_id"] == "high_entropy_secret" for item in findings)
+
+
+
+def test_entropy_rule_bounds_very_long_literals():
+    value = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc" * 200
+    findings = scan_text(f'JWT_SECRET = "{value}"', "AuthConfig.py")
+    assert not any(item["rule_id"] == "high_entropy_secret" for item in findings)
