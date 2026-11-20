@@ -670,3 +670,14 @@
 .react-flow__edge.edge-active .react-flow__edge-text{fill:#a8e1ff}
 .react-flow__edge.edge-completed .react-flow__edge-text{fill:#8cddbb}
 @media(max-width:700px){.flow-foot{align-items:flex-start;flex-direction:column;height:auto;min-height:34px;padding:6px 0;gap:4px}.flow-foot>span{max-width:100%}}
+
+
+/* Live scanner progress: factual file counters from workflow telemetry */
+.node-live-progress{display:grid;gap:5px;margin:8px 0 5px;padding:7px 8px;border:1px solid rgba(102,178,220,.22);border-radius:5px;background:rgba(8,25,39,.68)}
+.node-live-progress>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.node-live-progress>div>span{color:#80a9c8;font:6px 'DM Mono';letter-spacing:.65px}
+.node-live-progress>div>b{color:#a9dcf6;font:8px 'DM Mono'}
+.node-live-progress>i{display:block;height:4px;overflow:hidden;border-radius:4px;background:rgba(92,125,151,.2)}
+.node-live-progress>i>span{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#4f9fc4,#8bd7e8);transition:width .35s ease}
+.node-live-progress>small{overflow:hidden;color:#7f9bb2;font:6px/1.45 'DM Mono';text-overflow:ellipsis;white-space:nowrap}
+@media(prefers-reduced-motion:reduce){.node-live-progress>i>span{transition:none}}
