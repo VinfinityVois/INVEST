@@ -832,6 +832,13 @@ def _lock_workflow_for_version_write(session, workflow_id: UUID):
     )
 
 
+def _lock_run_for_update(session, run_id: UUID):
+    """Serialize cancellation with worker claims and completion transitions."""
+    return session.scalar(
+        select(WorkflowRun).where(WorkflowRun.id == run_id).with_for_update()
+    )
+
+
 @app.put("/api/workflows/{workflow_id}")
 def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
     validation = validate_graph(graph, registry)
@@ -1107,7 +1114,7 @@ def restore_workflow_version(workflow_id: UUID, version: int):
 @app.post("/api/runs/{run_id}/cancel")
 def cancel_workflow_run(run_id: UUID):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _lock_run_for_update(session, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         if run.status in {"completed", "partial", "failed", "cancelled"}:
