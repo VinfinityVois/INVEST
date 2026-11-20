@@ -39,7 +39,7 @@ def test_rejects_unsafe_archive_paths(tmp_path, name):
 
 
 def test_accepts_windows_style_separators_after_safe_normalization(tmp_path):
-    archive = make_zip([("project\\src\\Main.kt", "fun main() = Unit")])
+    archive = make_zip([(r"project\\src\\Main.kt", "fun main() = Unit")])
 
     result = extract_project_archive(archive, tmp_path)
 
