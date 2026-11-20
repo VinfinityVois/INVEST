@@ -5,12 +5,17 @@ class Settings(BaseSettings):
     app_secret_key: str = "development-only-change-me"
     database_url: str = "sqlite:///./dev.db"
     allowed_targets: str = ""
+    webhook_allowed_hosts: str = ""
     workspace_root: str = "/workspace"
     master_key_file: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def webhook_allowed_host_list(self) -> set[str]:
+        return {x.strip().lower().rstrip(".") for x in self.webhook_allowed_hosts.split(",") if x.strip()}
 
     @property
     def allowed_target_list(self) -> set[str]:

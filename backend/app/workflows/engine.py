@@ -17,6 +17,7 @@ from app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
 from .validator import validate_graph
+from .notifications import send_webhook_notification
 
 
 class WorkflowExecutionError(RuntimeError):
@@ -498,6 +499,13 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                         "matched": matched,
                     },
                 }
+        elif node.type == "notify.webhook":
+            try:
+                output = send_webhook_notification(node.config, parents, node_id=node_id, workflow_name=graph.name)
+            except ValueError as exc:
+                output = {"status": "configuration_required", "message": str(exc)}
+            except Exception as exc:
+                output = {"status": "failed", "message": "Webhook delivery failed: " + type(exc).__name__}
         elif node.type == "ai.explain":
             merged = []
             for parent in parents:
