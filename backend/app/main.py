@@ -275,10 +275,10 @@ def stream_run_events(run_id: UUID):
                 run = session.get(WorkflowRun, run_id)
                 if run is None:
                     payload = {"status": "not_found", "run_id": str(run_id)}
-                    yield "event: error\\ndata: " + json.dumps(payload) + "\\n\\n"
+                    yield "event: error\ndata: " + json.dumps(payload) + "\n\n"
                     return
                 payload = _run_telemetry(session, run)
-            yield "data: " + json.dumps(payload, default=str) + "\\n\\n"
+            yield "data: " + json.dumps(payload, default=str) + "\n\n"
             if payload["status"] in {"completed", "partial", "failed"}:
                 return
             time.sleep(1)
