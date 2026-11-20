@@ -547,3 +547,86 @@ def test_schedule_trigger_executes_as_workflow_event():
 
     assert result["status"] == "completed"
     assert result["outputs"]["schedule"]["status"] == "completed"
+
+
+
+def test_git_source_scans_only_safe_configured_subdirectory(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    repository = workspace / "git-test"
+    target = repository / "training-project"
+    target.mkdir(parents=True)
+    (target / "application.yml").write_text(
+        'spring:\n  datasource:\n    password: "TrainingProjectSecretValue123"\n',
+        encoding="utf-8",
+    )
+    (repository / "outside.yml").write_text(
+        'spring:\n  datasource:\n    password: "OutsideProjectSecretValue123"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+    monkeypatch.setattr(settings, "allowed_targets", "https://github.com/example/training")
+    monkeypatch.setattr(
+        "app.workflows.engine.clone_allowed_repository",
+        lambda **kwargs: {
+            "path": "git-test",
+            "source": "git",
+            "repository": "https://github.com/example/training",
+            "ref": "fe1fcbe212669783480666b9b60147c8a8c6eef4",
+        },
+    )
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.git", "config": {
+                "url": "https://github.com/example/training",
+                "ref": "fe1fcbe212669783480666b9b60147c8a8c6eef4",
+                "subdirectory": "training-project",
+            }},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    findings = result["outputs"]["scan"]["findings"]
+    assert any(item["path"] == "application.yml" for item in findings)
+    assert all("outside.yml" not in item["path"] for item in findings)
+
+
+def test_git_source_rejects_parent_traversal_subdirectory(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    (workspace / "git-test").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+    monkeypatch.setattr(settings, "allowed_targets", "https://github.com/example/training")
+    monkeypatch.setattr(
+        "app.workflows.engine.clone_allowed_repository",
+        lambda **kwargs: {"path": "git-test", "source": "git", "repository": "https://github.com/example/training", "ref": None},
+    )
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.git", "config": {
+                "url": "https://github.com/example/training",
+                "subdirectory": "../outside",
+            }},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "failed"
+    assert result["outputs"]["source"]["status"] == "failed"
