@@ -194,3 +194,23 @@ def test_sast_node_runs_against_workspace_source(tmp_path, monkeypatch):
     assert result["status"] == "completed"
     assert result["outputs"]["sast"]["summary"]["total"] == 1
     assert result["outputs"]["merge"]["findings"][0]["category"] == "SAST"
+
+
+
+def test_engine_reports_node_timing_and_progress():
+    graph = WorkflowGraph(
+        name="Telemetry",
+        nodes=[{"id": "trigger", "type": "trigger.manual"}],
+        edges=[],
+    )
+    progress = []
+
+    result = execute_graph(graph, registry, on_progress=progress.append)
+
+    assert result["status"] == "completed"
+    assert result["trace"][0]["node_id"] == "trigger"
+    assert result["trace"][0]["duration_ms"] >= 0
+    assert progress
+    assert progress[0]["completed_nodes"] == 1
+    assert progress[0]["total_nodes"] == 1
+    assert progress[0]["status"] == "running"
