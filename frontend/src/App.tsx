@@ -32,6 +32,8 @@ export default function App() {
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [sourcePath, setSourcePath] = useState("sample");
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitRef, setGitRef] = useState("");
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -64,7 +66,7 @@ export default function App() {
       id: node.id,
       type: typeById(node.id),
       position: node.position,
-      config: node.id === "source" || node.id.startsWith("source.upload-") ? { path: sourcePath } : {},
+      config: typeById(node.id) === "source.upload" ? { path: sourcePath } : typeById(node.id) === "source.git" ? { url: gitUrl, ref: gitRef || undefined } : {},
     })),
     edges: edges.map(edge => ({
       id: edge.id, source: edge.source, target: edge.target,
@@ -169,6 +171,9 @@ export default function App() {
           <input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadArchive(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </label>
         <small className="upload-hint">До 50 MiB · без запуска скриптов · ZIP распаковывается в изолированный каталог</small>
+        <label className="source-config">Git HTTPS URL<input value={gitUrl} onChange={event => setGitUrl(event.target.value)} placeholder="https://github.com/org/repository" /></label>
+        <label className="source-config">Git branch / tag<input value={gitRef} onChange={event => setGitRef(event.target.value)} placeholder="main (пусто — default branch)" /></label>
+        <small className="upload-hint">Git работает только с репозиториями из ALLOWED_TARGETS в backend/.env</small>
         {["Trigger", "Source", "Security", "Logic", "AI", "Notify", "CI"].map(category =>
           <section key={category}><h4>{category}</h4>
             {manifests.filter(manifest => manifest.category === category).map(manifest =>
