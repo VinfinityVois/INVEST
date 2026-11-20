@@ -129,7 +129,10 @@ def process_run(run_id: str, worker_id: str) -> None:
     heartbeat.start()
     started = datetime.now(timezone.utc)
     try:
-        graph = WorkflowGraph.model_validate(graph_snapshot)
+        execution_scope = graph_snapshot.get("__execution_scope", {}) if isinstance(graph_snapshot, dict) else {}
+        target_node_ids = execution_scope.get("requested_node_ids") if isinstance(execution_scope, dict) else None
+        graph_data = {key: value for key, value in graph_snapshot.items() if key != "__execution_scope"} if isinstance(graph_snapshot, dict) else graph_snapshot
+        graph = WorkflowGraph.model_validate(graph_data)
 
         def is_cancel_requested() -> bool:
             with SessionLocal() as cancel_session:
@@ -154,7 +157,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
@@ -170,7 +173,7 @@ def process_run(run_id: str, worker_id: str) -> None:
     findings = _findings_from_result(result)
     with SessionLocal() as session:
         run = session.get(WorkflowRun, UUID(run_id))
-        if run is None or run.status != "running" or run.locked_by != worker_id:
+        if run is None or run.status not in {"running", "cancelling"} or run.locked_by != worker_id:
             logger.warning("Run %s ownership changed before completion", run_id)
             return
         run.status = "cancelled" if run.status == "cancelling" or final_status == "cancelled" else final_status
