@@ -77,3 +77,15 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(120))
     details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Project(Base):
+    __tablename__ = "projects"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    workspace_path: Mapped[str] = mapped_column(String(260), nullable=False, unique=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255))
+    file_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expanded_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
