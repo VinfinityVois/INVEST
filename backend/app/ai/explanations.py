@@ -48,7 +48,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
     if not settings.llm_base_url or not settings.llm_model or not settings.llm_api_key:
         return {
             "status": "configuration_required",
-            "message": "Настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в backend/.env.",
+            "message": "Настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневом .env.",
             "findings": findings,
             "explanations": [],
         }
