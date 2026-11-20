@@ -65,3 +65,28 @@ def test_workspace_source_rejects_path_traversal(tmp_path, monkeypatch):
     assert result["status"] == "failed"
     assert result["outputs"]["source"]["status"] == "failed"
     assert result["outputs"]["scan"]["status"] == "blocked"
+
+
+def test_workspace_source_rejects_absolute_paths(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": str(outside)}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "failed"
+    assert result["outputs"]["source"]["status"] == "failed"
