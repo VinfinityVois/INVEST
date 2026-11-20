@@ -24,9 +24,9 @@ type Telemetry = {
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
-  node_results?: Record<string, { status?: string; message?: string; findings?: number; explained_count?: number; total_findings?: number }>;
+  node_results?: Record<string, { status?: string; message?: string; findings?: number; explained_count?: number; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[] };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -75,6 +75,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <p className="node-description">{data.description}</p>
     {data.executionDetail && <div className="node-execution-detail">{data.executionDetail}</div>}
+    {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
     <Handle type="source" position={Position.Right} />
   </div>;
@@ -161,7 +162,7 @@ export default function App() {
         : step?.status === "configuration_required" ? "configuration_required"
         : step?.status === "completed" || step?.status === "ready" ? "completed"
         : telemetry.status === "queued" ? "queued" : "idle";
-      let detail = output?.message || "";
+      let detail = output?.message || "";\n      let notes: string[] = [];
       if (node.data.nodeType === "ai.explain" && output) {
         detail = output.status === "configuration_required" ? "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
           : output.status === "failed" ? "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки."
@@ -173,7 +174,7 @@ export default function App() {
       } else if (status === "idle" && telemetry.status === "running") {
         detail = "Ожидает завершения предыдущих связанных блоков.";
       }
-      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail } };
+      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes } };
     }));
     setEdges(currentEdges => currentEdges.map(edge => {
       const sourceStep = trace.get(edge.source);
