@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: demo-vulnerable-app
+  datasource:
+    url: jdbc:postgresql://localhost:5432/demo
+    username: demo
+    # INTENTIONAL SECRET for secrets scanner
+    password: "SuperSecretDbPass2024!"
+
+# INTENTIONAL cloud-like credentials (demo patterns only)
+aws:
+  accessKeyId: AKIAIOSFODNN7EXAMPLE
+  secretAccessKey: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+external:
+  paymentApiKey: "pay_demo_51MzExamplePaymentKeyForScannerOnly"
+  githubToken: "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
