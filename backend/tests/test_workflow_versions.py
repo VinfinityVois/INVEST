@@ -187,5 +187,6 @@ def test_finding_state_history_query_is_bounded():
         main.SessionLocal = original
 
     sql = str(session.statement.compile(dialect=postgresql.dialect()))
-    assert "LIMIT 100" in sql
+    assert "LIMIT" in sql
+    assert 100 in session.statement.compile(dialect=postgresql.dialect()).params.values()
     assert "ORDER BY" in sql
