@@ -123,7 +123,7 @@ The editor shows explicit workflow node states (ready, running, completed, block
 
 ## AI Explanation Gateway
 
-The optional `ai.explain` node calls an OpenAI-compatible `/chat/completions` endpoint.
+The optional `ai.explain` node calls an OpenAI-compatible `/chat/completions` endpoint. The UI reads `GET /api/ai/status` to show whether the three settings are present; this endpoint never returns the API key. Provider failures distinguish authentication (401/403), missing endpoint/model (404), quota/rate limit (429), connection failures and timeouts. If a compatible server rejects `response_format`, the gateway retries once without that optional parameter.
 Configure `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY` in the root `.env`
 file (the worker reads the same environment). Remote endpoints must use HTTPS;
 localhost is allowed for local development. No API key is stored in a workflow graph.
