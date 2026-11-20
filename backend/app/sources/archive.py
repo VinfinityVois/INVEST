@@ -18,9 +18,11 @@ class ArchiveValidationError(ValueError):
 
 
 def _safe_member_name(name: str) -> PurePosixPath:
-    if "\x00" in name or "\\" in name:
+    if "\x00" in name:
         raise ArchiveValidationError("Archive contains an invalid path")
-    path = PurePosixPath(name)
+    # ZIP producers on Windows sometimes store separators as backslashes.
+    # Normalize them before applying the same traversal checks.
+    path = PurePosixPath(name.replace("\\", "/"))
     if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
         raise ArchiveValidationError("Archive contains a path traversal entry")
     if path.parts[0].endswith(":"):
