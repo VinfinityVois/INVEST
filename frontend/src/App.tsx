@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
-type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: Record<string, unknown> };
+type ConfigFieldSchema = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; items?: ConfigFieldSchema; format?: string };
+type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { properties?: Record<string, ConfigFieldSchema>; required?: string[] } };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
@@ -1220,10 +1221,38 @@ export default function App() {
             <button className="save-config" disabled={scheduleBusy || busy} onClick={() => void updateSchedule(true)}>{scheduleBusy ? "СОХРАНЕНИЕ…" : "Сохранить и включить расписание"}</button>
             <button className="ghost" disabled={scheduleBusy || !scheduleStatus?.enabled} onClick={() => void updateSchedule(false)}>Отключить расписание</button>
             <p className="edit-hint">Примеры: <code>*/5 * * * *</code> — каждые 5 минут; <code>0 9 * * 1-5</code> — будни в 09:00. Часовой пояс влияет на локальное время.</p>
-          </> : <>
-            <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
-          </>}
-          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
+          </> : (() => {
+            const manifest = manifests.find(item => item.type === selectedNode.data.nodeType);
+            const properties = manifest?.config_schema?.properties || {};
+            const entries = Object.entries(properties);
+            if (!entries.length) {
+              return <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>;
+            }
+            const required = new Set(manifest?.config_schema?.required || []);
+            return <div className="schema-config-fields">
+              {entries.map(([key, field]) => {
+                const current = selectedNode.data.config[key] ?? field.default ?? (field.type === "array" ? [] : field.type === "boolean" ? false : "");
+                const label = field.title || key;
+                const update = (value: unknown) => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, [key]: value } });
+                if (field.type === "boolean") {
+                  return <label className="field-label schema-checkbox" key={key}><span>{label}{required.has(key) ? " *" : ""}</span><input type="checkbox" checked={Boolean(current)} onChange={event => update(event.target.checked)}/>{field.description && <small>{field.description}</small>}</label>;
+                }
+                if (field.enum?.length) {
+                  return <label className="field-label" key={key}>{label}{required.has(key) ? " *" : ""}<select value={String(current)} onChange={event => update(event.target.value)}>{field.enum.map(option => <option key={String(option)} value={String(option)}>{String(option)}</option>)}</select>{field.description && <small>{field.description}</small>}</label>;
+                }
+                if (field.type === "integer" || field.type === "number") {
+                  return <label className="field-label" key={key}>{label}{required.has(key) ? " *" : ""}<input type="number" min={field.minimum} max={field.maximum} step={field.type === "integer" ? 1 : "any"} value={String(current)} onChange={event => update(field.type === "integer" ? Number.parseInt(event.target.value, 10) : Number(event.target.value))}/>{field.description && <small>{field.description}</small>}</label>;
+                }
+                if (field.type === "array") {
+                  const values = Array.isArray(current) ? current.map(String) : [];
+                  return <label className="field-label" key={key}>{label}{required.has(key) ? " *" : ""}<input value={values.join(", ")} onChange={event => update(event.target.value.split(",").map(value => value.trim()).filter(Boolean))} placeholder="Значения через запятую"/>{field.description && <small>{field.description}</small>}</label>;
+                }
+                return <label className="field-label" key={key}>{label}{required.has(key) ? " *" : ""}<input value={String(current)} onChange={event => update(event.target.value)} autoComplete="off" spellCheck={false}/>{field.description && <small>{field.description}</small>}</label>;
+              })}
+              <p className="edit-hint">Поля сформированы из схемы конфигурации компонента. Изменения применяются к выбранному блоку сразу.</p>
+            </div>;
+          })()}
+          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && !Object.keys(manifests.find(item => item.type === selectedNode.data.nodeType)?.config_schema?.properties || {}).length && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
