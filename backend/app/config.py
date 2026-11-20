@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./dev.db"
     allowed_targets: str = ""
     workspace_root: str = "/tmp/secworkflow"
+    master_key_file: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None
