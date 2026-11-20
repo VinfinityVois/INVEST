@@ -27,10 +27,10 @@ services:
     command: python -m app.worker
     env_file: .env
     environment:
-      WORKSPACE_ROOT: ${WORKSPACE_ROOT:-/data/workspaces}
+      WORKSPACE_ROOT: /workspace
     depends_on:
       db: {condition: service_healthy}
-    volumes: [appdata:/data]
+    volumes: [appdata:/data, workspaces:/workspace]
   frontend:
     image: node:22-alpine
     working_dir: /workspace
