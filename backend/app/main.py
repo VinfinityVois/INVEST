@@ -850,6 +850,49 @@ def execute_saved_workflow(workflow_id: UUID):
         }
 
 
+@app.post("/api/runs/{run_id}/cancel")
+def cancel_workflow_run(run_id: UUID):
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if run.status in {"completed", "partial", "failed", "cancelled"}:
+            raise HTTPException(status_code=409, detail=f"Run is already {run.status}")
+        if run.status == "queued":
+            run.status = "cancelled"
+            run.finished_at = datetime.now(timezone.utc)
+            run.error = "Cancelled before worker claimed the run"
+        elif run.status == "running":
+            run.status = "cancelling"
+        elif run.status != "cancelling":
+            raise HTTPException(status_code=409, detail=f"Run cannot be cancelled from status {run.status}")
+        session.commit()
+        return {"run_id": str(run.id), "status": run.status}
+
+
+@app.post("/api/runs/{run_id}/retry", status_code=202)
+def retry_workflow_run(run_id: UUID):
+    with SessionLocal() as session:
+        previous = session.get(WorkflowRun, run_id)
+        if previous is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if previous.status not in {"completed", "partial", "failed", "cancelled"}:
+            raise HTTPException(status_code=409, detail="Only finished runs can be retried")
+        graph = WorkflowGraph.model_validate(previous.graph_snapshot)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        retry = WorkflowRun(
+            workflow_id=previous.workflow_id,
+            status="queued",
+            source="retry",
+            graph_snapshot=previous.graph_snapshot,
+        )
+        session.add(retry)
+        session.commit()
+        return {"run_id": str(retry.id), "retry_of": str(previous.id), "status": "queued"}
+
+
 @app.get("/api/workflows/{workflow_id}/runs")
 def list_workflow_runs(workflow_id: UUID):
     with SessionLocal() as session:
