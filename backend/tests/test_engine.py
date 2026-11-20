@@ -396,3 +396,51 @@ def test_engine_executes_only_selected_node_and_its_upstream_dependencies(monkey
     assert result["order"] == ["trigger", "source", "secrets"]
     assert set(result["outputs"]) == {"trigger", "source", "secrets"}
     assert result["execution_scope"]["requested_node_ids"] == ["secrets"]
+
+
+def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_it(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    source_file = project / "app.kt"
+    source_file.write_text("class App {}", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    calls = {"count": 0}
+
+    def fake_scan(_root, **_kwargs):
+        calls["count"] += 1
+        return []
+
+    monkeypatch.setattr(engine, "scan_directory", fake_scan)
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    first = execute_graph(graph, registry)
+    assert calls["count"] == 1
+    assert first["cache_summary"]["misses"] == 1
+    assert first["cache_entries"]
+
+    second = execute_graph(graph, registry, cache_entries=first["cache_entries"])
+    assert calls["count"] == 1
+    assert second["trace"][-1]["cached"] is True
+    assert second["cache_summary"]["hits"] == 1
+
+    source_file.write_text("class App { fun changed() {} }", encoding="utf-8")
+    changed = execute_graph(graph, registry, cache_entries=first["cache_entries"])
+    assert calls["count"] == 2
+    assert changed["trace"][-1]["cached"] is False
+
+    forced = execute_graph(graph, registry, cache_entries=first["cache_entries"], force_full_scan=True)
+    assert calls["count"] == 3
+    assert forced["cache_summary"]["force_full_scan"] is True
+    assert forced["cache_summary"]["hits"] == 0
