@@ -217,7 +217,7 @@ def test_gateway_reports_max_findings_coverage_and_skipped_count(monkeypatch):
     def fake_post(url, **kwargs):
         return FakeResponse({"choices": [{"message": {"content": json.dumps({
             "explanations": [{
-                "fingerprint": "first", "root_cause": "Cause",
+                "fingerprint": "finding-0", "root_cause": "Cause",
                 "impact": "Impact", "recommendation": "Fix", "confidence": 0.8,
             }]
         })}}]})
@@ -229,9 +229,9 @@ def test_gateway_reports_max_findings_coverage_and_skipped_count(monkeypatch):
     assert result["status"] == "completed"
     assert result["analyzed_count"] == 2
     assert result["skipped_count"] == 2
-    assert result["explained_count"] == 0
-    assert result["unexplained_count"] == 2
-    assert result["coverage"] == 0.0
+    assert result["explained_count"] == 1
+    assert result["unexplained_count"] == 1
+    assert result["coverage"] == 0.5
 
 
 def test_gateway_configuration_required_reports_not_attempted(monkeypatch):
