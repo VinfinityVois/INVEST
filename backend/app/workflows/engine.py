@@ -237,6 +237,10 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                             "status": value.get("status"),
                             **({"message": value["message"]} if value.get("message") else {}),
                             **({"findings": value["summary"]["total"]} if isinstance(value.get("summary"), dict) else {}),
+                            **({"severity": {
+                                severity: sum(1 for finding in value.get("findings", []) if str(finding.get("severity", "UNKNOWN")).upper() == severity)
+                                for severity in sorted({str(finding.get("severity", "UNKNOWN")).upper() for finding in value.get("findings", [])})
+                            }} if isinstance(value.get("findings"), list) and value.get("findings") else {}),
                             **({"explained_count": value.get("explained_count", len(value.get("explanations", [])))} if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"total_findings": len(value.get("findings", []))} if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"explanations": [
