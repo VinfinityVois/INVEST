@@ -35,20 +35,28 @@ def resolve_run_source_file(
         raise RunSourceFileError("Run source artifact is ambiguous or unavailable")
 
     source_name = PurePosixPath(candidates[0])
-    if source_name.is_absolute() or len(source_name.parts) != 1 or source_name.parts[0] in {"", ".", ".."}:
+    if source_name.is_absolute() or any(part in {"", ".", ".."} for part in source_name.parts):
         raise RunSourceFileError("Invalid run source artifact")
-    if not source_name.parts[0].startswith(("upload-", "git-")):
+    if len(source_name.parts) == 1 and source_name.parts[0].startswith(("upload-", "git-")):
+        artifact_parts = source_name.parts
+    elif (
+        len(source_name.parts) == 2
+        and source_name.parts[0] == "projects"
+        and source_name.parts[1].startswith("project-")
+    ):
+        artifact_parts = source_name.parts
+    else:
         raise RunSourceFileError("Unknown run source artifact")
 
     workspace = Path(workspace_root).resolve()
-    source_root = workspace / source_name.parts[0]
+    source_root = workspace.joinpath(*artifact_parts)
     if source_root.is_symlink():
         raise RunSourceFileError("Symlink source artifacts are not allowed")
     try:
         source_root = source_root.resolve(strict=True)
     except OSError as exc:
         raise RunSourceFileError("Run source artifact is unavailable") from exc
-    if source_root.parent != workspace or not source_root.is_dir():
+    if not source_root.is_relative_to(workspace) or not source_root.is_dir():
         raise RunSourceFileError("Run source artifact is outside the workspace")
 
     candidate = source_root
