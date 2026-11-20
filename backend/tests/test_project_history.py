@@ -53,3 +53,5 @@ def test_project_editor_blocks_secret_paths_in_nested_directories():
 def test_project_editor_rejects_secret_like_content():
     assert _project_content_is_safe("name: sample\nversion: 1.0\n")
     assert not _project_content_is_safe("API_TOKEN=example-secret-value\n")
+    assert not _project_content_is_safe("token: unquoted-secret-value\\n")
+    assert not _project_content_is_safe("-----BEGIN RSA PRIVATE KEY-----\\n")
