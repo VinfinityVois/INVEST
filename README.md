@@ -53,7 +53,7 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 ## Текущий статус
 
-Реализованы редактор React Flow, реестр нод, валидация графа, синхронный executor, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, сохранение запусков и findings API/UI. SCA/SAST, постоянная очередь worker, SSE, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
+Реализованы редактор React Flow, реестр нод, валидация графа, синхронный executor, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, сохранение запусков и findings API/UI. Kotlin SAST, Spring Boot dependency management, расширение транзитивного анализа, постоянная очередь worker, SSE, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
 
 ## Принципы безопасности
 
