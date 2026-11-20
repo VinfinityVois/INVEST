@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 
 from app.db import SessionLocal
-from app.models import Finding, FindingState, WorkflowRun
+from app.models import AuditLog, Finding, FindingState, WorkflowRun
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
@@ -155,6 +155,44 @@ def process_run(run_id: str, worker_id: str) -> None:
         run.finished_at = datetime.now(timezone.utc)
         run.heartbeat_at = None
         run.locked_by = None
+        present_fingerprints = {str(item["fingerprint"]) for item in findings}
+        if run.workflow_id and present_fingerprints:
+            lifecycle_rows = session.scalars(
+                select(FindingState).where(
+                    FindingState.workflow_id == run.workflow_id,
+                    FindingState.fingerprint.in_(present_fingerprints),
+                )
+            ).all()
+            now = datetime.now(timezone.utc)
+            for lifecycle in lifecycle_rows:
+                expired_risk = (
+                    lifecycle.state == "accepted_risk"
+                    and lifecycle.expires_at is not None
+                    and lifecycle.expires_at <= now
+                )
+                reappeared_fixed = lifecycle.state == "fixed"
+                if expired_risk or reappeared_fixed:
+                    previous_state = lifecycle.state
+                    lifecycle.state = "open"
+                    lifecycle.reason = (
+                        "Срок принятого риска истёк; находка обнаружена повторно."
+                        if expired_risk
+                        else "Находка повторно обнаружена сканером после статуса fixed."
+                    )
+                    lifecycle.expires_at = None
+                    session.add(AuditLog(
+                        action="finding.state.reopened",
+                        entity="finding_state",
+                        entity_id=f"{run.workflow_id}:{lifecycle.fingerprint}",
+                        details={
+                            "workflow_id": str(run.workflow_id),
+                            "fingerprint": lifecycle.fingerprint,
+                            "previous_state": previous_state,
+                            "new_state": "open",
+                            "reason": lifecycle.reason,
+                            "run_id": str(run.id),
+                        },
+                    ))
         for finding in findings:
             session.add(
                 Finding(
