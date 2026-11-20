@@ -161,19 +161,26 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
         if isinstance(version, str):
             resolved_version = version
         elif isinstance(version, dict):
+            # "require" and "prefer" are selection constraints, not proof of the
+            # resolved version. Only an exact numeric "strictly" value is safe
+            # to use without a lockfile.
             resolved_version = None
             reference = version.get("ref")
             if isinstance(reference, str):
                 candidate = versions.get(reference)
-                if isinstance(candidate, str):
+                if isinstance(candidate, dict):
+                    candidate = candidate.get("strictly")
+                if isinstance(candidate, str) and _numeric_version(candidate):
                     resolved_version = candidate
-                elif isinstance(candidate, dict):
-                    resolved_version = candidate.get("strictly") or candidate.get("require") or candidate.get("prefer")
             else:
-                resolved_version = version.get("strictly") or version.get("require") or version.get("prefer")
+                candidate = version.get("strictly")
+                if isinstance(candidate, str) and _numeric_version(candidate):
+                    resolved_version = candidate
         elif isinstance(entry.get("version.ref"), str):
             candidate = versions.get(entry["version.ref"])
-            resolved_version = candidate if isinstance(candidate, str) else None
+            if isinstance(candidate, dict):
+                candidate = candidate.get("strictly")
+            resolved_version = candidate if isinstance(candidate, str) and _numeric_version(candidate) else None
         else:
             resolved_version = None
 
