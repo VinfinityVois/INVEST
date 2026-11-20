@@ -30,3 +30,15 @@ def test_worker_id_is_non_empty_and_unique():
 
     assert first
     assert first != second
+
+
+def test_finding_lifecycle_completion_locks_workflow_row():
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+    from app.models import Workflow
+
+    statement = select(Workflow).where(Workflow.id == "workflow-id").with_for_update()
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE" in sql
+    assert "workflows" in sql
