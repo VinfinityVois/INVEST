@@ -4,7 +4,7 @@ import {
   type Connection, type Edge, type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Activity, AlertTriangle, Bot, Check, CirclePlay, GitBranch, Layers3, Plus, Shield, Workflow } from "lucide-react";
+import { Activity, AlertTriangle, Bot, Check, CirclePlay, GitBranch, Layers3, Plus, Shield, UploadCloud, Workflow } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
 type Finding = { id?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string };
@@ -35,7 +35,7 @@ export default function App() {
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);\n  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetch("/api/node-types")
@@ -70,6 +70,25 @@ export default function App() {
       source_handle: edge.sourceHandle, target_handle: edge.targetHandle,
     })),
   }), [nodes, edges, sourcePath]);
+
+  const uploadArchive = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    setFindings([]);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/sources/upload", { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось загрузить архив");
+      setSourcePath(data.path);
+      setResult(`Архив принят · ${data.files} файлов · ${Math.round(data.expanded_bytes / 1024)} KiB распаковано. Путь источника обновлён.`);
+    } catch (error) {
+      setResult(`Ошибка загрузки ZIP: ${String(error)}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const persistWorkflow = async () => {
     const response = await fetch(workflowId ? `/api/workflows/${workflowId}` : "/api/workflows", {
@@ -142,7 +161,13 @@ export default function App() {
       <aside className="panel palette">
         <div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Компоненты</h3>
         <p>Добавляйте ноды на холст и соединяйте их.</p>
-        <label className="source-config">Каталог в WORKSPACE_ROOT<input value={sourcePath} onChange={event => setSourcePath(event.target.value)} placeholder="например, sample" /></label>
+        <label className="source-config">Каталог в WORKSPACE_ROOT<input value={sourcePath} onChange={event => setSourcePath(event.target.value)} placeholder="путь после загрузки ZIP" /></label>
+        <label className="archive-upload">
+          <UploadCloud size={15} />
+          <span>{uploading ? "Загрузка и проверка…" : "Загрузить ZIP проекта"}</span>
+          <input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadArchive(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+        </label>
+        <small className="upload-hint">До 50 MiB · без запуска скриптов · ZIP распаковывается в изолированный каталог</small>
         {["Trigger", "Source", "Security", "Logic", "AI", "Notify", "CI"].map(category =>
           <section key={category}><h4>{category}</h4>
             {manifests.filter(manifest => manifest.category === category).map(manifest =>
