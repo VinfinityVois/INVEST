@@ -126,6 +126,7 @@ export default function App() {
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Подключение к API…");
+  const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
@@ -263,7 +264,7 @@ export default function App() {
       if (node.data.nodeType === "ai.explain" && output) {
         notes = (output.explanations || []).map(item => [item.root_cause, item.recommendation].filter(Boolean).join(" · ")).filter(Boolean);
         detail = output.status === "configuration_required" ? "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
-          : output.status === "failed" ? "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки."
+          : output.status === "failed" ? (output.message || "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки.")
           : output.status === "completed" ? `Объяснено находок: ${output.explained_count ?? 0} из ${output.total_findings ?? 0}.` : detail;
       } else if (node.data.nodeType === "source.git" && output?.status === "ready") {
         detail = "Репозиторий клонирован в изолированную рабочую область.";
@@ -856,7 +857,7 @@ export default function App() {
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
           <label className="field-label">Заменить тип блока<select value={selectedNode.data.nodeType} onChange={event => replaceSelectedNode(event.target.value)}><option value={selectedNode.data.nodeType}>{selectedNode.data.nodeType}</option>{manifests.filter(item => item.type !== selectedNode.data.nodeType).map(item => <option key={item.type} value={item.type}>{item.title} · {item.type}</option>)}</select></label>
           {selectedNode.data.nodeType === "ai.explain" ? <>
-            <div className="ai-node-guide"><div><Bot size={16}/><b>AI-АНАЛИЗАТОР ПОДКЛЮЧЁН К ГРАФУ</b></div><p>Получает находки из блока Merge findings. Ключ API хранится только в корневом .env и не вводится здесь.</p><ol><li>Добавь LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в .env</li><li>Перезапусти api и worker</li><li>Запусти workflow — объяснения появятся в карточках находок</li></ol></div>
+            <div className="ai-node-guide"><div><Bot size={16}/><b>AI-АНАЛИЗАТОР · {aiProvider?.configured ? (aiProvider.endpoint_valid ? "КОНФИГУРАЦИЯ НАЙДЕНА" : "ОШИБКА АДРЕСА") : "ТРЕБУЕТ НАСТРОЙКИ"}</b></div><p>Получает находки из блока Merge findings. Ключ API хранится только в корневом .env и не вводится здесь.</p><div className="ai-provider-checks"><span className={aiProvider?.base_url_set ? "is-ready" : ""}>BASE URL {aiProvider?.base_url_set ? "✓" : "—"}</span><span className={aiProvider?.model_set ? "is-ready" : ""}>MODEL {aiProvider?.model_set ? "✓" : "—"}</span><span className={aiProvider?.api_key_set ? "is-ready" : ""}>API KEY {aiProvider?.api_key_set ? "✓" : "—"}</span></div>{aiProvider?.endpoint_error && <p className="ai-provider-error">{aiProvider.endpoint_error}</p>}<ol><li>Добавь LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневой .env</li><li>Перезапусти api и worker</li><li>Запусти workflow — подробная причина ошибки появится в статусе AI-блока</li></ol><small>Модель: {aiProvider?.model || "не задана"} · ключ не отображается и не передаётся в браузер</small></div>
             <label className="field-label">Язык объяснений<select value={String(selectedNode.data.config.language || "ru")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, language: event.target.value } })}><option value="ru">Русский</option><option value="en">English</option></select></label>
             <label className="field-label">Максимум находок<input type="number" min={1} max={25} value={Number(selectedNode.data.config.max_findings ?? 20)} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, max_findings: Math.max(1, Math.min(25, Number(event.target.value) || 1)) } })}/></label>
             <p className="edit-hint">AI не меняет severity, не создаёт новые уязвимости и не влияет на Security Gate. Ветка AI независима от проверки политики.</p>
@@ -936,7 +937,7 @@ export default function App() {
               <p>{aiNodeResult?.status === "configuration_required"
                 ? "Объяснение не создано: настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневом .env и перезапустите api и worker."
                 : aiNodeResult?.status === "failed"
-                  ? "Провайдер AI не вернул корректный результат. Проверьте адрес, модель, API-ключ и доступность провайдера."
+                  ? (aiNodeResult?.message || "Провайдер AI не вернул корректный результат. Проверьте адрес, модель, API-ключ и доступность провайдера.")
                   : aiNodeResult?.status === "completed"
                     ? "Для этой находки модель не вернула проверенное объяснение или находка не попала в установленный лимит. Ниже остаются результаты детерминированного анализа."
                     : "AI-объяснение появится после выполнения соответствующего блока workflow."}</p>
