@@ -1901,6 +1901,7 @@ def finding_state_history(workflow_id: UUID, fingerprint: str):
             select(AuditLog)
             .where(AuditLog.entity == "finding_state", AuditLog.entity_id == entity_id)
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(100)
         ).all()
         return [
             {
