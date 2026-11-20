@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
-type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
+type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
@@ -459,7 +459,7 @@ export default function App() {
             </button>
             {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
               <div className="source-code-head"><span>{finding.path}</span><b>СТРОКА {finding.line || "—"}</b></div>
-              {finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : <p>Фрагмент недоступен. Откройте файл проекта по указанному пути.</p>}
+              {finding.code_context_redacted && <p className="source-redacted-note">Строки исходника скрыты целиком: этот фрагмент содержит секретные данные.</p>}{finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : <p>Фрагмент недоступен. Откройте файл проекта по указанному пути.</p>}
             </div>}
             {finding.fingerprint && <div className="finding-lifecycle">
               <label>Статус
