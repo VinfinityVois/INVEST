@@ -13,3 +13,8 @@
 .finding small{display:block;margin-top:6px;color:#8ea1b9;font:8px 'DM Mono';overflow-wrap:anywhere}
 .finding p{margin:6px 0;color:#9baabe;font-size:8px;line-height:1.45}
 .finding code{display:inline-block;color:#e7bd91;background:#241d17;padding:3px 5px;border-radius:3px;font-size:8px}
+
+.archive-upload{display:flex;align-items:center;gap:8px;margin:8px 0 5px;padding:10px;border:1px dashed #405773;border-radius:6px;background:#101a27;color:#c5d7ec;font-size:9px;cursor:pointer}
+.archive-upload:hover{border-color:#79a8d8;background:#142237}
+.archive-upload input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.upload-hint{display:block;margin:0 0 14px;color:#718198;font-size:8px;line-height:1.45}
