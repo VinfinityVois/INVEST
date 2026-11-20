@@ -913,6 +913,14 @@ export default function App() {
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [templateLibraryOpen]);
+  useEffect(() => {
+    if (!aiGraphOpen || aiGraphBusy) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAiGraphOpen(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [aiGraphOpen, aiGraphBusy]);
   const cloneTemplateIntoEditor = async (templateId: string) => {
     setTemplateBusyId(templateId);
     setTemplateError("");
