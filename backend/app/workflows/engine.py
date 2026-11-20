@@ -229,6 +229,20 @@ def _evaluate_condition(config: dict, parents: list[dict]) -> tuple[bool, str | 
     return False, "Неподдерживаемый оператор условия: " + str(operator)
 
 
+
+def _active_parent_ids(edges, outputs: dict) -> list[str]:
+    active = []
+    for edge in edges:
+        parent_output = outputs.get(edge.source)
+        if parent_output is None or parent_output.get("status") == "skipped":
+            continue
+        selected_branch = parent_output.get("branch")
+        if selected_branch and edge.source_handle and edge.source_handle != selected_branch:
+            continue
+        active.append(edge.source)
+    return list(dict.fromkeys(active))
+
+
 def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
@@ -294,16 +308,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         node = nodes[node_id]
         cache_hit = False
         cache_bypass_reason = None
-        active_parent_ids = []
-        for edge in incoming_edges[node_id]:
-            parent_output = outputs.get(edge.source)
-            if parent_output is None or parent_output.get("status") == "skipped":
-                continue
-            selected_branch = parent_output.get("branch")
-            if selected_branch and edge.source_handle and edge.source_handle != selected_branch:
-                continue
-            active_parent_ids.append(edge.source)
-        parents = [outputs[parent] for parent in dict.fromkeys(active_parent_ids) if parent in outputs]
+        active_parent_ids = _active_parent_ids(incoming_edges[node_id], outputs)
+        parents = [outputs[parent] for parent in active_parent_ids if parent in outputs]
         if incoming_edges[node_id] and not parents:
             output = {"status": "skipped", "message": "Ветка workflow не выбрана предыдущим условным блоком."}
             outputs[node_id] = output
