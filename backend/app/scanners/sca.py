@@ -424,13 +424,9 @@ def _maven_profile_sections(pom_path, pom):
             yield profile
 
 
-def _maven_managed(pom_path, pom, properties, visited=None, depth=0):
-    visited = set() if visited is None else visited
-    path = pom_path.resolve()
-    if path in visited or depth > 5:
-        return {}
-    visited.add(path)
-    result = {}
+def _maven_managed(pom_path, pom, properties, snapshots=None):
+    result: dict[tuple[str, str], set[str]] = {}
+    snapshots = snapshots or {}
     for section in _maven_profile_sections(pom_path, pom):
         management = _maven_child(section, "dependencyManagement")
         dependencies = _maven_child(management, "dependencies")
@@ -441,20 +437,9 @@ def _maven_managed(pom_path, pom, properties, visited=None, depth=0):
             if not group or not artifact:
                 continue
             if (_maven_text(dep, "type") or "jar") == "pom" and _maven_text(dep, "scope") == "import":
-                rel = _maven_text(dep, "relativePath")
-                rel = "../pom.xml" if rel is None else rel
-                bom_path = (pom_path.parent / rel).resolve() if rel else None
-                bom_text = _read_text(bom_path) if bom_path and bom_path.is_file() and not bom_path.is_symlink() else None
-                if bom_text:
-                    try:
-                        bom = ET.fromstring(bom_text)
-                    except ET.ParseError:
-                        continue
-                    bom_props = dict(properties)
-                    bom_props.update(_maven_properties(bom))
-                    imported = _maven_managed(bom_path, bom, bom_props, visited, depth + 1)
-                    for coordinate, imported_version in imported.items():
-                        result.setdefault(coordinate, set()).add(imported_version)
+                if group == "org.springframework.boot" and artifact == "spring-boot-dependencies" and version:
+                    for coordinate, managed_version in snapshots.get(version, {}).items():
+                        result.setdefault(coordinate, set()).add(managed_version)
             elif version:
                 result.setdefault((group, artifact), set()).add(version)
     return {key: next(iter(values)) for key, values in result.items() if len(values) == 1}
@@ -478,6 +463,7 @@ def _maven_properties(pom, inherited=None):
 def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
     project = Path(root).resolve()
     advisories = _load_advisories(advisories_path)
+    bom_snapshots = _load_spring_boot_boms()
     findings = {}
     pom_files = [p for p in project.rglob("pom.xml") if not p.is_symlink() and not any(x in SKIP_DIRS for x in p.parts)][:MAX_FILES]
     tree_files = [p for p in project.rglob("*dependency-tree*.txt") if p.is_file() and not p.is_symlink() and not any(x in SKIP_DIRS for x in p.parts)][:max(0, MAX_FILES-len(pom_files))]
@@ -501,7 +487,7 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
                     props = _maven_properties(ET.fromstring(parent_source), props)
                 except ET.ParseError:
                     pass
-        managed = _maven_managed(pom_path, pom, props)
+        managed = _maven_managed(pom_path, pom, props, bom_snapshots)
         relative = pom_path.relative_to(project).as_posix()
         for section in _maven_profile_sections(pom_path, pom):
             deps = _maven_child(section, "dependencies")
