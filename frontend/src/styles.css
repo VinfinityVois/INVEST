@@ -254,3 +254,5 @@
 
 .workflow-node.node-configuration_required { border-color: rgba(224,174,93,.72) !important; }
 .node-configuration_required .node-state { color: #e5bc78; }
+
+.source-redacted-note { margin: 8px 10px 0; color: #d8ad72; font-size: 9px; line-height: 1.5; }
