@@ -239,6 +239,42 @@ def test_engine_reports_node_timing_and_progress():
 
 
 
+def test_ai_explanation_result_is_exposed_in_node_trace_and_progress(monkeypatch):
+    import app.workflows.engine as engine
+
+    monkeypatch.setattr(engine, "explain_findings", lambda findings, config: {
+        "status": "completed",
+        "findings": findings,
+        "explanations": [{
+            "fingerprint": "fp-1",
+            "root_cause": "Небезопасная конкатенация SQL.",
+            "impact": "Возможна SQL-инъекция.",
+            "recommendation": "Используйте параметры запроса.",
+            "confidence": 0.9,
+            "evidence_limits": "Проверен только локальный контекст.",
+        }],
+        "explained_count": 1,
+    })
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "merge", "type": "findings.merge"},
+            {"id": "ai", "type": "ai.explain"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "merge"},
+            {"id": "e2", "source": "merge", "target": "ai"},
+        ],
+    )
+    progress = []
+
+    result = execute_graph(graph, registry, on_progress=progress.append)
+
+    assert result["trace"][-1]["explained_count"] == 1
+    assert progress[-1]["node_results"]["ai"]["explained_count"] == 1
+    assert progress[-1]["node_results"]["ai"]["explanations"][0]["root_cause"] == "Небезопасная конкатенация SQL."
+
+
 def test_ci_gate_blocks_workflow_on_critical_findings(tmp_path, monkeypatch):
     from app.config import settings
     import app.workflows.engine as engine
