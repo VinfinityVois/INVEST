@@ -21,7 +21,7 @@ type ProjectFilePreview = { path: string; start_line: number; end_line: number; 
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
-type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
+type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
@@ -1061,7 +1061,9 @@ export default function App() {
               <p><b>Причина:</b> {finding.ai_explanation.root_cause}</p>
               <p><b>Влияние:</b> {finding.ai_explanation.impact}</p>
               <p><b>Рекомендация:</b> {finding.ai_explanation.recommendation}</p>
+              {finding.ai_explanation.source_evidence?.length ? <div className="ai-source-evidence"><b>ИСТОЧНИК ДОКАЗАТЕЛЬСТВА · ИЗ СКАНЕРА</b>{finding.ai_explanation.source_evidence.map(item => <div className={item.is_finding ? "is-finding-line" : ""} key={item.line}><span>{item.line}</span><code>{item.text}</code></div>)}</div> : <small className="ai-no-evidence">Сканер не предоставил фрагмент исходного кода для подтверждения. Не считайте текст модели доказательством.</small>}
               {finding.ai_explanation.evidence_limits && <small>Ограничения анализа: {finding.ai_explanation.evidence_limits}</small>}
+              <small className="ai-confidence-note">Уверенность — оценка модели, а не вероятность эксплуатации или подтверждение уязвимости.</small>
             </div>}
             {!finding.ai_explanation && aiNode && <div className="finding-ai-explanation ai-explanation-pending">
               <div><Bot size={13}/><b>AI EXPLANATION</b><span>{aiNodeResult?.status === "completed" ? "НЕТ ОТВЕТА" : aiNodeResult?.status === "failed" ? "ОШИБКА" : aiNodeResult?.status === "configuration_required" ? "НЕ НАСТРОЕН" : "ОЖИДАЕТ ЗАПУСКА"}</span></div>
