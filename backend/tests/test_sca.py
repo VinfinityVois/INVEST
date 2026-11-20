@@ -130,3 +130,24 @@ def test_malformed_gradle_version_catalog_is_ignored(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_gradle_subproject_uses_root_catalog_and_lockfile(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "service").mkdir()
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[libraries]\n'
+        'commons-text = { module = "org.apache.commons:commons-text", version = "1.9" }\n',
+        encoding="utf-8",
+    )
+    (project / "service" / "build.gradle.kts").write_text(
+        'dependencies { implementation(libs.commons.text) }\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        "org.apache.commons:commons-text:1.10.0=runtimeClasspath\n",
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
