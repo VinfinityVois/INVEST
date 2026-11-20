@@ -218,39 +218,41 @@ def test_engine_reports_node_timing_and_progress():
     assert progress[0]["severity"] == {}
 
 
-def test_ci_gate_blocks_workflow_on_critical_findings():
+
+def test_ci_gate_blocks_workflow_on_critical_findings(tmp_path, monkeypatch):
+    from app.config import settings
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda _path: [{
+        "fingerprint": "critical-1",
+        "rule_id": "TEST_CRITICAL",
+        "severity": "CRITICAL",
+        "path": "src/main.kt",
+        "line": 10,
+        "message": "Synthetic critical finding",
+    }])
     graph = WorkflowGraph(
         nodes=[
             {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
             {"id": "merge", "type": "findings.merge"},
             {"id": "gate", "type": "ci.gate"},
         ],
         edges=[
-            {"id": "e1", "source": "trigger", "target": "merge"},
-            {"id": "e2", "source": "merge", "target": "gate"},
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "merge"},
+            {"id": "e4", "source": "merge", "target": "gate"},
         ],
     )
-    # Inject a deterministic scanner output without touching the filesystem.
-    from app.workflows.engine import execute_graph as run_graph
-    from app.workflows.registry import registry as node_registry
-    from app.workflows.schemas import WorkflowGraph as Graph
-    import app.workflows.engine as engine
 
-    original = engine.scan_directory
-    try:
-        engine.scan_directory = lambda _path: []
-        # The pure gate behavior is covered in test_security_gate.py; here we
-        # verify graph-level status and gate-node execution using a synthetic
-        # findings merge supplied by a tiny registry-compatible scanner graph.
-        graph = Graph(
-            nodes=[
-                {"id": "trigger", "type": "trigger.manual"},
-                {"id": "gate", "type": "ci.gate"},
-            ],
-            edges=[],
-        )
-        result = run_graph(graph, node_registry)
-        assert result["status"] == "completed"
-        assert result["outputs"]["gate"]["decision"] == "PASS"
-    finally:
-        engine.scan_directory = original
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "failed"
+    assert result["security_gate"]["decision"] == "BLOCK"
+    assert result["outputs"]["gate"]["status"] == "blocked"
+    assert result["outputs"]["gate"]["counts"]["CRITICAL"] == 1
