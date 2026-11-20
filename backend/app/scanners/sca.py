@@ -14,8 +14,7 @@ from app.scanners.secrets import MAX_FILE_BYTES, MAX_FILES, SKIP_DIRS
 DATA_FILE = Path(__file__).resolve().parents[3] / "data" / "maven-advisories.json"
 SPRING_BOOT_BOM_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-managed-versions.json"
 DEPENDENCY_CALL = re.compile(
-    r"(?P<call>\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly|runtimeClasspath|compileClasspath)\s*\(\s*"
-    r"(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
+    r"(?P<call>\b[A-Za-z_]\w*\s*\(\s*(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
     r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
     re.MULTILINE | re.DOTALL,
 )
@@ -182,17 +181,42 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
     return result
 
 
-def _load_project_lockfile(build_dir: Path, project_root: Path) -> dict[tuple[str, str], str]:
-    """Find the nearest Gradle lockfile without traversing outside the project."""
-    current = build_dir
-    while current == project_root or project_root in current.parents:
-        candidate = current / "gradle.lockfile"
-        if candidate.is_file():
-            return _load_lockfile(candidate)
-        if current == project_root:
-            break
-        current = current.parent
-    return {}
+def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dict[str, tuple[str, str, str | None]]]:
+    """Load conventional and statically declared custom Gradle version catalogs."""
+    roots = {project_root / "gradle", build_dir / "gradle"}
+    catalog_files: set[Path] = set()
+    for directory in roots:
+        if directory.is_dir() and not directory.is_symlink():
+            try:
+                catalog_files.update(path for path in directory.glob("*.versions.toml") if not path.is_symlink())
+            except OSError:
+                continue
+
+    settings_text = ""
+    for settings_file in (project_root / "settings.gradle", project_root / "settings.gradle.kts",
+                          build_dir / "settings.gradle", build_dir / "settings.gradle.kts"):
+        content = _read_text(settings_file)
+        if content:
+            settings_text += "\n" + content
+
+    result: dict[str, dict[str, tuple[str, str, str | None]]] = {}
+    for catalog_file in catalog_files:
+        catalog_name = catalog_file.name.removesuffix(".versions.toml")
+        declarations = re.findall(
+            rf"\bcreate\s*\(\s*['\"]([A-Za-z_]\w*)['\"]\s*\)\s*\{{(?:(?!\}}).)*?from\s*\(\s*files\s*\(\s*['\"][^'\"]*{re.escape(catalog_file.name)}['\"]",
+            settings_text,
+            re.DOTALL,
+        )
+        if len(set(declarations)) == 1:
+            catalog_name = declarations[0]
+        elif len(set(declarations)) > 1:
+            continue
+        result[catalog_name] = _load_version_catalog(catalog_file)
+    if "libs" not in result:
+        default_catalog = project_root / "gradle" / "libs.versions.toml"
+        if default_catalog.is_file():
+            result["libs"] = _load_version_catalog(default_catalog)
+    return result
 
 
 def _numeric_version(value: str) -> tuple[int, ...] | None:
@@ -342,20 +366,20 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         if lockfile_path:
             lockfile_paths.add(lockfile_path)
         managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
-        catalog_path = project / "gradle" / "libs.versions.toml"
-        if not catalog_path.is_file():
-            catalog_path = build_file.parent / "gradle" / "libs.versions.toml"
-        catalog = _load_version_catalog(catalog_path) if catalog_path.is_file() else {}
+        catalogs = _load_version_catalogs(project, build_file.parent)
         relative_path = build_file.relative_to(project).as_posix()
 
         for block_start, _block_end, block in _dependency_blocks(build_text):
-            # Version-catalog accessors (for example libs.apache.commons.text).
-            for alias_match in re.finditer(
-                r"\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\s*\(\s*libs((?:\.[A-Za-z_]\w*)+)\s*\)",
-                block,
-            ):
-                accessor = alias_match.group(1).lstrip(".")
-                normalized = _catalog_alias_key(accessor)
+            # Version-catalog accessors: default/custom catalogs and add("configuration", libs.alias).
+            alias_pattern = re.compile(
+                r"\b[A-Za-z_]\w*\s*\(\s*(?P<catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
+                r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
+            )
+            for alias_match in alias_pattern.finditer(block):
+                catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
+                accessor = alias_match.group(2) or alias_match.group(3)
+                normalized = _catalog_alias_key(accessor.lstrip("."))
+                catalog = catalogs.get(catalog_name, {})
                 candidates = [entry for key, entry in catalog.items() if key == normalized]
                 if len(candidates) != 1:
                     continue
