@@ -110,3 +110,21 @@ def test_webhook_rejects_redirect_response(monkeypatch):
 
     with pytest.raises(WebhookDeliveryError, match="redirect"):
         deliver_webhook("https://webhook.site/unique-id", {"event": "test"})
+
+
+def test_webhook_payload_bounds_untrusted_finding_text():
+    payload = build_notification_payload({
+        "findings": [{
+            "rule_id": "x" * 1000,
+            "severity": "HIGH",
+            "path": "p" * 2000,
+            "message": "m" * 10000,
+            "recommendation": "r" * 10000,
+        }]
+    })
+
+    finding = payload["top_findings"][0]
+    assert len(finding["rule_id"]) <= 120
+    assert len(finding["path"]) <= 400
+    assert len(finding["message"]) <= 600
+    assert len(finding["recommendation"]) <= 800
