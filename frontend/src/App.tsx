@@ -14,8 +14,18 @@ import {
 
 type Manifest = { type: string; title: string; category: string; description: string };
 type Finding = { id?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string };
+type Telemetry = {
+  run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
+  finished_at?: string; duration_ms?: number | null; total_findings: number;
+  severity: Record<string, number>;
+  scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
+  completed_nodes?: number; total_nodes?: number; current_node?: string | null;
+};
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown> };
 type FlowNode = Node<NodeData>;
+
+const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
+const formatDate = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
 
 const categoryMeta: Record<string, { label: string; tone: string }> = {
   Trigger: { label: "Триггер", tone: "blue" }, Source: { label: "Источник", tone: "cyan" },
@@ -63,6 +73,7 @@ export default function App() {
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
@@ -81,6 +92,16 @@ export default function App() {
       .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
   }, []);
+
+  useEffect(() => {
+    if (!workflowId) { setTelemetry(null); return; }
+    let active = true;
+    fetch("/api/workflows/" + workflowId + "/telemetry/latest")
+      .then(response => response.ok ? response.json() : null)
+      .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
+      .catch(() => { if (active) setTelemetry(null); });
+    return () => { active = false; };
+  }, [workflowId]);
 
   const selectedNode = nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = edges.find(edge => edge.id === selectedEdgeId) || null;
@@ -192,22 +213,48 @@ export default function App() {
       setShowResult(true);
       setResult("Задание поставлено в очередь · " + queued.run_id);
 
-      let completed: Record<string, unknown> | null = null;
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        await new Promise(resolve => window.setTimeout(resolve, 1000));
-        const statusResponse = await fetch("/api/runs/" + queued.run_id);
-        if (!statusResponse.ok) throw new Error("Не удалось получить статус задания");
-        const status = await statusResponse.json();
-        setResult(JSON.stringify(status, null, 2));
-        if (["completed", "partial", "failed"].includes(status.status)) {
-          completed = status as Record<string, unknown>;
-          break;
-        }
-      }
-      if (!completed) throw new Error("Превышено время ожидания worker. Задание осталось сохранено в очереди.");
+      const completed = await new Promise<Telemetry>((resolve, reject) => {
+        const stream = new EventSource("/api/runs/" + queued.run_id + "/events");
+        let settled = false;
+        let fallbackStarted = false;
+        const finish = (data: Telemetry) => {
+          if (settled) return;
+          settled = true; stream.close(); window.clearTimeout(timeout); resolve(data);
+        };
+        const fallback = async () => {
+          if (fallbackStarted || settled) return;
+          fallbackStarted = true; stream.close();
+          try {
+            for (let attempt = 0; attempt < 300; attempt += 1) {
+              await new Promise(resolveWait => window.setTimeout(resolveWait, 1000));
+              const response = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+              if (!response.ok) throw new Error("Не удалось получить телеметрию задания");
+              const data: Telemetry = await response.json();
+              setTelemetry(data);
+              if (["completed", "partial", "failed"].includes(data.status)) { finish(data); return; }
+            }
+            throw new Error("Превышено время ожидания worker. Задание сохранено в очереди.");
+          } catch (error) {
+            if (!settled) { settled = true; window.clearTimeout(timeout); reject(error); }
+          }
+        };
+        const timeout = window.setTimeout(() => { void fallback(); }, 300000);
+        stream.onmessage = event => {
+          try {
+            const data: Telemetry = JSON.parse(event.data);
+            setTelemetry(data);
+            setResult("Выполнение · " + data.completed_nodes + "/" + data.total_nodes + " блоков");
+            if (["completed", "partial", "failed"].includes(data.status)) finish(data);
+          } catch { /* Ignore malformed telemetry frame and keep the stream alive. */ }
+        };
+        stream.onerror = () => { void fallback(); };
+      });
       const findingsResponse = await fetch("/api/runs/" + queued.run_id + "/findings");
       if (findingsResponse.ok) setFindings(await findingsResponse.json());
-      if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.\n" + JSON.stringify(completed, null, 2));
+      const telemetryResponse = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+      if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
+      setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
+      if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.");
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
@@ -285,6 +332,21 @@ export default function App() {
         {!selectedNode && !selectedEdge && <div className="empty-inspector"><Workflow size={26} /><b>Ничего не выбрано</b><p>Выбери блок или линию на холсте. Здесь появятся доступные настройки и действия.</p></div>}
         <div className="inspector-tabs"><span className="tab-active">Результаты</span><span className="tab-state">{busy ? "RUNNING" : "IDLE"}</span></div>
         <div className="runtime"><div><Bot size={18} /></div><section><b>Workflow runtime</b><small>Исполнитель графа API</small></section><label className={busy ? "running" : ""}>{busy ? "RUNNING" : "READY"}</label></div>
+        <section className="telemetry-card">
+          <div className="telemetry-heading"><div><div className="section-caption">RUN TELEMETRY</div><b>Последний запуск</b></div><span className={"telemetry-status status-" + (telemetry?.status || "empty")}>{telemetry?.status === "completed" ? "УСПЕШНО" : telemetry?.status === "partial" ? "ЧАСТИЧНО" : telemetry?.status === "failed" ? "ОШИБКА" : telemetry?.status === "running" ? "В РАБОТЕ" : telemetry?.status === "queued" ? "В ОЧЕРЕДИ" : "НЕТ ДАННЫХ"}</span></div>
+          {telemetry && telemetry.status !== "never_run" ? <>
+            <div className="telemetry-metrics">
+              <div><strong>{formatDuration(telemetry.duration_ms)}</strong><small>ДЛИТЕЛЬНОСТЬ</small></div>
+              <div><strong>{telemetry.total_findings}</strong><small>НАХОДКИ</small></div>
+              <div><strong>{telemetry.completed_nodes || 0}/{telemetry.total_nodes || 0}</strong><small>ШАГИ</small></div>
+            </div>
+            <div className="telemetry-time"><span>Начало: {formatDate(telemetry.started_at || telemetry.queued_at)}</span><span>Завершение: {formatDate(telemetry.finished_at)}</span></div>
+            {telemetry.status === "running" && <div className="telemetry-progress"><i style={{ width: `${telemetry.total_nodes ? Math.min(100, (telemetry.completed_nodes || 0) / telemetry.total_nodes * 100) : 0}%` }} /></div>}
+            <div className="severity-strip">{["CRITICAL","HIGH","MEDIUM","LOW","INFO"].filter(level => (telemetry.severity?.[level] || 0) > 0).map(level => <span key={level} className={"severity-" + level.toLowerCase()}>{level} <b>{telemetry.severity[level]}</b></span>)}</div>
+            {telemetry.scanners?.length > 0 && <div className="scanner-telemetry">{telemetry.scanners.map(scanner => <div key={scanner.node_id || scanner.type}><span>{scanner.type.replace("scan.", "").toUpperCase()}</span><small>{scanner.status}</small><b>{scanner.findings} · {formatDuration(scanner.duration_ms)}</b></div>)}</div>}
+            {telemetry.current_node && <div className="telemetry-current">Сейчас выполняется: <b>{telemetry.current_node}</b></div>}
+          </> : <p className="telemetry-empty">Запусков пока нет. Телеметрия появится после первой проверки.</p>}
+        </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> :
           findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}><div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div><small>{finding.path}{finding.line ? ":" + finding.line : ""}</small><p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>{finding.masked_value && <code>{finding.masked_value}</code>}</article>)}
