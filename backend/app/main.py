@@ -133,8 +133,9 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
         return {"id": str(workflow.id), "name": workflow.name, "version": version}
 
 
-@app.post("/api/workflows/{workflow_id}/runs", status_code=201)
+@app.post("/api/workflows/{workflow_id}/runs", status_code=202)
 def execute_saved_workflow(workflow_id: UUID):
+    """Persist a run request; the dedicated worker performs the scan asynchronously."""
     with SessionLocal() as session:
         workflow = session.get(Workflow, workflow_id)
         if workflow is None:
@@ -149,53 +150,24 @@ def execute_saved_workflow(workflow_id: UUID):
             raise HTTPException(status_code=409, detail="Workflow has no saved version")
 
         graph = WorkflowGraph.model_validate(version.graph)
-        started = datetime.now(timezone.utc)
-        try:
-            result = execute_graph(graph, registry)
-        except WorkflowExecutionError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        finished = datetime.now(timezone.utc)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
 
         run = WorkflowRun(
             workflow_id=workflow_id,
-            status=result["status"],
+            status="queued",
             source="ui",
             graph_snapshot=version.graph,
-            result=result,
-            started_at=started,
-            finished_at=finished,
         )
         session.add(run)
-        session.flush()
-
-        findings_by_fingerprint = {}
-        for node_output in result["outputs"].values():
-            for finding in node_output.get("findings", []):
-                fingerprint = finding.get("fingerprint")
-                if fingerprint:
-                    findings_by_fingerprint.setdefault(fingerprint, finding)
-
-        for fingerprint, finding in findings_by_fingerprint.items():
-            session.add(
-                Finding(
-                    run_id=run.id,
-                    fingerprint=fingerprint,
-                    rule_id=str(finding.get("rule_id", "unknown"))[:160],
-                    severity=str(finding.get("severity", "INFO"))[:16],
-                    path=str(finding.get("path", "")),
-                    line=finding.get("line"),
-                    payload=finding,
-                )
-            )
-
         session.commit()
         return {
             "run_id": str(run.id),
             "workflow_id": str(workflow_id),
             "workflow_version": version.version,
-            "status": run.status,
-            "findings_count": len(findings_by_fingerprint),
-            "result": result,
+            "status": "queued",
+            "findings_count": 0,
         }
 
 
