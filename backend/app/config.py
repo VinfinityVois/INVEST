@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     app_secret_key: str = "development-only-change-me"
     database_url: str = "sqlite:///./dev.db"
     allowed_targets: str = ""
-    workspace_root: str = "/data/workspaces"
+    workspace_root: str = "/workspace"
     master_key_file: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
