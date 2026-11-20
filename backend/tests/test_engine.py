@@ -1,0 +1,67 @@
+from pathlib import Path
+
+from app.config import settings
+from app.workflows.engine import execute_graph
+from app.workflows.registry import registry
+from app.workflows.schemas import WorkflowGraph
+
+
+def test_workspace_source_runs_secrets_scanner_and_merges_findings(tmp_path, monkeypatch):
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "application.yml").write_text(
+        'spring:\n  datasource:\n    password: "VeryStrongPasswordValue123"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+
+    graph = WorkflowGraph(
+        name="Secrets test",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "merge", "type": "findings.merge"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "merge"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["source"]["status"] == "ready"
+    assert result["outputs"]["scan"]["summary"]["total"] == 1
+    finding = result["outputs"]["merge"]["findings"][0]
+    assert finding["category"] == "SECRET"
+    assert finding["path"] == "application.yml"
+    assert "VeryStrongPasswordValue123" not in str(result)
+
+
+def test_workspace_source_rejects_path_traversal(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "../outside"}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "failed"
+    assert result["outputs"]["source"]["status"] == "failed"
+    assert result["outputs"]["scan"]["status"] == "blocked"
