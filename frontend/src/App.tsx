@@ -167,7 +167,6 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [notice, setNotice] = useState("Подключение к API…");
   const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
   const [result, setResult] = useState("Граф готов к проверке.");
@@ -873,23 +872,6 @@ export default function App() {
     if (!response.ok) throw new Error(JSON.stringify(data));
     setWorkflowId(data.id); return data.id as string;
   };
-  const toggleWorkflowSchedule = async () => {
-    setBusy(true);
-    try {
-      const id = await persistWorkflow();
-      const response = await fetch("/api/workflows/" + id + "/schedule", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !scheduleEnabled }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
-      setScheduleEnabled(Boolean(data.enabled));
-      setResult(data.enabled
-        ? "Расписание включено · " + data.cron + " · " + data.timezone + " · следующий запуск " + new Date(data.next_run_at).toLocaleString()
-        : "Расписание отключено.");
-    } catch (error) { setResult("Не удалось изменить расписание: " + String(error)); }
-    finally { setBusy(false); }
-  };
   const saveWorkflow = async () => {
     setBusy(true);
     try { const id = await persistWorkflow(); setResult("Сохранено · workflow " + id); }
@@ -1088,7 +1070,7 @@ export default function App() {
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
-        <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>{nodes.some(node => node.data.nodeType === "trigger.schedule") && <button className="ghost" disabled={busy} onClick={toggleWorkflowSchedule}><Clock size={13} /> {scheduleEnabled ? "Отключить расписание" : "Включить расписание"}</button>}
+        <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
         <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
       </div>
