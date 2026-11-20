@@ -15,7 +15,6 @@ def _sanitize_url(value: str) -> str:
         parsed = urlsplit(value)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             return ""
-        # Strip user-info, query and fragment; preserve only a public host/path reference.
         host = parsed.hostname
         if parsed.port:
             host = f"{host}:{parsed.port}"
@@ -24,31 +23,36 @@ def _sanitize_url(value: str) -> str:
         return ""
 
 
+def _clean_value(value, node_type: str, key: str = ""):
+    if SENSITIVE_KEY.search(key):
+        return None
+    lowered = key.lower()
+    if node_type == "notify.webhook" and lowered in {"url", "endpoint", "webhook"}:
+        return "https://example.invalid/replace-with-your-webhook"
+    if node_type == "source.upload" and lowered in {"path", "workspace_path"}:
+        return None
+    if node_type == "source.git" and lowered == "url" and isinstance(value, str):
+        return _sanitize_url(value)
+    if isinstance(value, dict):
+        cleaned = {}
+        for child_key, child_value in value.items():
+            result = _clean_value(child_value, node_type, str(child_key))
+            if result is not None:
+                cleaned[str(child_key)] = result
+        return cleaned
+    if isinstance(value, list):
+        return [item for item in (_clean_value(child, node_type) for child in value) if item is not None]
+    return value
+
+
 def sanitize_graph(graph: dict) -> dict:
     """Return a deep-copied graph with credential-like values and local paths removed."""
     result = copy.deepcopy(graph)
     for node in result.get("nodes", []):
         if not isinstance(node, dict):
             continue
-        node_type = str(node.get("type", ""))
         config = node.get("config")
-        if not isinstance(config, dict):
-            node["config"] = {}
-            continue
-        cleaned = {}
-        for key, value in config.items():
-            key_text = str(key)
-            if SENSITIVE_KEY.search(key_text):
-                continue
-            if node_type == "notify.webhook" and key_text.lower() in {"url", "endpoint", "webhook"}:
-                continue
-            if node_type == "source.upload" and key_text.lower() in {"path", "workspace_path"}:
-                continue
-            if node_type == "source.git" and key_text.lower() == "url" and isinstance(value, str):
-                cleaned[key_text] = _sanitize_url(value)
-                continue
-            cleaned[key_text] = value
-        node["config"] = cleaned
+        node["config"] = _clean_value(config if isinstance(config, dict) else {}, str(node.get("type", "")))
     return result
 
 
