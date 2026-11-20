@@ -41,6 +41,26 @@ def test_workspace_source_runs_secrets_scanner_and_merges_findings(tmp_path, mon
     assert "VeryStrongPasswordValue123" not in str(result)
 
 
+def test_unconfigured_source_is_reported_as_partial_with_actionable_status():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "partial"
+    assert result["outputs"]["source"]["status"] == "configuration_required"
+    assert result["outputs"]["scan"]["status"] == "blocked"
+
+
 def test_workspace_source_rejects_path_traversal(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
