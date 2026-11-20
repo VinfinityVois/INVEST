@@ -486,3 +486,51 @@ def test_scanner_cache_expires_after_ttl_and_rescans(tmp_path, monkeypatch):
     assert expired["trace"][-1]["cached"] is False
     assert expired["trace"][-1]["cache_bypass_reason"] == "Срок действия кэша истёк"
     assert expired["cache_metadata"]["scan"]["cached_at"] != expired_metadata["scan"]["cached_at"]
+
+
+def test_workflow_delivers_ai_report_to_webhook_node(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "App.kt").write_text("class App {}", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [{
+        "fingerprint": "finding-1", "rule_id": "demo.secret", "severity": "HIGH",
+        "path": "App.kt", "line": 1, "message": "Demo finding",
+    }])
+    monkeypatch.setattr(engine, "explain_findings", lambda findings, _config: {
+        "status": "completed", "findings": findings,
+        "explanations": [{"fingerprint": "finding-1", "root_cause": "Example cause",
+                          "impact": "Example impact", "recommendation": "Example fix"}],
+        "explained_count": 1,
+    })
+    delivered = {}
+    monkeypatch.setattr(engine, "deliver_webhook", lambda url, payload: delivered.update(
+        url=url, payload=payload
+    ) or {"http_status": 200, "delivered": True})
+
+    graph = WorkflowGraph(
+        name="Webhook end-to-end",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "ai", "type": "ai.explain"},
+            {"id": "notify", "type": "notify.webhook", "config": {"url": "https://webhook.site/demo-id"}},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "ai"},
+            {"id": "e4", "source": "ai", "target": "notify"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert delivered["url"] == "https://webhook.site/demo-id"
+    assert delivered["payload"]["summary"]["total_findings"] == 1
+    assert delivered["payload"]["ai_summary"]
+    assert result["outputs"]["notify"]["delivered"] is True
