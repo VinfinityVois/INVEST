@@ -289,3 +289,7 @@
 .git-source-button:hover:not(:disabled){background:#1b3d59;border-color:#69a9e8}
 .git-source-button:disabled{opacity:.45;cursor:not-allowed}
 @media(prefers-reduced-motion:reduce){.react-flow__edge.edge-active .react-flow__edge-path,.node-live-dot{animation:none}.workflow-node.node-running{animation:none}}
+
+.node-ai-note{display:flex;flex-direction:column;gap:3px;margin-top:5px;padding:6px 7px;border-left:2px solid #b783dc;border-radius:3px;background:rgba(112,65,151,.12);color:#c9b1dd;font-size:8px;line-height:1.4}
+.node-ai-note b{color:#d8b4f3;font-size:7px;letter-spacing:.08em}
+.node-ai-note span{overflow-wrap:anywhere}
