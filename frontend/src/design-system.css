@@ -454,3 +454,13 @@
   font:10px "IBM Plex Mono";
 }
 .shell .palette .panel-intro { min-height:36px; }
+
+.shell .desktop-recommendation {
+  display:none;align-items:center;gap:8px;padding:8px 11px;margin:8px 0 0;
+  border:1px solid var(--border);border-left:2px solid var(--info);border-radius:4px;
+  background:var(--surface);color:var(--text-secondary);font-size:11px;line-height:1.45;
+}
+.shell .desktop-recommendation svg { flex:0 0 14px;color:var(--info); }
+@media (max-width:1023px) {
+  .shell .desktop-recommendation { display:flex; }
+}
