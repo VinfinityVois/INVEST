@@ -20,6 +20,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
+from app.ai.explanations import provider_configuration
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
@@ -63,6 +64,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/ai/status")
+def ai_provider_status():
+    """Expose provider readiness without ever returning the API key."""
+    return provider_configuration()
 
 
 @app.get("/health")
