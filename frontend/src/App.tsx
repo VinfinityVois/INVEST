@@ -308,7 +308,8 @@ export default function App() {
     try {
       const response = await fetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
       if (!response.ok) throw new Error("Не удалось загрузить историю");
-      setFindingHistory(current => ({ ...current, [fingerprint]: await response.json() }));
+      const history = await response.json();
+      setFindingHistory(current => ({ ...current, [fingerprint]: history }));
     } catch (error) { setResult(String(error)); }
   };
   const categories = ["Все", ...Array.from(new Set(manifests.map(item => item.category)))];
