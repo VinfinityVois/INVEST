@@ -29,3 +29,32 @@
 .react-flow__edge-textbg{fill:#14263a}
 @media(max-width:1120px){.inspector{display:block;max-height:480px}.layout{grid-template-columns:220px minmax(280px,1fr)}}
 @media(max-width:700px){.inspector{max-height:none}.edit-section{padding:10px}.element-actions{flex-wrap:wrap}}
+
+
+/* 0.5.0 — independently collapsible sidebars */
+.panel-heading-actions{display:flex;align-items:center;gap:6px}
+.collapse-control{width:27px;height:27px;flex:0 0 27px}
+.layout{grid-template-columns:258px minmax(350px,1fr) 292px;transition:grid-template-columns .22s ease}
+.layout.left-collapsed{grid-template-columns:46px minmax(350px,1fr) 292px}
+.layout.right-collapsed{grid-template-columns:258px minmax(350px,1fr) 46px}
+.layout.left-collapsed.right-collapsed{grid-template-columns:46px minmax(350px,1fr) 46px}
+.panel.is-collapsed{padding:5px;overflow:hidden;display:flex;align-items:flex-start;justify-content:center}
+.collapsed-rail{width:34px;min-height:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:10px 4px;border:1px solid #2b4058;border-radius:7px;background:linear-gradient(160deg,#142238,#0b1420);color:#9fcaff}
+.collapsed-rail:hover{border-color:#5c91c2;background:#172b43;color:#d7ebff}
+.collapsed-rail span{writing-mode:vertical-rl;transform:rotate(180deg);font:7px 'DM Mono';letter-spacing:1.2px}
+@media(max-width:1120px){
+ .layout,.layout.left-collapsed,.layout.right-collapsed,.layout.left-collapsed.right-collapsed{grid-template-columns:220px minmax(280px,1fr) 260px}
+ .layout.left-collapsed{grid-template-columns:46px minmax(280px,1fr) 260px}
+ .layout.right-collapsed{grid-template-columns:220px minmax(280px,1fr) 46px}
+ .layout.left-collapsed.right-collapsed{grid-template-columns:46px minmax(280px,1fr) 46px}
+}
+@media(max-width:700px){
+ .layout,.layout.left-collapsed,.layout.right-collapsed,.layout.left-collapsed.right-collapsed{display:grid;grid-template-columns:1fr;grid-template-rows:auto minmax(520px,auto) auto}
+ .layout.left-collapsed{grid-template-rows:44px minmax(520px,auto) auto}
+ .layout.right-collapsed{grid-template-rows:auto minmax(520px,auto) 44px}
+ .layout.left-collapsed.right-collapsed{grid-template-rows:44px minmax(520px,auto) 44px}
+ .panel.is-collapsed{min-height:40px;align-items:center;justify-content:flex-start}
+ .collapsed-rail{width:100%;min-height:32px;flex-direction:row;gap:8px;padding:7px 10px}
+ .collapsed-rail span{writing-mode:initial;transform:none}
+}
+@media(prefers-reduced-motion:reduce){.layout{transition:none}}
