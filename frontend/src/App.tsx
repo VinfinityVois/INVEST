@@ -709,6 +709,21 @@ export default function App() {
         </>}
       </aside>
     </div>
-    <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.6.0</span></footer>
+    {projectWorkspaceOpen && activeProject && <div className="project-workspace-backdrop">
+      <section className="project-workspace">
+        <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
+        <div className="project-workspace-body">
+          <aside className="project-file-tree"><div className="section-caption">ФАЙЛЫ ПРОЕКТА · {projectFiles.length}</div>{projectFilesLoading && <small className="source-loading">Загрузка…</small>}
+            {projectFiles.map(file => <button className={"project-file-row" + (projectFilePreview?.path === file.path ? " selected" : "")} key={file.path} onClick={() => void openProjectFile(file)}><FileText size={12}/><span title={file.path}>{file.path}</span><small>{file.size < 1024 ? file.size + " B" : (file.size / 1024).toFixed(0) + " KB"}</small></button>)}
+            {projectFiles.length === 0 && <p className="telemetry-empty">В архиве не найдено файлов для отображения.</p>}
+          </aside>
+          <section className="project-file-view"><div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || "Выбери файл в дереве проекта"}</span>{projectFilePreview && <small>{projectFilePreview.total_lines} строк · текстовый просмотр</small>}</div>
+            {projectFilePreview ? <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
+          </section>
+        </div>
+        <footer className="project-workspace-footer"><span>READ-ONLY SOURCE VIEW · SECRET MASKING ENABLED</span><span>Запуск анализа доступен на основном холсте</span></footer>
+      </section>
+    </div>}
+    <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.7.0</span></footer>
   </main>;
 }
