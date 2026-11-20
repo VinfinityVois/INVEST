@@ -1,9 +1,11 @@
 import json
 import time
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
@@ -12,11 +14,24 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import settings
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.db import SessionLocal
-from app.models import Finding, Workflow, WorkflowRun, WorkflowVersion
+from app.models import AuditLog, Finding, FindingState, Workflow, WorkflowRun, WorkflowVersion
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import execute_graph, WorkflowExecutionError
+
+class FindingStateUpdate(BaseModel):
+    state: Literal["open", "accepted_risk", "fixed", "false_positive"]
+    reason: str = Field(min_length=3, max_length=2000)
+    expires_at: datetime | None = None
+
+    @field_validator("reason")
+    @classmethod
+    def reason_must_contain_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Укажите причину изменения статуса.")
+        return value.strip()
+
 
 app = FastAPI(title="AI Security Workflow API", version="0.2.0")
 app.add_middleware(
@@ -342,3 +357,109 @@ def run_workflow(graph: WorkflowGraph):
         return execute_graph(graph, registry)
     except WorkflowExecutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+
+@app.get("/api/workflows/{workflow_id}/finding-states")
+def list_finding_states(workflow_id: UUID):
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        rows = session.scalars(
+            select(FindingState)
+            .where(FindingState.workflow_id == workflow_id)
+            .order_by(FindingState.fingerprint)
+        ).all()
+        return [
+            {
+                "fingerprint": row.fingerprint,
+                "state": row.state,
+                "reason": row.reason,
+                "expires_at": row.expires_at,
+            }
+            for row in rows
+        ]
+
+
+@app.put("/api/workflows/{workflow_id}/findings/{fingerprint}/state")
+def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingStateUpdate):
+    if not fingerprint or len(fingerprint) > 64:
+        raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
+    if payload.state != "accepted_risk" and payload.expires_at is not None:
+        raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
+
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        finding = session.scalar(
+            select(Finding)
+            .join(WorkflowRun, Finding.run_id == WorkflowRun.id)
+            .where(WorkflowRun.workflow_id == workflow_id, Finding.fingerprint == fingerprint)
+            .limit(1)
+        )
+        if finding is None:
+            raise HTTPException(status_code=404, detail="Finding not found in this workflow")
+
+        state_row = session.scalar(
+            select(FindingState).where(
+                FindingState.workflow_id == workflow_id,
+                FindingState.fingerprint == fingerprint,
+            )
+        )
+        previous_state = state_row.state if state_row else None
+        if state_row is None:
+            state_row = FindingState(
+                workflow_id=workflow_id,
+                fingerprint=fingerprint,
+                state=payload.state,
+                reason=payload.reason,
+                expires_at=payload.expires_at,
+            )
+            session.add(state_row)
+        else:
+            state_row.state = payload.state
+            state_row.reason = payload.reason
+            state_row.expires_at = payload.expires_at
+
+        session.add(AuditLog(
+            action="finding.state.changed",
+            entity="finding_state",
+            entity_id=f"{workflow_id}:{fingerprint}",
+            details={
+                "workflow_id": str(workflow_id),
+                "fingerprint": fingerprint,
+                "previous_state": previous_state,
+                "new_state": payload.state,
+                "reason": payload.reason,
+                "expires_at": payload.expires_at.isoformat() if payload.expires_at else None,
+            },
+        ))
+        session.commit()
+        return {
+            "fingerprint": fingerprint,
+            "previous_state": previous_state,
+            "state": state_row.state,
+            "reason": state_row.reason,
+            "expires_at": state_row.expires_at,
+        }
+
+
+@app.get("/api/workflows/{workflow_id}/findings/{fingerprint}/history")
+def finding_state_history(workflow_id: UUID, fingerprint: str):
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        entity_id = f"{workflow_id}:{fingerprint}"
+        rows = session.scalars(
+            select(AuditLog)
+            .where(AuditLog.entity == "finding_state", AuditLog.entity_id == entity_id)
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        ).all()
+        return [
+            {
+                "action": row.action,
+                "details": row.details,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ]
