@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
-type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string };
+type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
@@ -23,7 +23,7 @@ type Telemetry = {
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown> };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -57,9 +57,9 @@ const seedEdges: Edge[] = [
 
 function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
   const meta = categoryMeta[data.category] || { label: data.category, tone: "slate" };
-  return <div className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "")}>
+  return <div className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
     <Handle type="target" position={Position.Left} />
-    <div className="node-topline"><span>{meta.label}</span><span className="node-dot" /></div>
+    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" ? "В РАБОТЕ" : data.executionStatus === "completed" ? "ГОТОВО" : data.executionStatus === "failed" ? "ОШИБКА" : data.executionStatus === "blocked" ? "БЛОК" : "ОЖИДАНИЕ"}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <p className="node-description">{data.description}</p>
@@ -77,6 +77,7 @@ export default function App() {
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [findingStates, setFindingStates] = useState<Record<string, FindingLifecycle>>({});
   const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
@@ -131,6 +132,22 @@ export default function App() {
       .catch(() => undefined);
     return () => { active = false; };
   }, [lastRunId]);
+
+  useEffect(() => {
+    if (!telemetry) return;
+    const completed = new Map((telemetry.scanners || []).map(scanner => [scanner.node_id || "", scanner.status]));
+    const traceResponse = telemetry as Telemetry & { trace?: Array<{ node_id: string; status: string }> };
+    for (const item of traceResponse.trace || []) completed.set(item.node_id, item.status);
+    setNodes(current => current.map(node => {
+      const traceStatus = completed.get(node.id);
+      const status = telemetry.current_node === node.id ? "running"
+        : traceStatus === "failed" ? "failed"
+        : traceStatus === "blocked" ? "blocked"
+        : traceStatus === "completed" || traceStatus === "ready" ? "completed"
+        : telemetry.status === "running" ? "idle" : node.data.executionStatus || "idle";
+      return { ...node, data: { ...node.data, executionStatus: status } };
+    }));
+  }, [telemetry, setNodes]);
 
   const selectedNode = nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = edges.find(edge => edge.id === selectedEdgeId) || null;
