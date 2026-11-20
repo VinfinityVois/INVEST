@@ -48,7 +48,7 @@ def _method_blocks(text: str):
             if quote:
                 if escaped:
                     escaped = False
-                elif char == "\\\\":
+                elif char == "\\":
                     escaped = True
                 elif char == quote:
                     quote = None
@@ -74,20 +74,20 @@ def _scan_sql(path: str, text: str) -> list[dict]:
     findings = []
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        params = set(re.findall(r"@RequestParam(?:\\([^)]*\\))?\\s+(?:val\\s+)?([A-Za-z_]\\w*)\\s*:", line))
+        params = set(re.findall(r"@RequestParam(?:\([^)]*\))?\s+(?:val\s+)?([A-Za-z_]\w*)\s*:", line))
         if not params:
             continue
         chunk_lines = []
         for candidate in lines[index + 1:index + 10]:
-            if re.search(r"^\\s*(?:@\\w+|(?:override\\s+)?fun\\s+)", candidate):
+            if re.search(r"^\s*(?:@\w+|(?:override\s+)?fun\s+)", candidate):
                 break
             chunk_lines.append(candidate)
-        chunk = "\\n".join(chunk_lines)
-        if not re.search(r"\\b(?:queryForList|queryForObject|query|update|execute)\\s*\\(", chunk):
+        chunk = "\n".join(chunk_lines)
+        if not re.search(r"\b(?:queryForList|queryForObject|query|update|execute)\s*\(", chunk):
             continue
-        sql_literals = re.findall(r'"([^"\\n]*(?:SELECT|INSERT|UPDATE|DELETE)[^"\\n]*)"', chunk, re.I)
+        sql_literals = re.findall(r'"([^"\n]*(?:SELECT|INSERT|UPDATE|DELETE)[^"\n]*)"', chunk, re.I)
         for sql in sql_literals:
-            vulnerable = next((param for param in params if re.search(rf"\\$\\{{?{re.escape(param)}\\}}?", sql)), None)
+            vulnerable = next((param for param in params if re.search(rf"\$\{{?{re.escape(param)}\}}?", sql)), None)
             if vulnerable:
                 findings.append(_finding(
                     "kotlin.jdbc.sql-injection", path, index + 1, "HIGH",
@@ -154,25 +154,25 @@ def _scan_idor(files: dict[str, str]) -> list[dict]:
     for controller_path, controller in files.items():
         if "Controller" not in Path(controller_path).name:
             continue
-        for mapping in re.finditer(r"@GetMapping\\([^\\n]*\\{([A-Za-z_]\\w*)\\}[^\\n]*\\)\\s*\\n\\s*fun\\s+([A-Za-z_]\\w*)\\s*\\(([^)]*)\\)([^\\n]*)(?:\\n(?P<body>(?:(?!\\s*@(?:Get|Post|Put|Delete)Mapping).)*))?", controller, re.S):
+        for mapping in re.finditer(r"@GetMapping\([^\n]*\{([A-Za-z_]\w*)\}[^\n]*\)\s*\n\s*fun\s+([A-Za-z_]\w*)\s*\(([^)]*)\)([^\n]*)(?:\n(?P<body>(?:(?!\s*@(?:Get|Post|Put|Delete)Mapping).)*))?", controller, re.S):
             object_id, _method, params, _return, body = mapping.groups()
             body = body or ""
             if re.search(r"Principal|Authentication|@PreAuthorize|@Secured", params + body):
                 continue
-            call = re.search(r"\\b\\w+\\.read\\(\\s*" + re.escape(object_id) + r"\\s*\\)", body)
+            call = re.search(r"\b\w+\.read\(\s*" + re.escape(object_id) + r"\s*\)", body)
             if not call:
                 continue
             reader_name = call.group(0).split(".", 1)[0]
             for reader_path, reader in files.items():
                 if Path(reader_path).name not in {"RepairTicketReader.kt", "TicketReader.kt"} and reader_name not in reader:
                     continue
-                read_match = re.search(r"(?m)^\\s*fun\\s+read\\s*\\([^)]*\\)[^=\\n]*=?(?P<body>.*?)(?=^\\s*fun\\s+|\\Z)", reader, re.S)
+                read_match = re.search(r"(?m)^\s*fun\s+read\s*\([^)]*\)[^=\n]*=?(?P<body>.*?)(?=^\s*fun\s+|\Z)", reader, re.S)
                 if not read_match:
                     continue
                 reader_body = read_match.group("body")
-                where_clause = re.split(r"\\bWHERE\\b", reader_body, flags=re.I)[-1]
-                has_id_lookup = re.search(r"\\bWHERE\\s+\\w+_id\\s*=\\s*\\?", reader_body, re.I)
-                has_owner_filter = re.search(r"\\b(?:customer_id|owner_id)\\s*=|principal|customerId", where_clause, re.I)
+                where_clause = re.split(r"\bWHERE\b", reader_body, flags=re.I)[-1]
+                has_id_lookup = re.search(r"\bWHERE\s+\w+_id\s*=\s*\?", reader_body, re.I)
+                has_owner_filter = re.search(r"\b(?:customer_id|owner_id)\s*=|principal|customerId", where_clause, re.I)
                 selects_owner = re.search(r"customer_id|owner_id", reader_body, re.I)
                 if has_id_lookup and not has_owner_filter and selects_owner:
                     findings.append(_finding(
