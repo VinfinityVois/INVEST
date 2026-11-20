@@ -433,6 +433,8 @@ def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_
     second = execute_graph(graph, registry, cache_entries=first["cache_entries"])
     assert calls["count"] == 1
     assert second["trace"][-1]["cached"] is True
+    assert second["trace"][-1]["cache_age_seconds"] >= 0
+    assert second["cache_metadata"]["scan"]["cached_at"]
     assert second["cache_summary"]["hits"] == 1
 
     source_file.write_text("class App { fun changed() {} }", encoding="utf-8")
@@ -449,3 +451,38 @@ def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_
     assert calls["count"] == 4
     assert reset_one["trace"][-1]["cached"] is False
     assert reset_one["trace"][-1]["cache_bypass_reason"] == "Кэш блока сброшен пользователем"
+
+
+def test_scanner_cache_expires_after_ttl_and_rescans(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "app.kt").write_text("class App {}", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    calls = {"count": 0}
+    monkeypatch.setattr(engine, "scan_directory", lambda _root, **_kwargs: calls.__setitem__("count", calls["count"] + 1) or [])
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+    first = execute_graph(graph, registry)
+    expired_metadata = {
+        "scan": {
+            **first["cache_metadata"]["scan"],
+            "cached_at": (datetime.now(timezone.utc) - timedelta(seconds=engine.CACHE_TTL_SECONDS + 5)).isoformat(),
+        }
+    }
+    expired = execute_graph(graph, registry, cache_entries=first["cache_entries"], cache_metadata=expired_metadata)
+    assert calls["count"] == 2
+    assert expired["trace"][-1]["cached"] is False
+    assert expired["trace"][-1]["cache_bypass_reason"] == "Срок действия кэша истёк"
+    assert expired["cache_metadata"]["scan"]["cached_at"] != expired_metadata["scan"]["cached_at"]
