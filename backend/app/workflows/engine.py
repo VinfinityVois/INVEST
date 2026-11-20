@@ -9,6 +9,7 @@ from time import perf_counter
 
 from app.config import settings
 from app.ai.explanations import explain_findings
+from app.notifications.webhook import WebhookDeliveryError, build_notification_payload, deliver_webhook
 from app.policies.security_gate import evaluate_security_gate
 from app.scanners.secrets import scan_directory
 from app.scanners.presentation import enrich_finding
@@ -455,6 +456,29 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 output = explain_findings(list(unique.values()), node.config)
             except ValueError as exc:
                 output = {"status": "failed", "message": str(exc), "findings": list(unique.values()), "explanations": []}
+        elif node.type == "notify.webhook":
+            reports = [parent for parent in parents if isinstance(parent, dict)]
+            report = next((item for item in reversed(reports) if isinstance(item.get("findings"), list)), {})
+            endpoint = str(node.config.get("url", "")).strip()
+            if not endpoint:
+                output = {"status": "configuration_required", "message": "Укажите HTTPS webhook URL в настройках блока."}
+            elif not report:
+                output = {"status": "blocked", "message": "Нет отчёта от предыдущего блока; подключите AI explanation."}
+            elif report.get("status") not in {"completed", "partial"}:
+                output = {"status": "blocked", "message": "Предыдущий блок не сформировал завершённый отчёт; уведомление не отправлено."}
+            else:
+                payload = build_notification_payload(report)
+                try:
+                    delivery = deliver_webhook(endpoint, payload)
+                    output = {
+                        "status": "completed",
+                        "message": "Уведомление доставлено.",
+                        "delivered": True,
+                        "http_status": delivery["http_status"],
+                        "summary": payload["summary"],
+                    }
+                except WebhookDeliveryError as exc:
+                    output = {"status": "failed", "message": str(exc), "delivered": False}
         else:
             output = {"status": "adapter_required"}
 
