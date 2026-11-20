@@ -129,7 +129,7 @@ def _catalog_alias_key(value: str) -> str:
     return re.sub(r"[-_.]+", ".", value).strip(".")
 
 
-def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
+def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]>:
     """Read Gradle's TOML version catalog without evaluating Gradle expressions."""
     text = _read_text(path)
     if text is None:
@@ -141,10 +141,11 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
 
     versions = payload.get("versions", {})
     libraries = payload.get("libraries", {})
-    if not isinstance(versions, dict) or not isinstance(libraries, dict):
+    bundles = payload.get("bundles", {})
+    if not isinstance(versions, dict) or not isinstance(libraries, dict) or not isinstance(bundles, dict):
         return {}
 
-    result: dict[str, tuple[str, str, str | None]] = {}
+    result: dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]] = {}
     for alias, entry in libraries.items():
         if not isinstance(alias, str) or not isinstance(entry, dict):
             continue
@@ -185,10 +186,28 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
             resolved_version = None
 
         result[_catalog_alias_key(alias)] = (group, artifact, resolved_version if isinstance(resolved_version, str) else None)
+
+    # Expand bundles only when every referenced library resolves uniquely.
+    for bundle_name, aliases in bundles.items():
+        if not isinstance(bundle_name, str) or not isinstance(aliases, list) or not aliases:
+            continue
+        expanded = []
+        valid = True
+        for library_alias in aliases:
+            if not isinstance(library_alias, str):
+                valid = False
+                break
+            dependency = result.get(_catalog_alias_key(library_alias))
+            if not isinstance(dependency, tuple):
+                valid = False
+                break
+            expanded.append(dependency)
+        if valid:
+            result[_catalog_alias_key(f"bundles.{bundle_name}")] = expanded
     return result
 
 
-def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dict[str, tuple[str, str, str | None]]]:
+def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]]]:
     """Load conventional and statically declared custom Gradle version catalogs."""
     roots = {project_root / "gradle", build_dir / "gradle"}
     catalog_files: set[Path] = set()
@@ -392,16 +411,17 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 candidates = [entry for key, entry in catalog.items() if key == normalized]
                 if len(candidates) != 1:
                     continue
-                group, artifact, declared_version = candidates[0]
-                declared_coordinates.add((group, artifact))
-                version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
-                if not version or "$" in version:
-                    continue
+                catalog_entries = candidates[0] if isinstance(candidates[0], list) else [candidates[0]]
                 line = build_text.count("\n", 0, block_start + alias_match.start()) + 1
-                for advisory in advisory_index.get((group, artifact), []):
-                    if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative_path, line)
-                        findings.setdefault(finding["fingerprint"], finding)
+                for group, artifact, declared_version in catalog_entries:
+                    declared_coordinates.add((group, artifact))
+                    version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
+                    if not version or "$" in version:
+                        continue
+                    for advisory in advisory_index.get((group, artifact), []):
+                        if _affected(version, advisory.get("ranges", [])):
+                            finding = _make_finding(group, artifact, version, advisory, relative_path, line)
+                            findings.setdefault(finding["fingerprint"], finding)
 
             for match in DEPENDENCY_CALL.finditer(block):
                 coordinate = match.group("coordinate") or match.group("add_coordinate")
