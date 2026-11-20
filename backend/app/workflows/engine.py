@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 from time import perf_counter
 
@@ -57,6 +58,55 @@ def _source_fingerprint(root: Path) -> str:
         digest.update(hashlib.sha256(content).digest())
     return digest.hexdigest()
 
+
+
+
+
+SOURCE_MANIFEST_MAX_FILES = 20_000
+SOURCE_MANIFEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
+SOURCE_MANIFEST_SKIPPED_DIRS = {".git", "node_modules", ".gradle", "build", "dist", "target", ".venv"}
+
+
+def _source_file_manifest(root: Path) -> dict:
+    """Capture bounded SHA-256 metadata for one run's source tree; never store contents."""
+    files: dict[str, dict[str, int | str]] = {}
+    total_bytes = 0
+    count = 0
+    try:
+        resolved_root = root.resolve(strict=True)
+        for current, directories, filenames in os.walk(resolved_root, followlinks=False):
+            directories[:] = sorted(
+                name for name in directories
+                if name not in SOURCE_MANIFEST_SKIPPED_DIRS
+                and not (Path(current) / name).is_symlink()
+            )
+            for filename in sorted(filenames):
+                item = Path(current) / filename
+                if item.is_symlink():
+                    continue
+                try:
+                    if not item.is_file() or not item.resolve(strict=True).is_relative_to(resolved_root):
+                        continue
+                    stat = item.stat()
+                    count += 1
+                    total_bytes += stat.st_size
+                    if count > SOURCE_MANIFEST_MAX_FILES or total_bytes > SOURCE_MANIFEST_MAX_BYTES:
+                        return {"schema_version": 1, "complete": False, "reason": "manifest_limit_exceeded",
+                                "file_count": count, "total_bytes": total_bytes, "files": {}}
+                    digest = hashlib.sha256()
+                    with item.open("rb") as source:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    relative = item.relative_to(resolved_root).as_posix()
+                    files[relative] = {"size": stat.st_size, "sha256": digest.hexdigest()}
+                except OSError:
+                    return {"schema_version": 1, "complete": False, "reason": "file_read_failed",
+                            "file_count": count, "total_bytes": total_bytes, "files": {}}
+    except OSError:
+        return {"schema_version": 1, "complete": False, "reason": "source_unavailable",
+                "file_count": 0, "total_bytes": 0, "files": {}}
+    return {"schema_version": 1, "complete": True, "reason": None,
+            "file_count": count, "total_bytes": total_bytes, "files": files}
 
 
 
@@ -518,4 +568,5 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
-    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate, "cache_entries": next_cache_entries, "cache_metadata": next_cache_metadata, "cache_summary": {"enabled": not force_full_scan, "force_full_scan": bool(force_full_scan), "hits": sum(1 for item in trace if item.get("cached")), "misses": sum(1 for item in trace if item.get("type") in CACHEABLE_NODE_TYPES and not item.get("cached"))}}
+    source_manifests = {node_id: _source_file_manifest(root) for node_id, root in artifacts.items()}
+    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "source_manifests": source_manifests, "security_gate": security_gate, "cache_entries": next_cache_entries, "cache_metadata": next_cache_metadata, "cache_summary": {"enabled": not force_full_scan, "force_full_scan": bool(force_full_scan), "hits": sum(1 for item in trace if item.get("cached")), "misses": sum(1 for item in trace if item.get("type") in CACHEABLE_NODE_TYPES and not item.get("cached"))}}
