@@ -234,6 +234,13 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                             **({"findings": value["summary"]["total"]} if isinstance(value.get("summary"), dict) else {}),
                             **({"explained_count": value.get("explained_count", len(value.get("explanations", [])))} if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"total_findings": len(value.get("findings", []))} if key in nodes and nodes[key].type == "ai.explain" else {}),
+                            **({"explanations": [
+                                {
+                                    "root_cause": str(item.get("root_cause", ""))[:240],
+                                    "impact": str(item.get("impact", ""))[:180],
+                                    "recommendation": str(item.get("recommendation", ""))[:240],
+                                } for item in value.get("explanations", [])[:3]
+                            ]} if key in nodes and nodes[key].type == "ai.explain" else {}),
                         } for key, value in outputs.items()
                     },
                 })
