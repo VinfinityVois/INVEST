@@ -826,3 +826,10 @@
 .trace-cache-reset:hover:not(:disabled){background:rgba(80,140,210,.16);border-color:rgba(100,160,230,.5);color:var(--text,#e7edf5)}
 .trace-cache-reset:disabled{opacity:.45;cursor:not-allowed}
 .trace-cache-hit{color:#72c9a0!important;font-weight:700}
+
+
+.cache-telemetry-strip{display:flex;align-items:center;flex-wrap:wrap;gap:7px 14px;margin:0 0 8px;padding:8px 9px;border:1px solid rgba(105,174,145,.18);border-radius:6px;background:rgba(34,103,77,.08);color:#8fbba8;font-size:9px}
+.cache-telemetry-strip b{color:#a5e0c2;font-variant-numeric:tabular-nums}
+.cache-telemetry-strip small{margin-left:auto;color:#78988c;font-size:8px}
+.run-cache-summary{grid-column:1/-1;color:#80bd9e!important;font:7px 'DM Mono';letter-spacing:.1px}
+@media(max-width:760px){.cache-telemetry-strip{align-items:flex-start;flex-direction:column;gap:4px}.cache-telemetry-strip small{margin-left:0}}
