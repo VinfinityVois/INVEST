@@ -106,6 +106,9 @@ def extract_project_archive(stream: BinaryIO, workspace_root: str | Path) -> dic
             "files": sum(1 for _, _, is_dir in prepared if not is_dir),
             "expanded_bytes": total_size,
         }
+    except (zipfile.BadZipFile, EOFError, zlib.error, RuntimeError) as exc:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise ArchiveValidationError("ZIP archive contains corrupt or unsupported compressed data") from exc
     except Exception:
         shutil.rmtree(destination, ignore_errors=True)
         raise
