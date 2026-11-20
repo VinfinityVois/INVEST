@@ -1,4 +1,7 @@
 from collections import defaultdict, deque
+import copy
+import hashlib
+import json
 from pathlib import Path
 from time import perf_counter
 
@@ -17,6 +20,48 @@ from .validator import validate_graph
 
 class WorkflowExecutionError(RuntimeError):
     pass
+
+
+CACHE_SCHEMA_VERSION = "node-cache-v1"
+SCANNER_CACHE_VERSION = "2026-11-21.1"
+CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
+MAX_CACHE_ENTRY_BYTES = 2_000_000
+
+
+def _source_fingerprint(root: Path) -> str:
+    digest = hashlib.sha256()
+    skipped = {".git", "node_modules", ".gradle", "build", "dist", "target", ".venv"}
+    files = []
+    for path in root.rglob("*"):
+        if any(part in skipped for part in path.parts) or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            if not path.resolve(strict=True).is_relative_to(root) or path.stat().st_size > 1_000_000:
+                continue
+            files.append(path)
+        except OSError:
+            continue
+    for path in sorted(files, key=lambda item: item.relative_to(root).as_posix()):
+        try:
+            relative = path.relative_to(root).as_posix().encode("utf-8")
+            content = path.read_bytes()
+        except OSError:
+            continue
+        if b"\x00" in content[:8192]:
+            continue
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(hashlib.sha256(content).digest())
+    return digest.hexdigest()
+
+
+def _node_cache_key(node, source_root: Path) -> str:
+    payload = {"schema": CACHE_SCHEMA_VERSION, "scanner": SCANNER_CACHE_VERSION,
+               "type": node.type, "config": node.config,
+               "source": _source_fingerprint(source_root)}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _workspace_source(relative_path: str) -> Path:
@@ -75,7 +120,7 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -119,6 +164,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     trace = []
     outputs = {}
     artifacts = {}
+    reusable_cache = {} if force_full_scan else dict(cache_entries or {})
+    next_cache_entries = {} if force_full_scan else dict(cache_entries or {})
     cancelled = False
     for node_id in order:
         if should_cancel is not None:
@@ -131,6 +178,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 pass
         node_started = perf_counter()
         node = nodes[node_id]
+        cache_hit = False
         parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
 
         def report_scanner_progress(progress):
@@ -189,15 +237,31 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 output = {"status": "ready", **source}
             except (GitSourceError, OSError, WorkflowExecutionError) as exc:
                 output = {"status": "failed", "message": str(exc)}
-        elif node.type == "scan.secrets":
-            source_node = next(
-                (parent for parent in incoming[node_id] if parent in artifacts), None
-            )
+        elif node.type in CACHEABLE_NODE_TYPES:
+            source_node = next((parent for parent in incoming[node_id] if parent in artifacts), None)
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_directory(artifacts[source_node], on_progress=report_scanner_progress)]
-                output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
+                source_root = artifacts[source_node]
+                cache_key = _node_cache_key(node, source_root)
+                cached_output = reusable_cache.get(cache_key)
+                if isinstance(cached_output, dict) and cached_output.get("status") == "completed":
+                    output = copy.deepcopy(cached_output)
+                    cache_hit = True
+                else:
+                    if node.type == "scan.secrets":
+                        raw_findings = scan_directory(source_root, on_progress=report_scanner_progress)
+                    elif node.type == "scan.sca":
+                        raw_findings = scan_gradle_project(source_root, on_progress=report_scanner_progress)
+                    else:
+                        raw_findings = scan_kotlin_project(source_root, on_progress=report_scanner_progress)
+                    findings = [enrich_finding(item, source_root) for item in raw_findings]
+                    output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
+                    try:
+                        if len(json.dumps(output, ensure_ascii=False).encode("utf-8")) <= MAX_CACHE_ENTRY_BYTES:
+                            next_cache_entries[cache_key] = copy.deepcopy(output)
+                    except (TypeError, ValueError):
+                        pass
         elif node.type == "scan.sca":
             source_node = next(
                 (parent for parent in incoming[node_id] if parent in artifacts), None
@@ -285,6 +349,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "node_id": node_id,
             "type": node.type,
             "status": node_status,
+            "cached": cache_hit,
             "diagnostic_level": diagnostic_level,
             **({"reason_code": diagnostic_code} if diagnostic_code else {}),
             **({"reason": str(output["message"])[:500]} if output.get("message") else {}),
@@ -370,4 +435,4 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
-    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate}
+    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate, "cache_entries": next_cache_entries, "cache_summary": {"enabled": not force_full_scan, "force_full_scan": bool(force_full_scan), "hits": sum(1 for item in trace if item.get("cached")), "misses": sum(1 for item in trace if item.get("type") in CACHEABLE_NODE_TYPES and not item.get("cached"))}}
