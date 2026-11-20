@@ -23,6 +23,7 @@ type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
@@ -152,7 +153,7 @@ export default function App() {
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([]);
   const [workflowVersions, setWorkflowVersions] = useState<WorkflowVersionSummary[]>([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);\n  const [compareVersion, setCompareVersion] = useState<number | null>(null);\n  const [workflowVersionDiff, setWorkflowVersionDiff] = useState<WorkflowVersionDiff | null>(null);\n  const [versionDiffLoading, setVersionDiffLoading] = useState(false);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -282,6 +283,18 @@ export default function App() {
       setWorkflowVersions(await response.json() as WorkflowVersionSummary[]);
     } catch { setWorkflowVersions([]); }
     finally { setVersionsLoading(false); }
+  };
+
+  const compareWorkflowVersions = async (fromVersion: number, toVersion: number) => {
+    if (!workflowId || fromVersion === toVersion) return;
+    setVersionDiffLoading(true);
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/versions/compare?from_version=" + fromVersion + "&to_version=" + toVersion);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось сравнить версии");
+      setWorkflowVersionDiff(data as WorkflowVersionDiff);
+    } catch (error) { setResult("Ошибка сравнения версий: " + String(error)); setWorkflowVersionDiff(null); }
+    finally { setVersionDiffLoading(false); }
   };
 
   const restoreWorkflowVersion = async (version: number) => {
@@ -1139,6 +1152,21 @@ export default function App() {
         </section>
         <section className="workflow-version-card">
           <div className="run-history-heading"><div><span className="section-caption">CONFIGURATION HISTORY</span><b>Версии workflow</b></div><button onClick={() => workflowId && void refreshWorkflowVersions(workflowId)} disabled={!workflowId || versionsLoading}>{versionsLoading ? "ЗАГРУЗКА…" : "ОБНОВИТЬ"}</button></div>
+          {workflowVersions.length > 1 && <div className="workflow-version-compare-control">
+            <label>Сравнить V<select value={compareVersion ?? workflowVersions[1].version} onChange={event => { setCompareVersion(Number(event.target.value)); setWorkflowVersionDiff(null); }}>{workflowVersions.slice(1).map(item => <option key={item.version} value={item.version}>V{item.version}</option>)}</select></label>
+            <span>с V{workflowVersions[0].version}</span>
+            <button disabled={versionDiffLoading} onClick={() => void compareWorkflowVersions(compareVersion ?? workflowVersions[1].version, workflowVersions[0].version)}>{versionDiffLoading ? "СРАВНЕНИЕ…" : "СРАВНИТЬ"}</button>
+          </div>}
+          {workflowVersionDiff && <div className="workflow-version-diff">
+            <div className="workflow-diff-summary">{Object.entries(workflowVersionDiff.summary).map(([key,value]) => <span key={key}><b>{value}</b>{({added_nodes:"блоков добавлено",removed_nodes:"блоков удалено",changed_nodes:"блоков изменено",added_edges:"связей добавлено",removed_edges:"связей удалено"} as Record<string,string>)[key] || key}</span>)}</div>
+            {workflowVersionDiff.name_changed && <p className="workflow-diff-name">Название: {workflowVersionDiff.name_before} → {workflowVersionDiff.name_after}</p>}
+            {workflowVersionDiff.nodes.added.map(item => <div className="workflow-diff-row diff-added" key={"na"+item.id}><b>+ БЛОК</b><span>{item.type}</span><small>{item.id}</small></div>)}
+            {workflowVersionDiff.nodes.removed.map(item => <div className="workflow-diff-row diff-removed" key={"nr"+item.id}><b>− БЛОК</b><span>{item.type}</span><small>{item.id}</small></div>)}
+            {workflowVersionDiff.nodes.changed.map(item => <div className="workflow-diff-row diff-changed" key={"nc"+item.id}><b>ИЗМЕНЁН</b><span>{item.label}</span><small>{item.changes.map(change => change.field).join(" · ")}</small></div>)}
+            {workflowVersionDiff.edges.added.map(item => <div className="workflow-diff-row diff-added" key={"ea"+item.id}><b>+ СВЯЗЬ</b><span>{item.source} → {item.target}</span></div>)}
+            {workflowVersionDiff.edges.removed.map(item => <div className="workflow-diff-row diff-removed" key={"er"+item.id}><b>− СВЯЗЬ</b><span>{item.source} → {item.target}</span></div>)}
+            {Object.values(workflowVersionDiff.summary).every(value => value === 0) && !workflowVersionDiff.name_changed && <p className="run-history-empty">Между версиями нет изменений.</p>}
+          </div>}
           {workflowVersions.length ? <div className="workflow-version-list">{workflowVersions.map(item => <div className="workflow-version-row" key={item.version}>
             <div><b>V{item.version}</b><span>{item.name}</span><small>{formatDate(item.created_at)} · {item.node_count} блоков · {item.edge_count} связей</small></div>
             {item.version !== workflowVersions[0].version && <button onClick={() => void restoreWorkflowVersion(item.version)}>ВОССТАНОВИТЬ</button>}
