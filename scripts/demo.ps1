@@ -28,10 +28,10 @@ do {
     Start-Sleep -Seconds 3
     $run = Invoke-RestMethod -Method Get -Uri "$ApiBaseUrl/api/runs/$runId"
     Write-Host ("{0} · {1}" -f (Get-Date -Format "HH:mm:ss"), $run.status)
-    if ($run.status -in @("completed", "failed", "cancelled")) { break }
+    if ($run.status -in @("completed", "partial", "failed", "cancelled")) { break }
 } while ((Get-Date) -lt $deadline)
 
-if (-not $run -or $run.status -notin @("completed", "failed", "cancelled")) {
+if (-not $run -or $run.status -notin @("completed", "partial", "failed", "cancelled")) {
     throw "Demo run timed out after $TimeoutSeconds seconds. Run ID: $runId"
 }
 
