@@ -1085,7 +1085,7 @@ export default function App() {
           {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
             <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status}</span></div>
             <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
-            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>
+            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button><div className="run-report-links"><a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
           </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
