@@ -45,7 +45,7 @@ def test_ai_generated_graph_rejects_unknown_config_keys():
 
 def test_ai_generated_graph_rejects_incompatible_ports():
     raw = _valid_raw()
-    raw["edges"][0] = {"source": "trigger", "target": "secrets"}
+    raw["edges"].append({"source": "source", "target": "merge"})
     with pytest.raises(WorkflowGenerationError, match="не прошёл проверку"):
         normalize_generated_graph(raw, "Build a Kotlin security workflow")
 
