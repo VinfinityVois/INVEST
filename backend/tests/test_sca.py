@@ -68,22 +68,22 @@ def test_gradle_version_catalog_resolves_aliases_and_version_refs(tmp_path):
     project = tmp_path / "project"
     (project / "gradle").mkdir(parents=True)
     (project / "gradle" / "libs.versions.toml").write_text(
-        '[versions]\\n'
-        'commonsText = "1.9"\\n'
-        'jsonVersion = { strictly = "20230227" }\\n'
-        '[libraries]\\n'
-        'commons-text = { module = "org.apache.commons:commons-text", version.ref = "commonsText" }\\n'
-        'json-lib = { group = "org.json", name = "json", version = { ref = "jsonVersion" } }\\n'
-        'unversioned-lib = { module = "org.apache.commons:commons-lang3" }\\n',
+        '[versions]\n'
+        'commonsText = "1.9"\n'
+        'jsonVersion = { strictly = "20230227" }\n'
+        '[libraries]\n'
+        'commons-text = { module = "org.apache.commons:commons-text", version.ref = "commonsText" }\n'
+        'json-lib = { group = "org.json", name = "json", version = { ref = "jsonVersion" } }\n'
+        'unversioned-lib = { module = "org.apache.commons:commons-lang3" }\n',
         encoding="utf-8",
     )
     (project / "build.gradle.kts").write_text(
-        'dependencies {\\n'
-        '    implementation(libs.commons.text)\\n'
-        '    api(libs.json.lib)\\n'
-        '    implementation(libs.unversioned.lib)\\n'
-        '    implementation(libs.unknown.alias)\\n'
-        '}\\n',
+        'dependencies {\n'
+        '    implementation(libs.commons.text)\n'
+        '    api(libs.json.lib)\n'
+        '    implementation(libs.unversioned.lib)\n'
+        '    implementation(libs.unknown.alias)\n'
+        '}\n',
         encoding="utf-8",
     )
 
@@ -101,16 +101,16 @@ def test_gradle_version_catalog_lockfile_version_takes_precedence(tmp_path):
     project = tmp_path / "project"
     (project / "gradle").mkdir(parents=True)
     (project / "gradle" / "libs.versions.toml").write_text(
-        '[libraries]\\n'
-        'commons-text = { module = "org.apache.commons:commons-text", version = "1.9" }\\n',
+        '[libraries]\n'
+        'commons-text = { module = "org.apache.commons:commons-text", version = "1.9" }\n',
         encoding="utf-8",
     )
     (project / "build.gradle.kts").write_text(
-        'dependencies { implementation(libs.commons.text) }\\n',
+        'dependencies { implementation(libs.commons.text) }\n',
         encoding="utf-8",
     )
     (project / "gradle.lockfile").write_text(
-        "org.apache.commons:commons-text:1.10.0=runtimeClasspath\\n",
+        "org.apache.commons:commons-text:1.10.0=runtimeClasspath\n",
         encoding="utf-8",
     )
 
@@ -121,11 +121,11 @@ def test_malformed_gradle_version_catalog_is_ignored(tmp_path):
     project = tmp_path / "project"
     (project / "gradle").mkdir(parents=True)
     (project / "gradle" / "libs.versions.toml").write_text(
-        '[libraries\\ncommons-text = "not valid TOML"\\n',
+        '[libraries\ncommons-text = "not valid TOML"\n',
         encoding="utf-8",
     )
     (project / "build.gradle.kts").write_text(
-        'dependencies { implementation(libs.commons.text) }\\n',
+        'dependencies { implementation(libs.commons.text) }\n',
         encoding="utf-8",
     )
 
