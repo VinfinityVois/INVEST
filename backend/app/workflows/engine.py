@@ -4,7 +4,7 @@ import copy
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from time import perf_counter
 
 from app.config import settings
@@ -327,8 +327,17 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     workspace_root=settings.workspace_root,
                     allowed_targets=settings.allowed_target_list,
                 )
-                artifacts[node_id] = _workspace_source(source["path"])
-                output = {"status": "ready", **source}
+                source_path = source["path"]
+                subdirectory = node.config.get("subdirectory")
+                if subdirectory:
+                    if not isinstance(subdirectory, str) or len(subdirectory) > 500:
+                        raise WorkflowExecutionError("Git source subdirectory must be a short relative path")
+                    normalized = PurePosixPath(subdirectory.replace("\\", "/"))
+                    if normalized.is_absolute() or not normalized.parts or any(part in {"", ".", ".."} for part in normalized.parts):
+                        raise WorkflowExecutionError("Git source subdirectory must stay inside the cloned repository")
+                    source_path = str(PurePosixPath(source_path) / normalized)
+                artifacts[node_id] = _workspace_source(source_path)
+                output = {"status": "ready", **source, **({"subdirectory": subdirectory} if subdirectory else {})}
             except (GitSourceError, OSError, WorkflowExecutionError) as exc:
                 output = {"status": "failed", "message": str(exc)}
         elif node.type in CACHEABLE_NODE_TYPES:
