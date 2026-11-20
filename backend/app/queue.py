@@ -131,6 +131,22 @@ def process_run(run_id: str, worker_id: str) -> None:
     try:
         execution_scope = graph_snapshot.get("__execution_scope", {}) if isinstance(graph_snapshot, dict) else {}
         target_node_ids = execution_scope.get("requested_node_ids") if isinstance(execution_scope, dict) else None
+        force_full_scan = bool(execution_scope.get("force_full_scan", False)) if isinstance(execution_scope, dict) else False
+        cache_entries = {}
+        if run.workflow_id and not force_full_scan:
+            with SessionLocal() as cache_session:
+                previous_runs = cache_session.scalars(
+                    select(WorkflowRun)
+                    .where(WorkflowRun.workflow_id == run.workflow_id, WorkflowRun.status.in_(["completed", "partial"]))
+                    .order_by(WorkflowRun.finished_at.desc())
+                    .limit(20)
+                ).all()
+                for previous in previous_runs:
+                    previous_result = previous.result if isinstance(previous.result, dict) else {}
+                    previous_cache = previous_result.get("cache_entries", {})
+                    if isinstance(previous_cache, dict):
+                        for key, value in previous_cache.items():
+                            cache_entries.setdefault(key, value)
         graph_data = {key: value for key, value in graph_snapshot.items() if key != "__execution_scope"} if isinstance(graph_snapshot, dict) else graph_snapshot
         graph = WorkflowGraph.model_validate(graph_data)
 
@@ -157,7 +173,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
