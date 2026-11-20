@@ -2,7 +2,8 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from app.config import settings
-from app.scanners.secrets import scan_directory\nfrom app.sources.git import GitSourceError, clone_allowed_repository
+from app.scanners.secrets import scan_directory
+from app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
 from .validator import validate_graph
