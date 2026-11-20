@@ -430,12 +430,13 @@ def _maven_managed(pom_path, pom, properties, snapshots=None):
     result: dict[tuple[str, str], set[str]] = {}
     snapshots = snapshots or {}
     for section in _maven_profile_sections(pom_path, pom):
+        section_properties = _maven_properties(section, properties)
         management = _maven_child(section, "dependencyManagement")
         dependencies = _maven_child(management, "dependencies")
         for dep in _maven_children(dependencies, "dependency"):
-            group = _maven_resolve(_maven_text(dep, "groupId"), properties)
-            artifact = _maven_resolve(_maven_text(dep, "artifactId"), properties)
-            version = _maven_resolve(_maven_text(dep, "version"), properties)
+            group = _maven_resolve(_maven_text(dep, "groupId"), section_properties)
+            artifact = _maven_resolve(_maven_text(dep, "artifactId"), section_properties)
+            version = _maven_resolve(_maven_text(dep, "version"), section_properties)
             if not group or not artifact:
                 continue
             if (_maven_text(dep, "type") or "jar") == "pom" and _maven_text(dep, "scope") == "import":
@@ -494,11 +495,12 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         managed = _maven_managed(pom_path, pom, props, bom_snapshots)
         relative = pom_path.relative_to(project).as_posix()
         for section in _maven_profile_sections(pom_path, pom):
+            section_properties = _maven_properties(section, props)
             deps = _maven_child(section, "dependencies")
             for dep in _maven_children(deps, "dependency"):
-                group = _maven_resolve(_maven_text(dep, "groupId"), props)
-                artifact = _maven_resolve(_maven_text(dep, "artifactId"), props)
-                version = _maven_resolve(_maven_text(dep, "version"), props)
+                group = _maven_resolve(_maven_text(dep, "groupId"), section_properties)
+                artifact = _maven_resolve(_maven_text(dep, "artifactId"), section_properties)
+                version = _maven_resolve(_maven_text(dep, "version"), section_properties)
                 version = version or managed.get((group, artifact))
                 if not group or not artifact or not version:
                     continue
