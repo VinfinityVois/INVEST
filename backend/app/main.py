@@ -1892,7 +1892,12 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
 
 
 @app.get("/api/workflows/{workflow_id}/findings/{fingerprint}/history")
-def finding_state_history(workflow_id: UUID, fingerprint: str):
+def finding_state_history(
+    workflow_id: UUID,
+    fingerprint: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
     with SessionLocal() as session:
         if session.get(Workflow, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -1901,7 +1906,8 @@ def finding_state_history(workflow_id: UUID, fingerprint: str):
             select(AuditLog)
             .where(AuditLog.entity == "finding_state", AuditLog.entity_id == entity_id)
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-            .limit(100)
+            .offset(offset)
+            .limit(limit)
         ).all()
         return [
             {
