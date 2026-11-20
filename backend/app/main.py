@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -434,6 +434,62 @@ def preview_project_file(
             "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
         }
+
+
+@app.get("/api/projects/{project_id}/preview")
+def preview_project_asset(
+    project_id: UUID,
+    path: str = Query(min_length=1, max_length=1000),
+):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    allowed_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".pdf": "application/pdf",
+    }
+    media_type = allowed_types.get(relative.suffix.lower())
+    if media_type is None:
+        raise HTTPException(status_code=415, detail="Формат не поддерживает безопасный предпросмотр.")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=404, detail="Project file is unavailable")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        candidate = root.joinpath(*relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(root) or not resolved.is_file():
+                raise OSError("File is unavailable")
+            size = resolved.stat().st_size
+            if size > 20 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Предпросмотр ограничен файлами до 20 MiB.")
+        except HTTPException:
+            raise
+        except OSError as exc:
+            raise HTTPException(status_code=404, detail="Файл недоступен для предпросмотра.") from exc
+        return FileResponse(
+            path=resolved,
+            media_type=media_type,
+            filename=resolved.name,
+            content_disposition_type="inline",
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "no-store",
+                "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+            },
+        )
 
 
 @app.put("/api/projects/{project_id}/file")
