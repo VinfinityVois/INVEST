@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -143,7 +143,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <details className="node-description-details nodrag"><summary>О БЛОКЕ <ChevronDown size={10} /></summary><p>{data.description}</p></details>
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
-      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
+      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "!" : "·"}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
       {data.executionProgress != null && <div className="node-live-progress" aria-label={`Прогресс сканирования: ${Math.round(data.executionProgress)}%`}><div><span>СКАНИРОВАНИЕ ФАЙЛОВ</span><b>{Math.round(data.executionProgress)}%</b></div><i><span style={{ width: `${data.executionProgress}%` }} /></i>{data.executionProgressLabel && <small title={data.executionProgressLabel}>{data.executionProgressLabel}</small>}</div>}
        {(data.executionDuration != null || data.executionCount != null || data.executionCoverage != null) && <div className="node-execution-metrics">
