@@ -236,6 +236,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 "analyzed_count": output.get("analyzed_count", 0),
                 "skipped_count": output.get("skipped_count", 0),
                 "coverage": output.get("coverage", 0),
+                "provider": output.get("provider"),
+                "model": output.get("model"),
+                "provider_request_ms": output.get("provider_request_ms"),
+                "provider_attempts": output.get("provider_attempts"),
+                "provider_http_status": output.get("provider_http_status"),
+                "provider_error_code": output.get("provider_error_code"),
             } if node.type == "ai.explain" else {}),
         })
         if on_progress is not None:
@@ -275,6 +281,10 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                                 "coverage": value.get("coverage", 0),
                                 "provider": value.get("provider"),
                                 "model": value.get("model"),
+                                "provider_request_ms": value.get("provider_request_ms"),
+                                "provider_attempts": value.get("provider_attempts"),
+                                "provider_http_status": value.get("provider_http_status"),
+                                "provider_error_code": value.get("provider_error_code"),
                             } if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"total_findings": len(value.get("findings", []))} if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"explanations": [
