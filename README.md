@@ -111,6 +111,10 @@ LLM_API_KEY=ВАШ_API_KEY
 После изменения \`.env\` перезапустите API и worker. Для провайдера, отличного от OpenAI, укажите его OpenAI-compatible endpoint и модель.
 
 
+## Условная фильтрация находок
+
+Нода **Compare findings** разделяет входящий список на два потока по полю: severity, rule_id, path, category, message, cve, cwe или count; и оператору: equals, not_equals, contains, not_contains, greater_than, greater_or_equal, less_than, less_or_equal. Подключайте рёбра от выходов true и false: downstream-блоки получат только соответствующую часть findings. Для числовых операторов поле должно содержать число; count сравнивает общее количество входящих находок. Нода не изменяет исходные finding и не меняет их severity.
+
 ## Расписание workflow
 
 Для запуска по времени добавьте на холст блок **Schedule trigger** вместо Manual trigger. В конфигурации задайте пяти-польное cron-выражение и IANA timezone, например:
