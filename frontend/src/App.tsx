@@ -69,14 +69,22 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "blocked" ? "ЗАБЛОКИРОВАН"
     : data.executionStatus === "configuration_required" ? "НУЖНА НАСТРОЙКА"
     : data.executionStatus === "queued" ? "В ОЧЕРЕДИ" : "ГОТОВ К ЗАПУСКУ";
+  const hasExecutionOutput = Boolean(data.executionDetail || data.executionNotes?.length);
+  const outputTone = data.executionStatus === "failed" || data.executionStatus === "blocked" ? "danger"
+    : data.executionStatus === "configuration_required" ? "warning"
+    : data.executionStatus === "completed" ? "success"
+    : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
     <Handle type="target" position={Position.Left} />
-    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
+    <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <p className="node-description">{data.description}</p>
-    {data.executionDetail && <div className="node-execution-detail">{data.executionDetail}</div>}
-    {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
+    {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
+      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
+      {data.executionDetail && <p>{data.executionDetail}</p>}
+      {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
+    </section>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
     <Handle type="source" position={Position.Right} />
   </div>;
