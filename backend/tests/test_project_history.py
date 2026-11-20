@@ -55,3 +55,16 @@ def test_project_editor_rejects_secret_like_content():
     assert not _project_content_is_safe("API_TOKEN=example-secret-value\n")
     assert not _project_content_is_safe("token: unquoted-secret-value\\n")
     assert not _project_content_is_safe("-----BEGIN RSA PRIVATE KEY-----\\n")
+
+
+
+def test_project_export_excludes_secret_paths_and_secret_like_content():
+    from pathlib import PurePosixPath
+    from app.main import _project_export_file_is_safe
+
+    assert not _project_export_file_is_safe(PurePosixPath("config/.env"), 20, "API_TOKEN=secret")
+    assert not _project_export_file_is_safe(PurePosixPath("config/app.yaml"), 30, "API_TOKEN=example-secret-value")
+    assert _project_export_file_is_safe(PurePosixPath("src/application.yaml"), 20, "name: sample")
+    assert _project_export_file_is_safe(PurePosixPath("assets/logo.png"), 1024)
+    assert not _project_export_file_is_safe(PurePosixPath("docs/large.txt"), 1_000_001)
+    assert not _project_export_file_is_safe(PurePosixPath("archive.bin"), 512 * 1024 * 1024 + 1)
