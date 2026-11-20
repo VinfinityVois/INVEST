@@ -253,6 +253,7 @@ export default function App() {
   const [aiGraphBusy, setAiGraphBusy] = useState(false);
   const [workflowDraftName, setWorkflowDraftName] = useState("");
   const [workflowDirty, setWorkflowDirty] = useState(true);
+  const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false);
   const [aiGraphError, setAiGraphError] = useState("");
 
 
@@ -1342,7 +1343,20 @@ export default function App() {
           edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
           <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.data?.category === "Security" ? (theme === "light" ? "#157A44" : "#3BB56F") : node.data?.category === "AI" ? "#6B7682" : theme === "light" ? "#8B95A1" : "#4F5863"} /><Controls />
         </ReactFlow></div>
-        <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span></div>
+        {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
+          <div className="workflow-bottom-drawer-head">
+            <div><span className="section-caption">EXECUTION LOG</span><b>Последние запуски</b><small>{workflowRuns.length} записей в истории</small></div>
+            <div><button type="button" onClick={() => setInspectorTab("telemetry")}>Подробная телеметрия</button><button type="button" className="drawer-close" onClick={() => setBottomDrawerOpen(false)} aria-label="Закрыть журнал"><X size={14}/></button></div>
+          </div>
+          {workflowRuns.length ? <div className="workflow-bottom-run-list">{workflowRuns.slice(0, 5).map((run, index) => <button type="button" className={"workflow-bottom-run" + (run.id === lastRunId ? " is-current" : "")} key={run.id} onClick={() => { if (run.id !== lastRunId) void openHistoricalRun(run); }}>
+            <span className="workflow-bottom-run-index">#{workflowRuns.length - index}</span>
+            <span className={"workflow-bottom-run-status state-" + run.status}><i/>{run.status === "completed" ? "Успешно" : run.status === "partial" ? "Частично" : run.status === "failed" ? "Ошибка" : run.status === "running" ? "В работе" : run.status === "queued" ? "В очереди" : run.status === "cancelling" ? "Отмена" : run.status === "cancelled" ? "Отменён" : run.status}</span>
+            <span className="workflow-bottom-run-date">{formatDate(run.finished_at || run.started_at || run.queued_at)}</span>
+            <b>{run.total_findings ?? "—"} находок</b>
+            <span className="workflow-bottom-run-open">{run.id === lastRunId ? "Текущий" : "Открыть"}</span>
+          </button>)}</div> : <p className="workflow-bottom-empty">{runHistoryLoading ? "Загружаем историю запусков…" : "Запусков пока нет. История появится после первого выполнения workflow."}</p>}
+        </section>}
+        <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span><button type="button" className={"workflow-drawer-toggle" + (bottomDrawerOpen ? " is-open" : "")} aria-expanded={bottomDrawerOpen} onClick={() => setBottomDrawerOpen(value => !value)}><Activity size={12}/> Запуски <b>{workflowRuns.length}</b><ChevronDown size={12}/></button></div>
       </section>
 
       <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>
