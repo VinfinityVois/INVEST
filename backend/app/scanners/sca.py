@@ -259,7 +259,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         for block_start, _block_end, block in _dependency_blocks(build_text):
             # Version-catalog accessors (for example libs.apache.commons.text).
             for alias_match in re.finditer(
-                r"\\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\\s*\\(\\s*libs((?:\\.[A-Za-z_]\\w*)+)\\s*\\)",
+                r"\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\s*\(\s*libs((?:\.[A-Za-z_]\w*)+)\s*\)",
                 block,
             ):
                 accessor = alias_match.group(1).lstrip(".")
@@ -271,7 +271,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 version = locked.get((group, artifact), declared_version)
                 if not version or "$" in version:
                     continue
-                line = build_text.count("\\n", 0, block_start + alias_match.start()) + 1
+                line = build_text.count("\n", 0, block_start + alias_match.start()) + 1
                 for advisory in advisory_index.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
                         finding = _make_finding(group, artifact, version, advisory, relative_path, line)
