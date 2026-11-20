@@ -212,7 +212,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None) -
                 version = locked.get((group, artifact), declared_version)
                 if not version or "$" in version:
                     continue
-                line = build_text.count("\n", 0, block_start + match.start()) + 1
+                coordinate_start = match.start("coordinate") if match.group("coordinate") is not None else match.start("add_coordinate")
+                line = build_text.count("\n", 0, block_start + coordinate_start) + 1
                 for advisory in advisory_index.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
                         finding = _make_finding(group, artifact, version, advisory, relative_path, line)
