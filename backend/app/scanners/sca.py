@@ -216,7 +216,9 @@ def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dic
         )
         if len(set(declarations)) == 1:
             catalog_name = declarations[0]
-        elif len(set(declarations)) > 1:
+        elif len(set(declarations)) > 1 or catalog_file.name != "libs.versions.toml":
+            # Gradle auto-imports only libs.versions.toml. Other catalogs must
+            # be explicitly declared in settings.gradle(.kts).
             continue
         result[catalog_name] = _load_version_catalog(catalog_file)
     if "libs" not in result:
