@@ -3,6 +3,7 @@ from pathlib import Path
 from time import perf_counter
 
 from app.config import settings
+from app.policies.security_gate import evaluate_security_gate
 from app.scanners.secrets import scan_directory
 from app.scanners.sca import scan_gradle_project
 from app.scanners.sast import scan_kotlin_project
@@ -130,6 +131,24 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             for finding in merged:
                 unique.setdefault(finding.get("fingerprint") or repr(finding), finding)
             output = {"status": "completed", "findings": list(unique.values()), "summary": {"total": len(unique)}}
+        elif node.type == "ci.gate":
+            merged = []
+            for parent in parents:
+                merged.extend(parent.get("findings", []))
+            unique = {}
+            for finding in merged:
+                unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
+            try:
+                evaluation = evaluate_security_gate(list(unique.values()), node.config)
+                output = {
+                    "status": "blocked" if evaluation["blocked"] else "completed",
+                    "decision": evaluation["decision"],
+                    "findings": list(unique.values()),
+                    "summary": {"total": len(unique)},
+                    **evaluation,
+                }
+            except ValueError as exc:
+                output = {"status": "failed", "decision": "INVALID_POLICY", "message": str(exc), "findings": []}
         elif node.type == "logic.if":
             output = {"status": "completed", "branch": "false"}
         elif node.type == "ai.explain":
@@ -172,4 +191,6 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     failed = any(item["status"] in {"failed", "blocked"} for item in outputs.values())
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
     status = "failed" if failed else ("partial" if pending else "completed")
-    return {"status": status, "order": order, "trace": trace, "outputs": outputs}
+    gate_results = [value for value in outputs.values() if "decision" in value]
+    security_gate = gate_results[-1] if gate_results else None
+    return {"status": status, "order": order, "trace": trace, "outputs": outputs, "security_gate": security_gate}
