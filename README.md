@@ -47,7 +47,7 @@ Git clone выполняется shallow, без тегов, hooks, LFS smudge �
 Пример:
 
 ```env
-WORKSPACE_ROOT=/data/workspaces
+WORKSPACE_ROOT=/workspace
 ALLOWED_TARGETS=https://github.com/example/training
 ```
 
@@ -120,7 +120,7 @@ pretending that AI analysis ran.
 ### Workspace persistence
 
 ZIP uploads and Git clones are stored in the named Docker volume mounted at
-`/data/workspaces` in both API and worker containers. This shared mount is
+`/workspace` in both API and worker containers. This shared mount is
 required: the API receives ZIP files, while the worker scans them later.
 The Compose configuration pins `WORKSPACE_ROOT=/data/workspaces` so the two
 containers cannot accidentally use separate temporary directories.
