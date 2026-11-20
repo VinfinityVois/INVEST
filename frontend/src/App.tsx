@@ -887,7 +887,7 @@ export default function App() {
       const params = new URLSearchParams();
       if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
       if (templateSearch.trim()) params.set("q", templateSearch.trim());
-      const response = await fetch("/api/templates" + (params.size ? "?" + params.toString() : ""));
+      const response = await fetch("/api/templates" + (params.toString() ? "?" + params.toString() : ""));
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
       setTemplateItems(Array.isArray(data) ? data : []);
@@ -899,6 +899,14 @@ export default function App() {
   useEffect(() => {
     if (templateLibraryOpen) void loadTemplateLibrary();
   }, [templateLibraryOpen, templateCategory]);
+  useEffect(() => {
+    if (!templateLibraryOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTemplateLibraryOpen(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [templateLibraryOpen]);
   const cloneTemplateIntoEditor = async (templateId: string) => {
     setTemplateBusyId(templateId);
     setTemplateError("");
