@@ -91,3 +91,10 @@ expired exceptions stop suppressing the finding. Active `accepted_risk` and
 is not hidden if it is detected again: the worker reopens it and records the
 transition in the audit log. Lifecycle controls and history are available from
 each finding card in the editor.
+
+
+## Finding explanations and live execution
+
+Security findings include a concise root-cause explanation (`why_it_matters`), a remediation recommendation, CWE/CVE identifiers where available, and a short source excerpt with the affected line highlighted. Source excerpts are path-confined to the scanned workspace, size-limited, and redact common credential assignments, bearer values, and known token formats before they are returned to the UI. Secret scanner values remain masked.
+
+The editor shows live workflow node states and an execution timeline from persisted worker events. Secrets, SCA, and SAST scanners report file-level progress (files scanned / total and current relative path); this is real scanner progress, not a simulated animation. Findings can expand an inline source preview with line numbers.
