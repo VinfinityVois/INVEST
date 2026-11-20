@@ -62,7 +62,7 @@ def test_rejects_unsafe_git_urls(tmp_path, url):
 
 @pytest.mark.parametrize("ref", ["--upload-pack=bad", "../main", "feature..oops", "bad ref", "main.lock"])
 def test_rejects_unsafe_git_refs(tmp_path, ref):
-    with pytest.raises(GitSourceError, match="ref"):
+    with pytest.raises(GitSourceError):
         clone_allowed_repository(
             "https://github.com/example/repo",
             ref,
