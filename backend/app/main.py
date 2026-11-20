@@ -31,7 +31,7 @@ from app.models import AuditLog, Finding, FindingState, Project, Workflow, Workf
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
-from app.workflows.engine import execute_graph, WorkflowExecutionError
+from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
 
 class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -1234,6 +1234,22 @@ def compare_workflow_runs(
         }
 
 
+def _cache_telemetry_summary(trace: list) -> dict:
+    scanner_steps = [
+        item for item in trace
+        if isinstance(item, dict) and item.get("type") in {"scan.secrets", "scan.sca", "scan.sast"}
+    ]
+    hits = sum(1 for item in scanner_steps if item.get("cached") is True)
+    total = len(scanner_steps)
+    return {
+        "scanner_blocks": total,
+        "cache_hits": hits,
+        "fresh_scans": total - hits,
+        "hit_rate": round(hits / total, 4) if total else 0.0,
+        "ttl_seconds": CACHE_TTL_SECONDS,
+    }
+
+
 def _run_telemetry(session, run: WorkflowRun):
     findings = session.scalars(select(Finding).where(Finding.run_id == run.id)).all()
     severity = {}
@@ -1277,6 +1293,7 @@ def _run_telemetry(session, run: WorkflowRun):
         "total_findings": total_findings,
         "severity": severity,
         "scanners": scanners,
+        "cache": _cache_telemetry_summary(trace),
         "trace": trace,
         "completed_nodes": progress.get("completed_nodes", len(trace)) if progress else len(trace),
         "total_nodes": progress.get("total_nodes", len(run.graph_snapshot.get("nodes", []))) if progress else len(run.graph_snapshot.get("nodes", [])),
