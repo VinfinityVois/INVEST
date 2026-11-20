@@ -37,3 +37,19 @@ def test_project_snapshot_diff_limits_path_samples():
     assert len(diff["added_files"]) == 50
     assert len(diff["removed_files"]) == 50
     assert diff["sample_truncated"] is True
+
+
+from pathlib import PurePosixPath
+
+from app.main import _project_content_is_safe, _project_path_is_sensitive
+
+
+def test_project_editor_blocks_secret_paths_in_nested_directories():
+    assert _project_path_is_sensitive(PurePosixPath("config/private/app.yaml"))
+    assert _project_path_is_sensitive(PurePosixPath("src/.env.production"))
+    assert not _project_path_is_sensitive(PurePosixPath("src/application.yaml"))
+
+
+def test_project_editor_rejects_secret_like_content():
+    assert _project_content_is_safe("name: sample\nversion: 1.0\n")
+    assert not _project_content_is_safe("API_TOKEN=example-secret-value\n")
