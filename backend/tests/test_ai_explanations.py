@@ -85,3 +85,61 @@ def test_gateway_rejects_non_https_remote_endpoint(monkeypatch):
 
     assert result["status"] == "failed"
     assert result["explanations"] == []
+
+
+
+def test_gateway_retries_without_response_format(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs["json"])
+        if len(calls) == 1:
+            return FakeResponse({"error": "response_format unsupported"}, status_code=400)
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "abc", "root_cause": "Cause", "impact": "Impact",
+                "recommendation": "Fix", "confidence": 0.8, "evidence_limits": ""
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert len(calls) == 2
+    assert "response_format" in calls[0]
+    assert "response_format" not in calls[1]
+    assert result["status"] == "completed"
+
+
+def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "very-secret-key")
+
+    def fake_post(url, **kwargs):
+        request = httpx.Request("POST", url)
+        response = httpx.Response(401, request=request)
+        raise httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    import httpx
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert result["status"] == "failed"
+    assert "401" in result["message"]
+    assert "very-secret-key" not in result["message"]
+
+
+def test_provider_configuration_never_returns_api_key(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "very-secret-key")
+
+    status = explanations.provider_configuration()
+
+    assert status["configured"] is True
+    assert status["endpoint_valid"] is True
+    assert "very-secret-key" not in str(status)
