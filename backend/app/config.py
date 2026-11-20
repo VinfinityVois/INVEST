@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: str | None = None
     notify_webhook_allowed_hosts: str = "webhook.site"
+    ci_trigger_token: str | None = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
