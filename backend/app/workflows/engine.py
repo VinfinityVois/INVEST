@@ -39,7 +39,43 @@ def _workspace_source(relative_path: str) -> Path:
     return candidate
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None):
+def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) -> list[str]:
+    """Return the selected nodes and every upstream dependency in stable graph order."""
+    nodes = {node.id for node in graph.nodes}
+    requested = list(dict.fromkeys(target_node_ids or []))
+    if not requested:
+        return [node.id for node in graph.nodes]
+    unknown = sorted(set(requested) - nodes)
+    if unknown:
+        raise WorkflowExecutionError("Unknown target node ids: " + ", ".join(unknown))
+    incoming = defaultdict(list)
+    indegree = {node.id: 0 for node in graph.nodes}
+    outgoing = defaultdict(list)
+    for edge in graph.edges:
+        incoming[edge.target].append(edge.source)
+        outgoing[edge.source].append(edge.target)
+        indegree[edge.target] += 1
+    queue = deque(node_id for node_id, degree in indegree.items() if degree == 0)
+    order = []
+    while queue:
+        current = queue.popleft()
+        order.append(current)
+        for target in outgoing[current]:
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                queue.append(target)
+    included = set()
+    stack = list(requested)
+    while stack:
+        current = stack.pop()
+        if current in included:
+            continue
+        included.add(current)
+        stack.extend(incoming[current])
+    return [node_id for node_id in order if node_id in included]
+
+
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -64,6 +100,21 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             indegree[target] -= 1
             if indegree[target] == 0:
                 queue.append(target)
+
+    requested_node_ids = list(dict.fromkeys(target_node_ids or []))
+    included_node_ids = set()
+    if requested_node_ids:
+        unknown = sorted(set(requested_node_ids) - set(nodes))
+        if unknown:
+            raise WorkflowExecutionError("Unknown target node ids: " + ", ".join(unknown))
+        stack = list(requested_node_ids)
+        while stack:
+            current = stack.pop()
+            if current in included_node_ids:
+                continue
+            included_node_ids.add(current)
+            stack.extend(incoming[current])
+        order = [node_id for node_id in order if node_id in included_node_ids]
 
     trace = []
     outputs = {}
@@ -319,4 +370,4 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
-    return {"status": status, "order": order, "trace": trace, "outputs": outputs, "security_gate": security_gate}
+    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate}
