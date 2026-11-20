@@ -421,33 +421,40 @@ def _maven_profile_sections(pom_path, pom):
     for match in re.finditer(r"(?:^|\s)-D([A-Za-z0-9_.-]+)(?:=([^\s]+))?", config):
         user_properties[match.group(1)] = match.group(2) if match.group(2) is not None else ""
     active = set(explicit)
+    property_activated = set()
     for profile in _maven_children(profiles, "profile"):
         activation = _maven_child(profile, "activation")
         property_activation = _maven_child(activation, "property")
-        if property_activation is not None:
-            name = _maven_text(property_activation, "name")
-            expected = _maven_text(property_activation, "value")
-            if name:
-                negate_name = name.startswith("!")
-                property_name = name[1:] if negate_name else name
-                exists = property_name in user_properties
-                actual = user_properties.get(property_name)
-                if negate_name:
-                    matched = not exists
-                elif expected and expected.startswith("!"):
-                    matched = exists and actual != expected[1:]
-                elif expected is not None:
-                    matched = exists and actual == expected
-                else:
-                    matched = exists
-                if matched:
-                    profile_id = _maven_text(profile, "id")
-                    if profile_id:
-                        active.add(profile_id)
-        if not explicit and not active and _maven_text(activation, "activeByDefault") == "true":
+        if property_activation is None:
+            continue
+        name = _maven_text(property_activation, "name")
+        expected = _maven_text(property_activation, "value")
+        if not name:
+            continue
+        negate_name = name.startswith("!")
+        property_name = name[1:] if negate_name else name
+        exists = property_name in user_properties
+        actual = user_properties.get(property_name)
+        if negate_name:
+            matched = not exists
+        elif expected and expected.startswith("!"):
+            matched = exists and actual != expected[1:]
+        elif expected is not None:
+            matched = exists and actual == expected
+        else:
+            matched = exists
+        if matched:
             profile_id = _maven_text(profile, "id")
             if profile_id:
-                active.add(profile_id)
+                property_activated.add(profile_id)
+    active.update(property_activated)
+    if not explicit and not property_activated:
+        for profile in _maven_children(profiles, "profile"):
+            activation = _maven_child(profile, "activation")
+            if _maven_text(activation, "activeByDefault") == "true":
+                profile_id = _maven_text(profile, "id")
+                if profile_id:
+                    active.add(profile_id)
     active.difference_update(disabled)
     yield pom
     for profile in _maven_children(profiles, "profile"):
