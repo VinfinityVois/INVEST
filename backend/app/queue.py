@@ -132,6 +132,7 @@ def process_run(run_id: str, worker_id: str) -> None:
         execution_scope = graph_snapshot.get("__execution_scope", {}) if isinstance(graph_snapshot, dict) else {}
         target_node_ids = execution_scope.get("requested_node_ids") if isinstance(execution_scope, dict) else None
         force_full_scan = bool(execution_scope.get("force_full_scan", False)) if isinstance(execution_scope, dict) else False
+        force_node_ids = execution_scope.get("force_node_ids", []) if isinstance(execution_scope, dict) else []
         cache_entries = {}
         if run.workflow_id and not force_full_scan:
             with SessionLocal() as cache_session:
@@ -173,7 +174,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan, force_node_ids=force_node_ids)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
