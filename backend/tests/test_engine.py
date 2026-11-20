@@ -159,3 +159,38 @@ def test_sca_node_runs_against_workspace_source(tmp_path, monkeypatch):
     assert result["status"] == "completed"
     assert result["outputs"]["sca"]["summary"]["total"] == 1
     assert result["outputs"]["merge"]["findings"][0]["advisory_id"] == "GHSA-599f-7c49-w659"
+
+
+
+def test_sast_node_runs_against_workspace_source(tmp_path, monkeypatch):
+    project = tmp_path / "sample"
+    source = project / "src/main/kotlin/demo"
+    source.mkdir(parents=True)
+    (source / "LookupController.kt").write_text(
+        """class LookupController {
+    fun find(@RequestParam frameTag: String): List<String> =
+        jdbc.queryForList("SELECT code FROM repair_ticket WHERE frame_tag = '$frameTag'", String::class.java)
+}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "sast", "type": "scan.sast"},
+            {"id": "merge", "type": "findings.merge"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "sast"},
+            {"id": "e3", "source": "sast", "target": "merge"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["sast"]["summary"]["total"] == 1
+    assert result["outputs"]["merge"]["findings"][0]["category"] == "SAST"
