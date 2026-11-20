@@ -109,7 +109,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         elif node.type == "source.upload":
             relative_path = node.config.get("path")
             if not isinstance(relative_path, str) or not relative_path.strip():
-                output = {"status": "configuration_required", "message": "Укажите относительный путь к каталогу внутри WORKSPACE_ROOT."}
+                output = {"status": "configuration_required", "message": "Выберите источник проекта: загрузите ZIP-архив или настройте Git-репозиторий."}
             else:
                 try:
                     source_root = _workspace_source(relative_path)
@@ -179,6 +179,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     "findings": list(unique.values()),
                     "summary": {"total": len(unique)},
                     **evaluation,
+                    "message": (
+                        "Проверка остановлена политикой: найдены уязвимости выше допустимого порога."
+                        if evaluation["blocked"]
+                        else "Проверка политики завершена: критичных блокирующих находок нет."
+                    ),
                 }
             except ValueError as exc:
                 output = {"status": "failed", "decision": "INVALID_POLICY", "message": str(exc), "findings": []}
