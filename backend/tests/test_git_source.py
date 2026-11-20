@@ -82,7 +82,7 @@ def test_clone_supports_pinned_commit_sha_with_detached_checkout(tmp_path, monke
             destination = Path(args[-1])
             (destination / ".git").mkdir(parents=True)
         if "rev-parse" in args:
-            return SimpleNamespace(returncode=0, stdout=commit + "\\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout=commit + "\n", stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("app.sources.git.subprocess.run", fake_run)
