@@ -407,3 +407,30 @@
 .shell .inspector-tab-panel .execution-timeline,
 .shell .inspector-tab-panel .run-history-card,
 .shell .inspector-tab-panel .workflow-version-card { margin-top:12px; }
+
+/* Application menu */
+.shell .app-menu-wrap { position:relative;display:flex;align-items:center; }
+.shell .app-menu-trigger { flex:0 0 32px; }
+.shell .app-menu {
+  position:absolute;z-index:60;top:calc(100% + 8px);right:0;width:268px;padding:6px;
+  border:1px solid var(--border);border-radius:6px;background:var(--elevated);
+  box-shadow:var(--shadow);animation:menu-enter .16s cubic-bezier(.2,0,0,1);
+}
+.shell .app-menu-heading { display:flex;flex-direction:column;gap:3px;padding:9px 10px 10px;border-bottom:1px solid var(--border); }
+.shell .app-menu-heading span { color:var(--text-secondary);font:500 10px Inter,sans-serif;letter-spacing:.05em; }
+.shell .app-menu-heading small { color:var(--muted);font-size:11px; }
+.shell .app-menu button,.shell .app-menu a {
+  display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:7px 9px;
+  border:0;border-radius:4px;background:transparent;color:var(--icon);text-align:left;text-decoration:none;
+}
+.shell .app-menu button:hover,.shell .app-menu a:hover { background:var(--gray-50);color:var(--accent-text); }
+.shell[data-theme="dark"] .app-menu button:hover,.shell[data-theme="dark"] .app-menu a:hover { background:var(--gray-700); }
+.shell .app-menu button>svg,.shell .app-menu a>svg { flex:0 0 16px; }
+.shell .app-menu button>span,.shell .app-menu a>span { display:flex;flex-direction:column;gap:2px;min-width:0; }
+.shell .app-menu button b,.shell .app-menu a b { color:var(--text);font-size:12px;font-weight:500; }
+.shell .app-menu button small,.shell .app-menu a small { color:var(--muted);font-size:10px;font-weight:400; }
+.shell .app-menu-divider { height:1px;margin:5px 4px;background:var(--border); }
+@keyframes menu-enter { from { opacity:0;transform:translateY(4px); } to { opacity:1;transform:translateY(0); } }
+@media (max-width:760px) {
+  .shell .app-menu { position:fixed;top:60px;right:8px; }
+}
