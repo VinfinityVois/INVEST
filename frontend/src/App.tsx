@@ -1346,7 +1346,7 @@ export default function App() {
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
           <div className="workflow-bottom-drawer-head">
             <div><span className="section-caption">EXECUTION LOG</span><b>Последние запуски</b><small>{workflowRuns.length} записей в истории</small></div>
-            <div><button type="button" onClick={() => setInspectorTab("telemetry")}>Подробная телеметрия</button><button type="button" className="drawer-close" onClick={() => setBottomDrawerOpen(false)} aria-label="Закрыть журнал"><X size={14}/></button></div>
+            <div><button type="button" onClick={() => { setRightCollapsed(false); setInspectorTab("telemetry"); }}>Подробная телеметрия</button><button type="button" className="drawer-close" onClick={() => setBottomDrawerOpen(false)} aria-label="Закрыть журнал"><X size={14}/></button></div>
           </div>
           {workflowRuns.length ? <div className="workflow-bottom-run-list">{workflowRuns.slice(0, 5).map((run, index) => <button type="button" className={"workflow-bottom-run" + (run.id === lastRunId ? " is-current" : "")} key={run.id} onClick={() => { if (run.id !== lastRunId) void openHistoricalRun(run); }}>
             <span className="workflow-bottom-run-index">#{workflowRuns.length - index}</span>
