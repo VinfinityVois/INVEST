@@ -194,6 +194,7 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
 
     tainted_arguments = [set(method["tainted_parameters"]) for method in methods]
     tainted_variables: list[set[str]] = [set() for _ in methods]
+    interprocedural_arguments: list[set[int]] = [set() for _ in methods]
     # Fixed point over direct calls. A hard cap protects against pathological graphs.
     for _iteration in range(min(12, len(methods) + 1)):
         changed = False
@@ -237,12 +238,17 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                         if argument_is_tainted:
                             if position not in tainted_arguments[target]:
                                 tainted_arguments[target].add(position)
+                                interprocedural_arguments[target].add(position)
                                 changed = True
+                            elif position not in methods[target]["tainted_parameters"]:
+                                interprocedural_arguments[target].add(position)
         if not changed:
             break
 
     findings = []
     for index, method in enumerate(methods):
+        if not interprocedural_arguments[index]:
+            continue
         variables = set(tainted_variables[index])
         body = method["body"]
         for sink in _SQL_SINK_CALL.finditer(body):
