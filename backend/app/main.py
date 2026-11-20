@@ -240,7 +240,8 @@ def _run_telemetry(session, run: WorkflowRun):
         "scanners": scanners,
         "completed_nodes": progress.get("completed_nodes", len(trace)) if progress else len(trace),
         "total_nodes": progress.get("total_nodes", len(run.graph_snapshot.get("nodes", []))) if progress else len(run.graph_snapshot.get("nodes", [])),
-        "current_node": progress.get("current_node") if progress else None,\n        "error": run.error,
+        "current_node": progress.get("current_node") if progress else None,
+        "error": run.error,
     }
 
 
