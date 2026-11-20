@@ -771,3 +771,24 @@
 
 .run-report-links button{border:0;padding:0;background:transparent;color:#8fb8d0;font:8px 'DM Mono';letter-spacing:.04em;cursor:pointer}
 .run-report-links button:hover{color:#d2eafa;text-decoration:underline}
+
+
+/* Run-to-run comparison */
+.run-compare-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:9px;align-items:end;padding:12px;margin:10px 0;border:1px solid #263b4d;background:rgba(12,25,38,.72)}
+.run-compare-controls label{display:grid;gap:5px;color:#7891a6;font-size:9px;letter-spacing:.12em}
+.run-compare-controls select{min-width:0;width:100%;padding:8px;background:#0b1722;border:1px solid #2b4052;color:#c8d8e5;font:11px inherit}
+.run-compare-controls button{padding:9px 12px;border:1px solid #386078;background:#142b3b;color:#b9e7f4;font-size:10px;letter-spacing:.08em;cursor:pointer}
+.run-compare-controls button:disabled{opacity:.4;cursor:not-allowed}
+.run-diff-panel{margin:10px 0 14px;padding:13px;border:1px solid #294356;background:linear-gradient(145deg,rgba(16,34,49,.9),rgba(9,18,28,.9))}
+.run-diff-heading{display:flex;justify-content:space-between;gap:12px;color:#b9d0df;font-size:10px;letter-spacing:.1em}
+.run-diff-heading small{color:#6f899d;font-size:10px;letter-spacing:0}
+.run-diff-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:12px 0}
+.run-diff-stats>div{display:grid;gap:4px;padding:9px 6px;background:rgba(3,12,20,.48);text-align:center}
+.run-diff-stats b{font-size:19px;color:#c4d6e3}
+.run-diff-stats span{font-size:8px;letter-spacing:.08em;color:#7891a6}
+.run-diff-warning{margin:9px 0;padding:8px 10px;border-left:2px solid #b58b45;background:rgba(126,89,32,.12);color:#d5b981;font-size:11px;line-height:1.5}
+.run-diff-group{display:grid;gap:5px;margin-top:12px}
+.run-diff-group>b{color:#7f9bb0;font-size:9px;letter-spacing:.12em}
+.run-diff-group>div{display:grid;grid-template-columns:80px minmax(100px,1fr) minmax(100px,2fr) auto;gap:8px;align-items:center;padding:7px 8px;border:1px solid rgba(54,77,95,.5);background:rgba(3,12,20,.3);font-size:10px}
+.run-diff-group>div>span{color:#d4a96a}.run-diff-group code{overflow:hidden;text-overflow:ellipsis;color:#b7d7e8}.run-diff-group small{overflow:hidden;text-overflow:ellipsis;color:#7891a6;white-space:nowrap}.run-diff-group i{color:#d7bd81;font-style:normal}
+@media(max-width:760px){.run-compare-controls{grid-template-columns:1fr}.run-diff-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.run-diff-group>div{grid-template-columns:64px minmax(0,1fr)}.run-diff-group>div small,.run-diff-group>div i{grid-column:2}.run-diff-heading{flex-direction:column}}
