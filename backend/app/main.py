@@ -25,6 +25,7 @@ from app.ai.explanations import provider_configuration
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
+from app.security.redaction import redact_text
 from app.db import SessionLocal
 from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion
 from app.workflows.registry import registry
@@ -977,7 +978,7 @@ def _safe_report_value(value, key: str = ""):
     if isinstance(value, (list, tuple)):
         return [_safe_report_value(item) for item in value[:5000]]
     if isinstance(value, str):
-        return _redact(value[:5000])
+        return redact_text(_redact(value[:5000]))
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return str(value)[:500]
