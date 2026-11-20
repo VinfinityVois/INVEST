@@ -17,7 +17,8 @@ type Project = { id: string; name: string; workspace_path: string; original_file
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
-type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; lines: Array<{ line: number; text: string }> };
+type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
+type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
@@ -126,6 +127,12 @@ export default function App() {
   const [projectFileQuery, setProjectFileQuery] = useState("");
   const [expandedProjectDirs, setExpandedProjectDirs] = useState<Set<string>>(new Set());
   const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [projectEditing, setProjectEditing] = useState(false);
+  const [projectDraft, setProjectDraft] = useState("");
+  const [projectSaving, setProjectSaving] = useState(false);
+  const [projectContentQuery, setProjectContentQuery] = useState("");
+  const [projectContentResults, setProjectContentResults] = useState<ProjectSearchResult[]>([]);
+  const [projectContentSearching, setProjectContentSearching] = useState(false);
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryEntry[]>([]);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
   const [projectWorkspaceOpen, setProjectWorkspaceOpen] = useState(false);
@@ -412,8 +419,43 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
       setProjectFilePreview(data);
+      setProjectEditing(false);
+      setProjectDraft(data.editable && typeof data.content === "string" ? data.content : "");
     } catch (error) { setResult("Просмотр файла: " + String(error)); }
     finally { setProjectFilesLoading(false); }
+  };
+
+  const searchProjectContent = async () => {
+    if (!activeProject || projectContentQuery.trim().length < 2) return;
+    setProjectContentSearching(true);
+    try {
+      const params = new URLSearchParams({ q: projectContentQuery.trim() });
+      const response = await fetch(`/api/projects/${activeProject.id}/search?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Поиск не выполнен");
+      setProjectContentResults(data.results || []);
+      setResult(`Поиск завершён · ${(data.results || []).length} совпадений · проверено ${data.scanned_files} файлов`);
+    } catch (error) { setResult("Поиск по содержимому: " + String(error)); }
+    finally { setProjectContentSearching(false); }
+  };
+  const saveProjectFile = async () => {
+    if (!activeProject || !projectFilePreview?.editable || !projectEditing) return;
+    setProjectSaving(true);
+    try {
+      const params = new URLSearchParams({ path: projectFilePreview.path });
+      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось сохранить файл");
+      const savedPath = projectFilePreview.path;
+      setProjectEditing(false);
+      await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size });
+      setResult("Файл сохранён · " + data.path);
+      const historyResponse = await fetch(`/api/projects/${activeProject.id}/history`);
+      if (historyResponse.ok) setProjectHistory(await historyResponse.json());
+    } catch (error) { setResult("Ошибка сохранения: " + String(error)); }
+    finally { setProjectSaving(false); }
   };
   const uploadArchive = async (file?: File) => {
     if (!file) return;
@@ -792,13 +834,20 @@ export default function App() {
       <section className="project-workspace">
         <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectHistoryOpen(value => !value)}><RefreshCw size={13}/> История {projectHistory.length ? `· ${projectHistory.length}` : ""}</button><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
         <div className="project-workspace-body">
-          <aside className="project-file-tree"><div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>{projectFilesLoading && <small className="source-loading">Загрузка…</small>}
+          <aside className="project-file-tree">
+            <div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>
+            <div className="project-content-search"><div className="section-caption">ПОИСК В ИСХОДНИКАХ</div><div><Search size={12}/><input value={projectContentQuery} onChange={event => setProjectContentQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchProjectContent(); }} placeholder="Найти текст в файлах…"/><button disabled={projectContentSearching || projectContentQuery.trim().length < 2} onClick={() => void searchProjectContent()}>{projectContentSearching ? "…" : "Найти"}</button></div></div>
+            {projectContentResults.length > 0 && <div className="project-content-results">{projectContentResults.map((item,index) => <button key={item.path+item.line+index} onClick={() => { const file=projectFiles.find(f=>f.path===item.path); if(file) void openProjectFile(file); }}><b>{item.path}:{item.line}</b><span>{item.text}</span></button>)}</div>}
+            {projectFilesLoading && <small className="source-loading">Загрузка…</small>}
             {projectFiles.length > 0 && projectTree.length > 0 && <div className="project-tree-list">{renderProjectTree(projectTree)}</div>}
             {projectFiles.length > 0 && projectTree.length === 0 && <p className="telemetry-empty">По запросу ничего не найдено.</p>}
             {projectFiles.length === 0 && <p className="telemetry-empty">В архиве не найдено файлов для отображения.</p>}
           </aside>
-          <section className="project-file-view"><div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || "Выбери файл в дереве проекта"}</span>{projectFilePreview && <small>{projectFilePreview.total_lines} строк · текстовый просмотр</small>}</div>
-            {projectFilePreview ? <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
+          <section className="project-file-view">
+            <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || "Выбери файл в дереве проекта"}</span>
+              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}
+            </div>
+            {projectFilePreview ? projectEditing ? <textarea className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} /> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
         </div>
         {projectHistoryOpen && <aside className="project-history-drawer">
