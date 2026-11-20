@@ -261,6 +261,8 @@ def run_worker(poll_interval: float = 2.0) -> None:
     logger.info("Worker %s started", worker_id)
     while True:
         try:
+            from app.scheduler import enqueue_due_schedules
+            enqueue_due_schedules()
             run_id = claim_next_run(worker_id)
             if run_id is None:
                 time.sleep(poll_interval)

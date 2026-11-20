@@ -348,7 +348,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             except Exception:
                 pass
 
-        if node.type == "trigger.manual":
+        if node.type in {"trigger.manual", "trigger.schedule"}:
             output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":
             relative_path = node.config.get("path")

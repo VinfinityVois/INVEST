@@ -89,3 +89,17 @@ class Project(Base):
     expanded_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class WorkflowSchedule(Base):
+    __tablename__ = "workflow_schedules"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    cron_expression: Mapped[str] = mapped_column(String(120), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(80), nullable=False, default="UTC")
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
