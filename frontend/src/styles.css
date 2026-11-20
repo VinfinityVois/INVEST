@@ -243,3 +243,11 @@
 .scanner-file-track { height: 4px; margin: 8px 0 6px; overflow: hidden; border-radius: 5px; background: rgba(108,143,175,.18); }
 .scanner-file-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#4b9bd1,#70d1c1); transition: width .25s ease; }
 .scanner-file-progress small { display: block; color: #8da4ba; font: 9px/1.5 "JetBrains Mono", monospace; overflow-wrap: anywhere; }
+
+.finding-ai-explanation { margin: 10px 0; padding: 10px; border: 1px solid rgba(177,121,225,.3); border-radius: 7px; background: rgba(112,65,151,.09); }
+.finding-ai-explanation > div { display: flex; align-items: center; gap: 6px; color: #c9a4ec; }
+.finding-ai-explanation > div b { font-size: 9px; letter-spacing: .1em; }
+.finding-ai-explanation > div span { margin-left: auto; color: #9b86b1; font-size: 9px; }
+.finding-ai-explanation p { margin: 7px 0 0; color: #c9c0d6; font-size: 10px; line-height: 1.5; }
+.finding-ai-explanation p b { color: #e0c8f6; }
+.finding-ai-explanation > small { display: block; margin-top: 8px; color: #a28eaf; font-size: 9px; line-height: 1.5; }
