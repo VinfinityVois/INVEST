@@ -1047,6 +1047,135 @@ def list_workflow_runs(workflow_id: UUID):
         ]
 
 
+def _compare_run_snapshots(before: dict, after: dict) -> dict:
+    """Compare two completed scan snapshots without treating partial absence as a fix."""
+    old_findings = {
+        str(item.get("fingerprint")): item
+        for item in before.get("findings", [])
+        if isinstance(item, dict) and item.get("fingerprint")
+    }
+    new_findings = {
+        str(item.get("fingerprint")): item
+        for item in after.get("findings", [])
+        if isinstance(item, dict) and item.get("fingerprint")
+    }
+    old_ids, new_ids = set(old_findings), set(new_findings)
+    complete_after = after.get("run", {}).get("status") == "completed"
+
+    def finding_summary(item: dict) -> dict:
+        return {
+            "fingerprint": item.get("fingerprint"),
+            "rule_id": item.get("rule_id"),
+            "severity": item.get("severity"),
+            "path": item.get("path"),
+            "line": item.get("line"),
+        }
+
+    added = [finding_summary(new_findings[key]) for key in sorted(new_ids - old_ids)]
+    persisted = []
+    for key in sorted(old_ids & new_ids):
+        old, new = old_findings[key], new_findings[key]
+        persisted.append({
+            **finding_summary(new),
+            "severity_changed": old.get("severity") != new.get("severity"),
+            "previous_severity": old.get("severity"),
+        })
+    missing = [finding_summary(old_findings[key]) for key in sorted(old_ids - new_ids)]
+    disappeared = missing if complete_after else []
+    not_observed = [] if complete_after else missing
+
+    old_trace = {
+        str(item.get("node_id")): item
+        for item in before.get("telemetry", {}).get("trace", [])
+        if isinstance(item, dict) and item.get("node_id")
+    }
+    new_trace = {
+        str(item.get("node_id")): item
+        for item in after.get("telemetry", {}).get("trace", [])
+        if isinstance(item, dict) and item.get("node_id")
+    }
+    node_changes = []
+    for node_id in sorted(set(old_trace) | set(new_trace)):
+        old, new = old_trace.get(node_id), new_trace.get(node_id)
+        if old is None or new is None:
+            node_changes.append({
+                "node_id": node_id,
+                "change": "added_to_trace" if old is None else "missing_from_trace",
+                "before_status": old.get("status") if old else None,
+                "after_status": new.get("status") if new else None,
+            })
+            continue
+        fields = ("status", "duration_ms", "findings", "diagnostic_level", "reason_code")
+        changes = {
+            field: {"before": old.get(field), "after": new.get(field)}
+            for field in fields if old.get(field) != new.get(field)
+        }
+        if changes:
+            node_changes.append({"node_id": node_id, "change": "changed", "fields": changes})
+
+    return {
+        "findings": {
+            "new": added,
+            "persisting": persisted,
+            "disappeared": disappeared,
+            "not_observed": not_observed,
+            "absence_confirmed": complete_after,
+            "summary": {
+                "new": len(added),
+                "persisting": len(persisted),
+                "disappeared": len(disappeared),
+                "not_observed": len(not_observed),
+            },
+        },
+        "nodes": node_changes,
+        "summary": {
+            "new_findings": len(added),
+            "persisting_findings": len(persisted),
+            "disappeared_findings": len(disappeared),
+            "not_observed_findings": len(not_observed),
+            "changed_nodes": len(node_changes),
+        },
+    }
+
+
+@app.get("/api/workflows/{workflow_id}/runs/compare")
+def compare_workflow_runs(
+    workflow_id: UUID,
+    from_run: UUID = Query(...),
+    to_run: UUID = Query(...),
+):
+    if from_run == to_run:
+        raise HTTPException(status_code=422, detail="Выберите два разных запуска.")
+    terminal = {"completed", "partial", "failed", "cancelled"}
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        before = session.get(WorkflowRun, from_run)
+        after = session.get(WorkflowRun, to_run)
+        if before is None or after is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if before.workflow_id != workflow_id or after.workflow_id != workflow_id:
+            raise HTTPException(status_code=404, detail="Run not found in this workflow")
+        if before.status not in terminal or after.status not in terminal:
+            raise HTTPException(status_code=409, detail="Сравнивать можно только завершённые запуски.")
+        before_report = _build_run_report(session, before)
+        after_report = _build_run_report(session, after)
+        diff = _compare_run_snapshots(before_report, after_report)
+        return {
+            "workflow_id": str(workflow_id),
+            "from_run": before_report["run"],
+            "to_run": after_report["run"],
+            **diff,
+            "limitations": {
+                "before_findings_truncated": before_report["findings_truncated"],
+                "after_findings_truncated": after_report["findings_truncated"],
+                "absence_confirmed": diff["findings"]["absence_confirmed"],
+                "note": None if diff["findings"]["absence_confirmed"] else
+                    "Запуск назначения не завершён полностью: отсутствие прежних находок не считается подтверждённым исправлением.",
+            },
+        }
+
+
 def _run_telemetry(session, run: WorkflowRun):
     findings = session.scalars(select(Finding).where(Finding.run_id == run.id)).all()
     severity = {}
