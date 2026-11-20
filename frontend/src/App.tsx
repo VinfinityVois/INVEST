@@ -292,10 +292,10 @@ export default function App() {
   };
 
   const graph = useMemo(() => ({
-    name: "Security pipeline",
+    name: activeProject?.name || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
-  }), [nodes, edges]);
+  }), [nodes, edges, activeProject?.name]);
 
 
   const refreshProjects = async () => {
@@ -534,9 +534,24 @@ export default function App() {
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
         <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
         <div className="source-section">
-          <div className="section-caption">ИСТОЧНИК ПРОЕКТА</div>
+          <div className="section-caption">ПРОЕКТЫ / PROJECT LIBRARY</div>
+          <div className="project-library">
+            <label className="project-add-button"><Plus size={13}/><span>{uploadingProjectId === "new" ? "Загрузка проекта…" : "Добавить ZIP в библиотеку"}</span><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label>
+            <small className="upload-hint">До 300 MiB на архив · постоянное хранение · файлы не исполняются</small>
+            {projects.map(project => <article className={"project-library-item" + (activeProject?.id === project.id ? " project-active" : "")} key={project.id}>
+              <div className="project-library-main"><div className="project-folder-icon"><FolderOpen size={15}/></div><div className="project-library-copy"><b title={project.name}>{project.name}</b><small>{project.file_count} файлов · {(project.expanded_bytes / 1048576).toFixed(1)} MiB</small></div></div>
+              <div className="project-library-actions">
+                <button title="Открыть проект в площадке" onClick={() => void openProject(project)}><FolderOpen size={12}/>Открыть</button>
+                <label title="Обновить содержимое ZIP"><RefreshCw size={12}/><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0], project.id); event.currentTarget.value = ""; }}/></label>
+                <button title="Переименовать" onClick={() => void renameProject(project)}><Pencil size={12}/></button>
+                <button title="Удалить проект" className="project-delete" onClick={() => void deleteProject(project)}><Trash2 size={12}/></button>
+              </div>
+            </article>)}
+            {projects.length === 0 && <div className="project-library-empty"><FolderOpen size={17}/><span>Библиотека пока пуста. Добавь ZIP-архив проекта.</span></div>}
+          </div>
+          <div className="section-caption source-secondary-caption">БЫСТРЫЙ ИСТОЧНИК ДЛЯ ОДНОГО ЗАПУСКА</div>
           <label className="archive-upload"><UploadCloud size={15} /><span>{uploading ? "Загрузка и проверка…" : "Загрузить ZIP проекта"}</span><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadArchive(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
-          <small className="upload-hint">До 50 MiB · архив проверяется · файлы проекта не исполняются</small>
+          <small className="upload-hint">До 300 MiB · временный источник для одного workflow</small>
           <div className="source-divider"><span>ИЛИ КЛОНИРОВАТЬ ЧЕРЕЗ GIT</span></div>
           <label className="source-field">HTTPS-ссылка репозитория<input value={gitUrl} onChange={event => setGitUrl(event.target.value)} placeholder="https://github.com/owner/repository.git" disabled={busy || uploading}/></label>
           <label className="source-field">Ветка или тег<input value={gitRef} onChange={event => setGitRef(event.target.value)} placeholder="main (необязательно)" disabled={busy || uploading}/></label>
