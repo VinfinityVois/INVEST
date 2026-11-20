@@ -53,6 +53,10 @@ def _validate_webhook_url(raw_url: str) -> str:
 
 
 def _safe_findings(findings: list[dict], limit: int = 10) -> list[dict]:
+    field_limits = {
+        "rule_id": 120, "severity": 24, "path": 400, "message": 600,
+        "recommendation": 800, "cve": 80,
+    }
     safe = []
     for finding in findings[:limit]:
         if not isinstance(finding, dict):
@@ -60,10 +64,12 @@ def _safe_findings(findings: list[dict], limit: int = 10) -> list[dict]:
         item = {}
         for key in ("rule_id", "severity", "path", "line", "message", "cwe", "cve", "recommendation"):
             value = finding.get(key)
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                item[key] = value
-            elif key == "cwe" and isinstance(value, list):
+            if key == "cwe" and isinstance(value, list):
                 item[key] = [str(entry)[:40] for entry in value[:8]]
+            elif isinstance(value, str):
+                item[key] = value[:field_limits.get(key, 300)]
+            elif isinstance(value, (int, float, bool)) or value is None:
+                item[key] = value
         safe.append(item)
     return safe
 
