@@ -153,7 +153,10 @@ export default function App() {
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([]);
   const [workflowVersions, setWorkflowVersions] = useState<WorkflowVersionSummary[]>([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);\n  const [compareVersion, setCompareVersion] = useState<number | null>(null);\n  const [workflowVersionDiff, setWorkflowVersionDiff] = useState<WorkflowVersionDiff | null>(null);\n  const [versionDiffLoading, setVersionDiffLoading] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [compareVersion, setCompareVersion] = useState<number | null>(null);
+  const [workflowVersionDiff, setWorkflowVersionDiff] = useState<WorkflowVersionDiff | null>(null);
+  const [versionDiffLoading, setVersionDiffLoading] = useState(false);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
