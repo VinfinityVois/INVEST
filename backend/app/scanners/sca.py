@@ -468,7 +468,14 @@ def _maven_parent_context(pom_path, project, snapshots, visited=None, depth=0):
     visited = set() if visited is None else visited
     if depth >= 8:
         return {}, {}
-    parent = _maven_child(ET.fromstring(_read_text(pom_path) or ""), "parent")
+    pom_source = _read_text(pom_path)
+    if pom_source is None:
+        return {}, {}
+    try:
+        pom = ET.fromstring(pom_source)
+    except ET.ParseError:
+        return {}, {}
+    parent = _maven_child(pom, "parent")
     if parent is None:
         return {}, {}
     relative_path_element = _maven_child(parent, "relativePath")
