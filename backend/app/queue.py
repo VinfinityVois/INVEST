@@ -131,7 +131,14 @@ def process_run(run_id: str, worker_id: str) -> None:
     try:
         graph = WorkflowGraph.model_validate(graph_snapshot)
 
-        def is_cancel_requested() -> bool:\n            with SessionLocal() as cancel_session:\n                current_status = cancel_session.scalar(\n                    select(WorkflowRun.status).where(WorkflowRun.id == UUID(run_id))\n                )\n                return current_status in {"cancelling", "cancelled"}\n\n        def report_progress(snapshot: dict) -> None:
+        def is_cancel_requested() -> bool:
+            with SessionLocal() as cancel_session:
+                current_status = cancel_session.scalar(
+                    select(WorkflowRun.status).where(WorkflowRun.id == UUID(run_id))
+                )
+                return current_status in {"cancelling", "cancelled"}
+
+        def report_progress(snapshot: dict) -> None:
             try:
                 with SessionLocal() as progress_session:
                     progress_session.execute(
