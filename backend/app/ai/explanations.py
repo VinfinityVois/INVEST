@@ -215,7 +215,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "explanations": [],
         }
 
-    allowed_fingerprints = {str(item.get("fingerprint")) for item in selected}
+    allowed_fingerprints = {str(item.get("fingerprint")) for item in selected if item.get("fingerprint")}
     normalized = []
     seen = set()
     for item in raw_items:
