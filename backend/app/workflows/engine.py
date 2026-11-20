@@ -56,6 +56,25 @@ def _source_fingerprint(root: Path) -> str:
     return digest.hexdigest()
 
 
+
+
+def _bounded_cache_entries(entries: dict | None) -> dict:
+    bounded = {}
+    total_bytes = 0
+    for key, value in (entries or {}).items():
+        if not isinstance(key, str) or not isinstance(value, dict) or value.get("status") != "completed":
+            continue
+        try:
+            size = len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        except (TypeError, ValueError):
+            continue
+        if size > MAX_CACHE_ENTRY_BYTES or len(bounded) >= 100 or total_bytes + size > 20_000_000:
+            continue
+        bounded[key] = value
+        total_bytes += size
+    return bounded
+
+
 def _node_cache_key(node, source_root: Path) -> str:
     payload = {"schema": CACHE_SCHEMA_VERSION, "scanner": SCANNER_CACHE_VERSION,
                "type": node.type, "config": node.config,
@@ -164,8 +183,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     trace = []
     outputs = {}
     artifacts = {}
-    reusable_cache = {} if force_full_scan else dict(cache_entries or {})
-    next_cache_entries = {} if force_full_scan else dict(cache_entries or {})
+    reusable_cache = {} if force_full_scan else _bounded_cache_entries(cache_entries)
+    next_cache_entries = dict(reusable_cache)
     cancelled = False
     for node_id in order:
         if should_cancel is not None:
