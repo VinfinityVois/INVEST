@@ -634,11 +634,6 @@ export default function App() {
     if (!selectedEdgeId) return;
     setEdges(current => current.filter(edge => edge.id !== selectedEdgeId)); setWorkflowDirty(true); setSelectedEdgeId(null);
   };
-  const updateEdgeEndpoint = (field: "source" | "target", value: string) => {
-    if (!selectedEdgeId) return;
-    setEdges(current => current.map(edge => edge.id === selectedEdgeId ? { ...edge, [field]: value } : edge)); setWorkflowDirty(true);
-  };
-
   const graph = useMemo(() => ({
     name: workflowDraftName || activeProject?.name || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
@@ -1413,8 +1408,7 @@ export default function App() {
         </section>}
         {selectedEdge && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ СВЯЗИ</div>
-          <label className="field-label">Откуда (источник)<select value={selectedEdge.source} onChange={event => updateEdgeEndpoint("source", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
-          <label className="field-label">Куда (получатель)<select value={selectedEdge.target} onChange={event => updateEdgeEndpoint("target", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
+          <div className="edge-endpoint-readonly"><span><small>ИСТОЧНИК</small><b>{nodes.find(node => node.id === selectedEdge.source)?.data.label || selectedEdge.source}</b></span><i>→</i><span><small>ПОЛУЧАТЕЛЬ</small><b>{nodes.find(node => node.id === selectedEdge.target)?.data.label || selectedEdge.target}</b></span><p>Чтобы изменить маршрут, перетащи конец связи на совместимый порт другой ноды.</p></div>
           <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); setWorkflowDirty(true); }} placeholder="например: success" /></label>
           <div className="edge-flow-diagnostics">
             <div className="section-caption">ДИАГНОСТИКА ПОТОКА</div>
