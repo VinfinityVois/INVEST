@@ -264,3 +264,26 @@ def test_gradle_lockfile_ambiguous_versions_are_not_used_as_override(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_root_lockfile_does_not_duplicate_direct_findings_across_subprojects(tmp_path):
+    project = tmp_path / "project"
+    (project / "service-a").mkdir(parents=True)
+    (project / "service-b").mkdir()
+    (project / "service-a" / "build.gradle.kts").write_text(
+        'dependencies { implementation("org.apache.commons:commons-lang3:3.17.0") }\n',
+        encoding="utf-8",
+    )
+    (project / "service-b" / "build.gradle.kts").write_text(
+        'dependencies { }\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        "org.apache.commons:commons-lang3:3.17.0=runtimeClasspath\n",
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["path"] == "service-a/build.gradle.kts"
