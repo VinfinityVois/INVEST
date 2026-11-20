@@ -143,6 +143,19 @@ def _method_parameters(signature: str) -> list[tuple[str, bool]]:
     return parameters
 
 
+def _is_sql_safe_conversion(expression: str, tainted_names: set[str]) -> bool:
+    """Only conversions that constrain input to a non-SQL token type are safe."""
+    if not any(re.search(rf"\b{re.escape(name)}\b", expression) for name in tainted_names):
+        return False
+    numeric = re.search(
+        r"\.\s*(?:toByte|toShort|toInt|toLong|toFloat|toDouble|"
+        r"toByteOrNull|toShortOrNull|toIntOrNull|toLongOrNull|toFloatOrNull|toDoubleOrNull)\s*\(",
+        expression,
+    )
+    uuid = re.search(r"\bUUID\s*\.\s*fromString\s*\(", expression)
+    return bool(numeric or uuid)
+
+
 def _scan_interprocedural_sql_taint(path: str, text: str, project_files: dict[str, str] | None = None) -> list[dict]:
     """Bounded same-project Kotlin taint analysis across direct function calls.
 
@@ -209,7 +222,8 @@ def _scan_interprocedural_sql_taint(path: str, text: str, project_files: dict[st
                     carries_taint = any(
                         re.search(rf"\b{re.escape(item)}\b", expression) for item in variables
                     )
-                    if request_source or carries_taint:
+                    safely_converted = _is_sql_safe_conversion(expression, variables)
+                    if request_source or (carries_taint and not safely_converted):
                         variables.add(variable)
                 if len(variables) == before:
                     break
@@ -224,11 +238,15 @@ def _scan_interprocedural_sql_taint(path: str, text: str, project_files: dict[st
                 args = _split_call_arguments(call.group(2))
                 for target in targets:
                     for position, argument in enumerate(args[:len(methods[target]["parameters"])]):
-                        is_tainted = bool(re.search(
+                        request_source = bool(re.search(
                             r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(",
                             argument,
-                        )) or any(
+                        ))
+                        carries_taint = any(
                             re.search(rf"\b{re.escape(item)}\b", argument) for item in variables
+                        )
+                        is_tainted = request_source or (
+                            carries_taint and not _is_sql_safe_conversion(argument, variables)
                         )
                         if is_tainted:
                             if position not in tainted_arguments[target]:
