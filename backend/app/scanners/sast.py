@@ -72,30 +72,30 @@ def _method_blocks(text: str):
 
 def _scan_sql(path: str, text: str) -> list[dict]:
     findings = []
-    for name, method_start, body_start, _end, body in _method_blocks(text):
-        params = set(re.findall(r"@RequestParam(?:\([^)]*\))?\s+(?:val\s+)?([A-Za-z_]\w*)\s*:", text[method_start:body_start]))
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        params = set(re.findall(r"@RequestParam(?:\\([^)]*\\))?\\s+(?:val\\s+)?([A-Za-z_]\\w*)\\s*:", line))
         if not params:
             continue
-        query_calls = list(re.finditer(r"\b(?:queryForList|queryForObject|query|update|execute)\s*\(", body))
-        for call in query_calls:
-            prefix = body[max(0, call.start() - 500):call.start()]
-            # Restrict to SQL expressions passed to JDBC and require actual Kotlin interpolation.
-            sql_literals = re.findall(r'"([^"\n]*(?:SELECT|INSERT|UPDATE|DELETE)[^"\n]*)"', prefix + body[call.start():call.start() + 500], re.I)
-            for sql in sql_literals:
-                for param in params:
-                    if re.search(rf"\$\{{?{re.escape(param)}\}}?", sql) or re.search(rf"['\"]\s*\+\s*{re.escape(param)}", sql):
-                        absolute = body_start + call.start()
-                        findings.append(_finding(
-                            "kotlin.jdbc.sql-injection", path, _line(text, absolute), "HIGH",
-                            f"Параметр запроса {param} попадает в SQL-строку метода {name}; используйте placeholder и отдельный bind-параметр.",
-                            "CWE-89", 0.96,
-                        ))
-                        break
-                else:
-                    continue
+        chunk_lines = []
+        for candidate in lines[index + 1:index + 10]:
+            if re.search(r"^\\s*(?:@\\w+|(?:override\\s+)?fun\\s+)", candidate):
+                break
+            chunk_lines.append(candidate)
+        chunk = "\\n".join(chunk_lines)
+        if not re.search(r"\\b(?:queryForList|queryForObject|query|update|execute)\\s*\\(", chunk):
+            continue
+        sql_literals = re.findall(r'"([^"\\n]*(?:SELECT|INSERT|UPDATE|DELETE)[^"\\n]*)"', chunk, re.I)
+        for sql in sql_literals:
+            vulnerable = next((param for param in params if re.search(rf"\\$\\{{?{re.escape(param)}\\}}?", sql)), None)
+            if vulnerable:
+                findings.append(_finding(
+                    "kotlin.jdbc.sql-injection", path, index + 1, "HIGH",
+                    f"Параметр запроса {vulnerable} попадает в SQL-строку; используйте placeholder и отдельный bind-параметр.",
+                    "CWE-89", 0.96,
+                ))
                 break
     return findings
-
 
 def _scan_tls(path: str, text: str) -> list[dict]:
     findings = []
@@ -154,35 +154,35 @@ def _scan_idor(files: dict[str, str]) -> list[dict]:
     for controller_path, controller in files.items():
         if "Controller" not in Path(controller_path).name:
             continue
-        for name, method_start, body_start, _end, body in _method_blocks(controller):
-            mapping = controller[max(0, method_start - 220):method_start]
-            if not re.search(r"@GetMapping\([^\n]*\{[A-Za-z_]\w*\}", mapping):
+        for mapping in re.finditer(r"@GetMapping\\([^\\n]*\\{([A-Za-z_]\\w*)\\}[^\\n]*\\)\\s*\\n\\s*fun\\s+([A-Za-z_]\\w*)\\s*\\(([^)]*)\\)([^\\n]*)(?:\\n(?P<body>(?:(?!\\s*@(?:Get|Post|Put|Delete)Mapping).)*))?", controller, re.S):
+            object_id, _method, params, _return, body = mapping.groups()
+            body = body or ""
+            if re.search(r"Principal|Authentication|@PreAuthorize|@Secured", params + body):
                 continue
-            if re.search(r"Principal|Authentication|@PreAuthorize|@Secured", controller[method_start:body_start]):
-                continue
-            call = re.search(r"\b\w+\.read\(\s*([A-Za-z_]\w*)\s*\)", body)
+            call = re.search(r"\\b\\w+\\.read\\(\\s*" + re.escape(object_id) + r"\\s*\\)", body)
             if not call:
                 continue
             reader_name = call.group(0).split(".", 1)[0]
             for reader_path, reader in files.items():
-                if Path(reader_path).name != "RepairTicketReader.kt" and reader_name not in reader:
+                if Path(reader_path).name not in {"RepairTicketReader.kt", "TicketReader.kt"} and reader_name not in reader:
                     continue
-                read_method = next((item for item in _method_blocks(reader) if item[0] == "read"), None)
-                if not read_method:
+                read_match = re.search(r"(?m)^\\s*fun\\s+read\\s*\\([^)]*\\)[^=\\n]*=?(?P<body>.*?)(?=^\\s*fun\\s+|\\Z)", reader, re.S)
+                if not read_match:
                     continue
-                reader_body = read_method[4]
-                if re.search(r"WHERE\s+\w+_id\s*=\s*\?", reader_body, re.I) and not re.search(r"customer_id\s*=|owner_id\s*=|principal|customerId", reader_body, re.I):
-                    # The selected record includes an owner field, but the lookup is only by caller-supplied object ID.
-                    if re.search(r"customer_id|owner_id", reader_body, re.I):
-                        findings.append(_finding(
-                            "kotlin.spring.idor.unscoped-object-read", reader_path,
-                            _line(reader, read_method[1]), "HIGH",
-                            "Запись читается только по переданному object ID; отсутствует ограничение по владельцу из Principal.",
-                            "CWE-639", 0.84,
-                        ))
-                    break
+                reader_body = read_match.group("body")
+                where_clause = re.split(r"\\bWHERE\\b", reader_body, flags=re.I)[-1]
+                has_id_lookup = re.search(r"\\bWHERE\\s+\\w+_id\\s*=\\s*\\?", reader_body, re.I)
+                has_owner_filter = re.search(r"\\b(?:customer_id|owner_id)\\s*=|principal|customerId", where_clause, re.I)
+                selects_owner = re.search(r"customer_id|owner_id", reader_body, re.I)
+                if has_id_lookup and not has_owner_filter and selects_owner:
+                    findings.append(_finding(
+                        "kotlin.spring.idor.unscoped-object-read", reader_path,
+                        _line(reader, read_match.start()), "HIGH",
+                        "Запись читается только по переданному object ID; отсутствует ограничение по владельцу из Principal.",
+                        "CWE-639", 0.84,
+                    ))
+                break
     return findings
-
 
 def scan_kotlin_project(root: str | Path) -> list[dict]:
     project = Path(root).resolve()
