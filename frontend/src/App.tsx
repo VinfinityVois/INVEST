@@ -36,7 +36,7 @@ type Telemetry = {
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number> };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -97,7 +97,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "blocked" ? "ЗАБЛОКИРОВАН"
     : data.executionStatus === "configuration_required" ? "НУЖНА НАСТРОЙКА"
     : data.executionStatus === "queued" ? "В ОЧЕРЕДИ" : "ГОТОВ К ЗАПУСКУ";
-  const hasExecutionOutput = Boolean(data.executionDetail || data.executionNotes?.length);
+  const hasExecutionOutput = Boolean(data.executionDetail || data.executionNotes?.length || data.executionDuration != null || data.executionCount != null || data.executionCoverage != null);
   const outputTone = data.executionStatus === "failed" || data.executionStatus === "blocked" ? "danger"
     : data.executionStatus === "configuration_required" ? "warning"
     : data.executionStatus === "completed" ? "success"
@@ -107,10 +107,15 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
-    <p className="node-description">{data.description}</p>
+    <details className="node-description-details nodrag"><summary>О БЛОКЕ <ChevronDown size={10} /></summary><p>{data.description}</p></details>
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
       <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
+       {(data.executionDuration != null || data.executionCount != null || data.executionCoverage != null) && <div className="node-execution-metrics">
+         {data.executionDuration != null && <span><small>ВРЕМЯ</small><b>{formatDuration(data.executionDuration)}</b></span>}
+         {data.executionCount != null && <span><small>НАХОДКИ</small><b>{data.executionCount}</b></span>}
+         {data.executionCoverage != null && <span><small>AI ПОКРЫТИЕ</small><b>{Math.round(data.executionCoverage * 100)}%</b></span>}
+       </div>}
       {data.executionSeverity && Object.entries(data.executionSeverity).some(([, count]) => count > 0) && <div className="node-severity-breakdown">
         {Object.entries(data.executionSeverity).filter(([, count]) => count > 0).sort(([a], [b]) => ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].indexOf(a) - ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].indexOf(b)).map(([severity, count]) => <span className={"node-severity severity-" + severity.toLowerCase()} key={severity}><b>{count}</b>{severity}</span>)}
       </div>}
@@ -335,7 +340,8 @@ export default function App() {
       } else if (status === "idle" && telemetry.status === "running") {
         detail = "Ожидает завершения предыдущих связанных блоков.";
       }
-      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes, executionSeverity: output?.severity } };
+      const count = typeof output?.findings === "number" ? output.findings : typeof output?.total_findings === "number" ? output.total_findings : undefined;
+       return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes, executionSeverity: output?.severity, executionDuration: step?.duration_ms ?? null, executionCount: count, executionCoverage: typeof output?.coverage === "number" ? output.coverage : undefined } };
     }));
     setEdges(currentEdges => currentEdges.map(edge => {
       const sourceStep = trace.get(edge.source);
