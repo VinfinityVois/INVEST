@@ -561,3 +561,10 @@
 .project-library-actions .project-apply-button{border-color:rgba(80,190,157,.38);background:rgba(36,112,91,.16);color:#8ce0c2}
 .project-library-actions .project-apply-button:hover{border-color:rgba(105,226,185,.72);background:rgba(36,132,101,.28);color:#c0ffe7}
 .project-library-actions .project-apply-button:focus-visible{outline:2px solid #7ce0bd;outline-offset:2px}
+
+
+/* AI provider readiness diagnostics */
+.ai-provider-checks{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}
+.ai-provider-checks span{padding:4px 6px;border:1px solid #35485d;border-radius:3px;background:#101d2b;color:#8197ad;font:7px 'DM Mono';letter-spacing:.4px}
+.ai-provider-checks span.is-ready{border-color:rgba(92,191,154,.42);background:rgba(36,112,91,.14);color:#8dddbd}
+.ai-provider-error{padding:7px 8px;border-left:2px solid #d17b79;background:rgba(132,54,57,.13);color:#efaaa6;font-size:9px}
