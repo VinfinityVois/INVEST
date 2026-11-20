@@ -646,7 +646,7 @@ def test_maven_inherits_dependency_management_through_multiple_local_parents(tmp
         encoding="utf-8",
     )
 
-    findings = scan_maven_project(project / "module")
+    findings = scan_maven_project(project)
 
     assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
 
