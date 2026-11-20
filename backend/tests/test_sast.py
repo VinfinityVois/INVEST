@@ -161,3 +161,63 @@ class SearchService(private val jdbc: JdbcTemplate) {
 
     findings = scan_kotlin_project(root)
     assert any(item["rule_id"] == "kotlin.taint.interprocedural-sql-injection" for item in findings)
+
+
+def test_interprocedural_sql_taint_crosses_kotlin_file_boundary(tmp_path):
+    root = tmp_path / "project"
+    controller = root / "src/main/kotlin/sample/web"
+    service = root / "src/main/kotlin/sample/service"
+    controller.mkdir(parents=True)
+    service.mkdir(parents=True)
+    (controller / "SearchController.kt").write_text(
+        """package sample.web
+class SearchController(private val service: SearchService) {
+    fun search(@RequestParam term: String) = service.find(term)
+}
+""", encoding="utf-8"
+    )
+    (service / "SearchService.kt").write_text(
+        """package sample.service
+class SearchService(private val jdbc: JdbcTemplate) {
+    fun find(value: String): List<String> {
+        val sql = "SELECT name FROM item WHERE name = '$value'"
+        return jdbc.queryForList(sql, String::class.java)
+    }
+}
+""", encoding="utf-8"
+    )
+
+    findings = scan_kotlin_project(root)
+    cross_file = [
+        item for item in findings
+        if item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
+    ]
+    assert len(cross_file) == 1
+    assert cross_file[0]["path"].endswith("SearchService.kt")
+
+
+def test_interprocedural_sql_taint_cross_file_bound_query_is_safe(tmp_path):
+    root = tmp_path / "project"
+    controller = root / "web"
+    service = root / "service"
+    controller.mkdir(parents=True)
+    service.mkdir(parents=True)
+    (controller / "SearchController.kt").write_text(
+        """class SearchController(private val service: SearchService) {
+    fun search(@RequestParam term: String) = service.find(term)
+}
+""", encoding="utf-8"
+    )
+    (service / "SearchService.kt").write_text(
+        """class SearchService(private val jdbc: JdbcTemplate) {
+    fun find(value: String): List<String> =
+        jdbc.queryForList("SELECT name FROM item WHERE name = ?", String::class.java, value)
+}
+""", encoding="utf-8"
+    )
+
+    findings = scan_kotlin_project(root)
+    assert not any(
+        item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
+        for item in findings
+    )
