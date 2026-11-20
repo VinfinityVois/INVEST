@@ -40,6 +40,25 @@ type FlowNode = Node<NodeData>;
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
 
+const highlightCodeLine = (source: string): React.ReactNode[] => {
+  const pattern = /(\/\/.*$|#.*$|\/\*.*?\*\/|"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|import|export|from|async|await|try|catch|throw|new|public|private|protected|static|fun|val|var|package|object|when|true|false|null|None|True|False|def|self)\\b|\\b\\d+(?:\\.\\d+)?\\b)/g;
+  const output: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source)) !== null) {
+    if (match.index > cursor) output.push(source.slice(cursor, match.index));
+    const token = match[0];
+    const tone = /^(\/\/|#|\/\*)/.test(token) ? "comment"
+      : /^(["'])/.test(token) ? "string"
+      : /^\\d/.test(token) ? "number" : "keyword";
+    output.push(<span className={"syntax-" + tone} key={match.index}>{token}</span>);
+    cursor = match.index + token.length;
+  }
+  if (cursor < source.length) output.push(source.slice(cursor));
+  return output;
+};
+
+
 const categoryMeta: Record<string, { label: string; tone: string }> = {
   Trigger: { label: "Триггер", tone: "blue" }, Source: { label: "Источник", tone: "cyan" },
   Security: { label: "Security", tone: "violet" }, Logic: { label: "Логика", tone: "amber" },
@@ -931,7 +950,7 @@ export default function App() {
                 <div className="project-editor-gutter" ref={editorGutterRef}>{projectDraft.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div>
                 <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
               </div>
-            </> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
+            </> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{highlightCodeLine(line.text || " ")}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
         </div>
         {projectHistoryOpen && <aside className="project-history-drawer">
