@@ -926,6 +926,28 @@ def list_workflow_versions(workflow_id: UUID):
         ]
 
 
+@app.get("/api/workflows/{workflow_id}/versions/compare")
+def compare_workflow_versions(
+    workflow_id: UUID,
+    from_version: int = Query(ge=1),
+    to_version: int = Query(ge=1),
+):
+    if from_version == to_version:
+        raise HTTPException(status_code=422, detail="Выберите две разные версии.")
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        rows = session.scalars(select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id,
+            WorkflowVersion.version.in_([from_version, to_version]),
+        )).all()
+        by_version = {item.version: item for item in rows}
+        if from_version not in by_version or to_version not in by_version:
+            raise HTTPException(status_code=404, detail="Workflow version not found")
+        return {"from_version": from_version, "to_version": to_version,
+                **_compare_workflow_graphs(by_version[from_version].graph, by_version[to_version].graph)}
+
+
 @app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
 def restore_workflow_version(workflow_id: UUID, version: int):
     with SessionLocal() as session:
@@ -1136,6 +1158,46 @@ def _safe_report_value(value, key: str = ""):
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return str(value)[:500]
+
+
+def _compare_workflow_graphs(before: dict, after: dict) -> dict:
+    def indexed(graph: dict, key: str) -> dict:
+        rows = graph.get(key, []) if isinstance(graph, dict) else []
+        return {str(item.get("id")): item for item in rows if isinstance(item, dict) and item.get("id") is not None}
+
+    old_nodes, new_nodes = indexed(before, "nodes"), indexed(after, "nodes")
+    old_edges, new_edges = indexed(before, "edges"), indexed(after, "edges")
+    added_nodes = sorted(set(new_nodes) - set(old_nodes))
+    removed_nodes = sorted(set(old_nodes) - set(new_nodes))
+    changed_nodes = []
+    for node_id in sorted(set(old_nodes) & set(new_nodes)):
+        old, new = old_nodes[node_id], new_nodes[node_id]
+        changes = []
+        for field in ("type", "config", "position"):
+            if old.get(field, {}) != new.get(field, {}):
+                changes.append({"field": field, "before": _safe_report_value(old.get(field, {}), field),
+                                "after": _safe_report_value(new.get(field, {}), field)})
+        if changes:
+            changed_nodes.append({"id": node_id, "label": _safe_report_value(new.get("config", {}).get("label", new.get("type", node_id))),
+                                  "changes": changes})
+    added_edges = sorted(set(new_edges) - set(old_edges))
+    removed_edges = sorted(set(old_edges) - set(new_edges))
+    return {
+        "name_changed": before.get("name") != after.get("name"),
+        "name_before": _safe_report_value(before.get("name", "")),
+        "name_after": _safe_report_value(after.get("name", "")),
+        "nodes": {
+            "added": [{"id": key, "type": _safe_report_value(new_nodes[key].get("type", ""))} for key in added_nodes],
+            "removed": [{"id": key, "type": _safe_report_value(old_nodes[key].get("type", ""))} for key in removed_nodes],
+            "changed": changed_nodes,
+        },
+        "edges": {
+            "added": [{"id": key, "source": new_edges[key].get("source"), "target": new_edges[key].get("target")} for key in added_edges],
+            "removed": [{"id": key, "source": old_edges[key].get("source"), "target": old_edges[key].get("target")} for key in removed_edges],
+        },
+        "summary": {"added_nodes": len(added_nodes), "removed_nodes": len(removed_nodes), "changed_nodes": len(changed_nodes),
+                    "added_edges": len(added_edges), "removed_edges": len(removed_edges)},
+    }
 
 
 def _build_run_report(session, run: WorkflowRun) -> dict:
