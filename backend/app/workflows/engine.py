@@ -199,6 +199,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         node_started = perf_counter()
         node = nodes[node_id]
         cache_hit = False
+        cache_bypass_reason = None
         parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
 
         def report_scanner_progress(progress):
@@ -265,7 +266,13 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 source_root = artifacts[source_node]
                 cache_key = _node_cache_key(node, source_root)
                 cached_output = reusable_cache.get(cache_key)
-                if node_id not in forced_nodes and isinstance(cached_output, dict) and cached_output.get("status") == "completed":
+                if node_id in forced_nodes:
+                    cache_bypass_reason = "Кэш блока сброшен пользователем"
+                elif force_full_scan:
+                    cache_bypass_reason = "Запрошен полный анализ"
+                elif not (isinstance(cached_output, dict) and cached_output.get("status") == "completed"):
+                    cache_bypass_reason = "Нет совпадающего результата: изменились входные данные, настройки или версия сканера"
+                if node_id not in forced_nodes and not force_full_scan and isinstance(cached_output, dict) and cached_output.get("status") == "completed":
                     output = copy.deepcopy(cached_output)
                     cache_hit = True
                 else:
