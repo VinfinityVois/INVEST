@@ -241,7 +241,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 # Progress reporting must never break a security scan.
                 pass
 
-    failed = any(item["status"] in {"failed", "blocked"} for item in outputs.values())
+    failed = any(
+        item.get("status") == "failed"
+        or (nodes[node_id].type == "ci.gate" and item.get("status") == "blocked")
+        for node_id, item in outputs.items()
+    )
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
     status = "failed" if failed else ("partial" if pending else "completed")
     gate_results = [value for value in outputs.values() if "decision" in value]
