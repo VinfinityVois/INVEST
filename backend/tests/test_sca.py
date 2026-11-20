@@ -691,3 +691,22 @@ def test_maven_profiles_activate_from_mvn_user_properties(tmp_path):
     findings = scan_maven_project(project)
 
     assert {item["artifact"] for item in findings} == {"jackson-databind"}
+
+
+def test_maven_reactor_modules_use_root_maven_config(tmp_path):
+    project = tmp_path / "project"
+    (project / ".mvn").mkdir(parents=True)
+    (project / "module").mkdir()
+    (project / ".mvn" / "maven.config").write_text("-Denv=prod\n", encoding="utf-8")
+    (project / "module" / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>module</artifactId>"
+        "<profiles><profile><id>production</id><activation><property><name>env</name><value>prod</value>"
+        "</property></activation><dependencies><dependency><groupId>com.google.code.gson</groupId>"
+        "<artifactId>gson</artifactId><version>2.8.8</version></dependency></dependencies></profile>"
+        "</profiles></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project)
+
+    assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
