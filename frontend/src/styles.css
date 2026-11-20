@@ -568,3 +568,11 @@
 .ai-provider-checks span{padding:4px 6px;border:1px solid #35485d;border-radius:3px;background:#101d2b;color:#8197ad;font:7px 'DM Mono';letter-spacing:.4px}
 .ai-provider-checks span.is-ready{border-color:rgba(92,191,154,.42);background:rgba(36,112,91,.14);color:#8dddbd}
 .ai-provider-error{padding:7px 8px;border-left:2px solid #d17b79;background:rgba(132,54,57,.13);color:#efaaa6;font-size:9px}
+
+
+/* AI provider state and last execution */
+.ai-provider-ready-note{margin:9px 0;padding:8px 9px;border-left:2px solid #5cbf9a;background:rgba(36,112,91,.12);color:#b5d9cd;font-size:9px;line-height:1.55}
+.ai-provider-ready-note b{color:#8dddbd}
+.ai-provider-run-state{margin:8px 0;padding:8px 9px;border:1px solid #35485d;border-radius:3px;background:rgba(12,24,37,.7);color:#a8bbcc;font-size:9px}
+.ai-provider-run-state b{font:8px 'DM Mono';letter-spacing:.45px;color:#c4d3df}
+.ai-provider-run-state p{margin:5px 0 0;line-height:1.5;color:#d1a7a3}
