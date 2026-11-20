@@ -103,7 +103,24 @@ def process_run(run_id: str, worker_id: str) -> None:
     started = datetime.now(timezone.utc)
     try:
         graph = WorkflowGraph.model_validate(graph_snapshot)
-        result = execute_graph(graph, registry)
+
+        def report_progress(snapshot: dict) -> None:
+            try:
+                with SessionLocal() as progress_session:
+                    progress_session.execute(
+                        update(WorkflowRun)
+                        .where(
+                            WorkflowRun.id == UUID(run_id),
+                            WorkflowRun.status == "running",
+                            WorkflowRun.locked_by == worker_id,
+                        )
+                        .values(result=snapshot, heartbeat_at=datetime.now(timezone.utc))
+                    )
+                    progress_session.commit()
+            except Exception:
+                logger.exception("Could not persist progress for run %s", run_id)
+
+        result = execute_graph(graph, registry, on_progress=report_progress)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
