@@ -80,12 +80,20 @@ def _heartbeat(run_id: str, worker_id: str, stop: threading.Event) -> None:
 
 def _findings_from_result(result: dict) -> list[dict]:
     unique: dict[str, dict] = {}
+    explanations: dict[str, dict] = {}
     for output in result.get("outputs", {}).values():
         for finding in output.get("findings", []):
             fingerprint = finding.get("fingerprint")
             if fingerprint:
                 unique.setdefault(str(fingerprint), finding)
-    return list(unique.values())
+        for explanation in output.get("explanations", []):
+            fingerprint = explanation.get("fingerprint")
+            if fingerprint:
+                explanations[str(fingerprint)] = explanation
+    return [
+        {**finding, **({"ai_explanation": explanations[str(finding["fingerprint"])]} if str(finding.get("fingerprint")) in explanations else {})}
+        for finding in unique.values()
+    ]
 
 
 def process_run(run_id: str, worker_id: str) -> None:
