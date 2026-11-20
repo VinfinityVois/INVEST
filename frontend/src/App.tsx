@@ -994,6 +994,29 @@ export default function App() {
           <label className="field-label">Откуда (источник)<select value={selectedEdge.source} onChange={event => updateEdgeEndpoint("source", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
           <label className="field-label">Куда (получатель)<select value={selectedEdge.target} onChange={event => updateEdgeEndpoint("target", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
           <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); }} placeholder="например: success" /></label>
+          <div className="edge-flow-diagnostics">
+            <div className="section-caption">ДИАГНОСТИКА ПОТОКА</div>
+            {(() => {
+              const sourceNode = nodes.find(node => node.id === selectedEdge.source);
+              const targetNode = nodes.find(node => node.id === selectedEdge.target);
+              const sourceResult = telemetry?.node_results?.[selectedEdge.source];
+              const sourceTrace = telemetry?.trace?.find(step => step.node_id === selectedEdge.source);
+              const targetTrace = telemetry?.trace?.find(step => step.node_id === selectedEdge.target);
+              const count = typeof sourceResult?.findings === "number" ? sourceResult.findings : typeof sourceResult?.total_findings === "number" ? sourceResult.total_findings : undefined;
+              const explained = typeof sourceResult?.explained_count === "number" ? sourceResult.explained_count : undefined;
+              const statusText = (status?: string) => status === "completed" || status === "ready" ? "завершён" : status === "running" ? "выполняется" : status === "failed" ? "ошибка" : status === "blocked" ? "заблокирован" : status || "нет данных";
+              return <>
+                <div className="edge-flow-route"><div><small>ИСТОЧНИК</small><b>{sourceNode?.data.label || selectedEdge.source}</b><span>{statusText(sourceTrace?.status || sourceResult?.status)}</span></div><i>→</i><div><small>ПОЛУЧАТЕЛЬ</small><b>{targetNode?.data.label || selectedEdge.target}</b><span>{statusText(targetTrace?.status || (telemetry?.current_node === selectedEdge.target ? "running" : undefined))}</span></div></div>
+                <div className="edge-flow-payload"><small>ДАННЫЕ НА ВЫХОДЕ ИСТОЧНИКА</small>
+                  {count != null ? <b>{count} {count === 1 ? "находка" : count >= 2 && count <= 4 ? "находки" : "находок"}</b> : explained != null ? <b>{explained} объяснений AI</b> : <b className="edge-flow-unknown">Счётчик не передан телеметрией</b>}
+                  {sourceTrace?.duration_ms != null && <span>Время шага: {formatDuration(sourceTrace.duration_ms)}</span>}
+                  {sourceResult?.message && <p>{sourceResult.message}</p>}
+                </div>
+                {!telemetry && <p className="edge-flow-empty">Запусти workflow, чтобы увидеть фактическое состояние передачи данных.</p>}
+                {telemetry && !sourceResult && !sourceTrace && <p className="edge-flow-empty">Для этого источника нет отдельной записи в телеметрии текущего запуска.</p>}
+              </>;
+            })()}
+          </div>
           <div className="element-actions"><button className="danger" onClick={deleteSelectedEdge}><Trash2 size={13} /> Удалить связь</button></div>
           <p className="edit-hint">Также можно создать связь, потянув линию от правого порта одного блока к левому порту другого. Перетащи конец существующей связи, чтобы перенаправить её.</p>
         </section>}
