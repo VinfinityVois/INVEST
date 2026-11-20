@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import uuid
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
