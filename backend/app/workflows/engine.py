@@ -12,7 +12,7 @@ from app.ai.explanations import explain_findings
 from app.policies.security_gate import evaluate_security_gate
 from app.scanners.secrets import scan_directory
 from app.scanners.presentation import enrich_finding
-from app.scanners.sca import scan_gradle_project
+from app.scanners.sca import scan_project
 from app.scanners.sast import scan_kotlin_project
 from app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
@@ -25,7 +25,7 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.1"
+SCANNER_CACHE_VERSION = "2026-11-21.2"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -378,7 +378,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     if node.type == "scan.secrets":
                         raw_findings = scan_directory(source_root, on_progress=report_scanner_progress)
                     elif node.type == "scan.sca":
-                        raw_findings = scan_gradle_project(source_root, on_progress=report_scanner_progress)
+                        raw_findings = scan_project(source_root, on_progress=report_scanner_progress)
                     else:
                         raw_findings = scan_kotlin_project(source_root, on_progress=report_scanner_progress)
                     findings = [enrich_finding(item, source_root) for item in raw_findings]
@@ -400,7 +400,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_gradle_project(artifacts[source_node], on_progress=report_scanner_progress)]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_project(artifacts[source_node], on_progress=report_scanner_progress)]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
             source_node = next(
