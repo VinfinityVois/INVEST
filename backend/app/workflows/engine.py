@@ -39,7 +39,7 @@ def _workspace_source(relative_path: str) -> Path:
     return candidate
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -68,7 +68,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     trace = []
     outputs = {}
     artifacts = {}
+    cancelled = False
     for node_id in order:
+        if should_cancel is not None:
+            try:
+                if should_cancel():
+                    cancelled = True
+                    break
+            except Exception:
+                # A transient status lookup failure must not abort a security scan.
+                pass
         node_started = perf_counter()
         node = nodes[node_id]
         parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
@@ -307,7 +316,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         for node_id, item in outputs.items()
     )
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
-    status = "failed" if failed else ("partial" if pending else "completed")
+    status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
     return {"status": status, "order": order, "trace": trace, "outputs": outputs, "security_gate": security_gate}
