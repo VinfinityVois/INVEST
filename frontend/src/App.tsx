@@ -536,7 +536,7 @@ export default function App() {
     const editor = editorRef.current;
     const requested = Number.parseInt(editorJumpLine, 10);
     if (!editor || !Number.isFinite(requested) || requested < 1) return;
-    const lines = projectDraft.split("\\n");
+    const lines = projectDraft.split("\n");
     const target = Math.min(requested, lines.length);
     const offset = lines.slice(0, target - 1).reduce((sum, line) => sum + line.length + 1, 0);
     editor.focus();
