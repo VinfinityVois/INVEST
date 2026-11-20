@@ -36,7 +36,7 @@ type Telemetry = {
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -111,6 +111,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
       <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
+      {data.executionProgress != null && <div className="node-live-progress" aria-label={`Прогресс сканирования: ${Math.round(data.executionProgress)}%`}><div><span>СКАНИРОВАНИЕ ФАЙЛОВ</span><b>{Math.round(data.executionProgress)}%</b></div><i><span style={{ width: `${data.executionProgress}%` }} /></i>{data.executionProgressLabel && <small title={data.executionProgressLabel}>{data.executionProgressLabel}</small>}</div>}
        {(data.executionDuration != null || data.executionCount != null || data.executionCoverage != null) && <div className="node-execution-metrics">
          {data.executionDuration != null && <span><small>ВРЕМЯ</small><b>{formatDuration(data.executionDuration)}</b></span>}
          {data.executionCount != null && <span><small>НАХОДКИ</small><b>{data.executionCount}</b></span>}
@@ -341,7 +342,7 @@ export default function App() {
         detail = "Ожидает завершения предыдущих связанных блоков.";
       }
       const count = typeof output?.findings === "number" ? output.findings : typeof output?.total_findings === "number" ? output.total_findings : undefined;
-       return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes, executionSeverity: output?.severity, executionDuration: step?.duration_ms ?? null, executionCount: count, executionCoverage: typeof output?.coverage === "number" ? output.coverage : undefined } };
+       return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes, executionSeverity: output?.severity, executionDuration: step?.duration_ms ?? null, executionCount: count, executionCoverage: typeof output?.coverage === "number" ? output.coverage : undefined, executionProgress: node.id === current && telemetry.scanner_progress && telemetry.scanner_progress.total_files > 0 ? Math.min(100, Math.max(0, telemetry.scanner_progress.files_scanned / telemetry.scanner_progress.total_files * 100)) : undefined, executionProgressLabel: node.id === current && telemetry.scanner_progress ? `${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files} файлов${telemetry.scanner_progress.current_file ? ` · ${telemetry.scanner_progress.current_file}` : ""}` : undefined } };
     }));
     setEdges(currentEdges => currentEdges.map(edge => {
       const sourceStep = trace.get(edge.source);
