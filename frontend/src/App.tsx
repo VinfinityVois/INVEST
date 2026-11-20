@@ -93,6 +93,8 @@ export default function App() {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [findingStates, setFindingStates] = useState<Record<string, FindingLifecycle>>({});
   const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
+  const [findingQuery, setFindingQuery] = useState("");
+  const [findingSeverity, setFindingSeverity] = useState("Все");
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
@@ -375,6 +377,17 @@ export default function App() {
   };
   const categories = ["Все", ...Array.from(new Set(manifests.map(item => item.category)))];
   const filtered = manifests.filter(item => (category === "Все" || item.category === category) && (item.title + " " + item.description + " " + item.type).toLowerCase().includes(search.toLowerCase()));
+  const findingGroups = useMemo(() => {
+    const query = findingQuery.trim().toLowerCase();
+    const visible = findings.filter(item => (findingSeverity === "Все" || item.severity.toUpperCase() === findingSeverity)
+      && (!query || [item.rule_id, item.path, item.message, item.why_it_matters].filter(Boolean).join(" ").toLowerCase().includes(query)));
+    const groups = new Map<string, Finding[]>();
+    for (const item of visible) { const path = item.path || "Файл не указан"; groups.set(path, [...(groups.get(path) || []), item]); }
+    return Array.from(groups, ([path, items]) => ({ path, items: items.sort((a,b) => (a.line || 0) - (b.line || 0)) })).sort((a,b) => a.path.localeCompare(b.path));
+  }, [findings, findingQuery, findingSeverity]);
+  const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
+  const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
+  const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) setSelectedFinding(next); };
   const aiNode = nodes.find(node => node.data.nodeType === "ai.explain");
   const aiNodeResult = aiNode ? telemetry?.node_results?.[aiNode.id] : undefined;
 
@@ -497,8 +510,15 @@ export default function App() {
           </> : <p className="telemetry-empty">Запусков пока нет. Телеметрия появится после первой проверки.</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
-        {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> :
-          findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}>
+        {findings.length > 0 && <div className="finding-browser">
+          <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
+          <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
+          <span>{orderedVisibleFindings.length} / {findings.length}</span>
+        </div>}
+        {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> : findingGroups.length === 0 ? <p className="empty-findings">По текущим фильтрам ничего не найдено.</p> :
+          findingGroups.map(group => <section className="finding-file-group" key={group.path}>
+            <div className="finding-file-heading"><Code2 size={13}/><b>{group.path}</b><span>{group.items.length} · находок</span></div>
+            {group.items.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}>
             <div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div>
             <small className="finding-location">{finding.path}{finding.line ? ":" + finding.line : ""}</small>
             <p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>
@@ -527,7 +547,7 @@ export default function App() {
               <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть фрагмент" : "Показать место в коде"}
             </button>
             {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
-              <div className="source-code-head"><span>{finding.path}</span><b>СТРОКА {finding.line || "—"}</b></div>
+              <div className="source-code-head"><span>{finding.path}</span><div className="source-code-nav"><button disabled={selectedFindingIndex <= 0} onClick={() => selectAdjacentFinding(-1)} title="Предыдущая находка">←</button><b>{selectedFindingIndex >= 0 ? `${selectedFindingIndex + 1} / ${orderedVisibleFindings.length}` : `СТРОКА ${finding.line || "—"}`}</b><button disabled={selectedFindingIndex < 0 || selectedFindingIndex >= orderedVisibleFindings.length - 1} onClick={() => selectAdjacentFinding(1)} title="Следующая находка">→</button></div></div>
               {finding.code_context_redacted && <p className="source-redacted-note">Строки исходника скрыты целиком: этот фрагмент содержит секретные данные.</p>}{finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : <p>Фрагмент недоступен. Откройте файл проекта по указанному пути.</p>}
             </div>}
             {finding.fingerprint && <div className="finding-lifecycle">
@@ -540,6 +560,7 @@ export default function App() {
               {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
             </div>}
           </article>)}
+          </section>)}
         {showResult && <section className="result-section"><div className="result-title"><span>Последний ответ API</span><AlertTriangle size={13} /></div><pre>{result}</pre></section>}
         <div className="safe"><Shield size={16} /><div><b>Изолированный анализ</b><p>Проект не запускается. ZIP проверяется, Git ограничен allowlist. Секреты маскируются.</p></div></div>
         </>}
