@@ -139,7 +139,7 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -185,6 +185,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     artifacts = {}
     reusable_cache = {} if force_full_scan else _bounded_cache_entries(cache_entries)
     next_cache_entries = dict(reusable_cache)
+    forced_nodes = set(force_node_ids or [])
     cancelled = False
     for node_id in order:
         if should_cancel is not None:
@@ -264,7 +265,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 source_root = artifacts[source_node]
                 cache_key = _node_cache_key(node, source_root)
                 cached_output = reusable_cache.get(cache_key)
-                if isinstance(cached_output, dict) and cached_output.get("status") == "completed":
+                if node_id not in forced_nodes and isinstance(cached_output, dict) and cached_output.get("status") == "completed":
                     output = copy.deepcopy(cached_output)
                     cache_hit = True
                 else:
@@ -369,6 +370,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "type": node.type,
             "status": node_status,
             "cached": cache_hit,
+            **({"cache_bypass_reason": "Кэш блока сброшен пользователем"} if node.type in CACHEABLE_NODE_TYPES and node_id in forced_nodes and not cache_hit else {}),
             "diagnostic_level": diagnostic_level,
             **({"reason_code": diagnostic_code} if diagnostic_code else {}),
             **({"reason": str(output["message"])[:500]} if output.get("message") else {}),
