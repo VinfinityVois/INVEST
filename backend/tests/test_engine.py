@@ -374,3 +374,25 @@ def test_engine_stops_between_nodes_when_cancellation_is_requested():
     assert result["status"] == "cancelled"
     assert [item["node_id"] for item in result["trace"]] == ["trigger"]
     assert "source" not in result["outputs"]
+
+
+def test_engine_executes_only_selected_node_and_its_upstream_dependencies(monkeypatch):
+    graph = WorkflowGraph(
+        name="Selective",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "secrets", "type": "scan.secrets"},
+            {"id": "sca", "type": "scan.sca"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "secrets"},
+            {"id": "e3", "source": "source", "target": "sca"},
+        ],
+    )
+    result = execute_graph(graph, registry, target_node_ids=["secrets"])
+    assert result["status"] == "partial"
+    assert result["order"] == ["trigger", "source", "secrets"]
+    assert set(result["outputs"]) == {"trigger", "source", "secrets"}
+    assert result["execution_scope"]["requested_node_ids"] == ["secrets"]
