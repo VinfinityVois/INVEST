@@ -1645,10 +1645,16 @@ export default function App() {
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> : findingGroups.length === 0 ? <p className="empty-findings">По текущим фильтрам ничего не найдено.</p> :
           findingGroups.map(group => <section className="finding-file-group" key={group.path}>
             <div className="finding-file-heading"><Code2 size={13}/><b>{group.path}</b><span>{group.items.length} · находок</span></div>
-            {group.items.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}>
-            <div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div>
-            <small className="finding-location">{finding.path}{finding.line ? ":" + finding.line : ""}</small>
-            <p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>
+            {group.items.map((finding, index) => <article className="finding finding-table-item" key={finding.id || finding.rule_id + index}>
+            <button type="button" className={"finding-table-row" + (selectedFinding?.fingerprint === finding.fingerprint ? " is-selected" : "")} onClick={() => { setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding); setSourceWindowStart(Math.max(1, (finding.line || 1) - 40)); }} aria-expanded={selectedFinding?.fingerprint === finding.fingerprint}>
+              <span className={"finding-table-severity severity-" + finding.severity.toLowerCase()}>{finding.severity}</span>
+              <b>{finding.rule_id}</b>
+              <small>{finding.path}{finding.line ? ":" + finding.line : ""}</small>
+              <span className="finding-table-message">{finding.message || "Потенциальная проблема; проверьте контекст."}</span>
+              <ChevronDown size={13}/>
+            </button>
+            {selectedFinding?.fingerprint === finding.fingerprint && <div className="finding-detail">
+            <div className="finding-detail-heading"><b>Детали находки</b><span>{finding.severity} · {finding.rule_id}</span></div>
             {finding.why_it_matters && <div className="finding-explanation"><b>ПОЧЕМУ ЭТО ПРОБЛЕМА</b><p>{finding.why_it_matters}</p></div>}
             {finding.recommendation && <div className="finding-remediation"><b>КАК ИСПРАВИТЬ</b><p>{finding.recommendation}</p></div>}
             {finding.ai_explanation && <div className="finding-ai-explanation">
@@ -1690,6 +1696,7 @@ export default function App() {
               </label>
               <button className="history-button" onClick={() => void loadFindingHistory(finding.fingerprint!)}>История</button>
               {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
+            </div>}
             </div>}
           </article>)}
           </section>)}
