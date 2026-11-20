@@ -40,3 +40,24 @@ def test_secret_values_are_redacted_from_source_context(tmp_path: Path):
     snippet = "\n".join(item["text"] for item in finding["code_context"])
     assert "super-secret-value-123" not in snippet
     assert "[REDACTED]" in snippet
+
+
+def test_private_key_source_context_is_fully_hidden(tmp_path: Path):
+    source = tmp_path / "private.pem"
+    source.write_text(
+        "-----BEGIN PRIVATE KEY-----\\n"
+        "VERY-SENSITIVE-PRIVATE-KEY-MATERIAL\\n"
+        "-----END PRIVATE KEY-----\\n",
+        encoding="utf-8",
+    )
+    finding = enrich_finding({
+        "rule_id": "private_key",
+        "category": "SECRET",
+        "path": "private.pem",
+        "line": 1,
+        "severity": "CRITICAL",
+        "message": "Private key detected",
+    }, tmp_path)
+    snippet = "\\n".join(item["text"] for item in finding["code_context"])
+    assert "VERY-SENSITIVE-PRIVATE-KEY-MATERIAL" not in snippet
+    assert finding["code_context_redacted"] is True
