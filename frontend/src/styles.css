@@ -498,3 +498,24 @@
 .project-file-tools>button.save{border-color:#38785e;background:#102b25;color:#8ce0b4}
 .project-file-tools>button:disabled{opacity:.5;cursor:wait}
 .project-code-editor{flex:1;width:100%;min-height:0;resize:none;padding:14px 16px;border:0;outline:0;background:#080e17;color:#c6d5e5;font:9px/1.7 'DM Mono';tab-size:4;white-space:pre;overflow:auto}
+
+
+/* Sidebar folders: project library and API components are independent groups */
+.palette-folder{margin:10px 0;border:1px solid #293e54;border-radius:7px;overflow:hidden;background:rgba(7,15,25,.42)}
+.palette-folder-head{width:100%;min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 11px;border:0;background:linear-gradient(100deg,rgba(24,43,62,.94),rgba(13,25,39,.96));color:#c4d8eb;text-align:left;cursor:pointer}
+.palette-folder-head:hover{background:linear-gradient(100deg,rgba(33,59,81,.98),rgba(17,34,51,.98))}
+.palette-folder-leading{display:flex;align-items:center;gap:8px;min-width:0}
+.palette-folder-leading>svg:not(.palette-folder-chevron){color:#82b9d9;flex-shrink:0}
+.palette-folder-leading b{overflow:hidden;color:#d4e4f3;font:700 8px 'DM Mono';letter-spacing:.65px;text-overflow:ellipsis;white-space:nowrap}
+.palette-folder-head>small{flex-shrink:0;min-width:21px;padding:3px 6px;border:1px solid #344e68;border-radius:10px;background:#101f30;color:#8fa9c1;text-align:center;font:7px 'DM Mono'}
+.palette-folder-chevron{flex-shrink:0;color:#718ba4;transition:transform .18s ease}
+.palette-folder.folder-open .palette-folder-chevron{transform:rotate(90deg)}
+.palette-folder-body{padding:9px;border-top:1px solid #26394d}
+.palette-folder-body .source-section{margin:0}
+.palette-folder-body .section-caption{margin-top:10px}
+.palette-folder-body .section-caption:first-child{margin-top:0}
+.components-folder .palette-folder-leading>svg:not(.palette-folder-chevron){color:#bd9ce8}
+.components-folder .palette-folder-head{background:linear-gradient(100deg,rgba(39,32,60,.85),rgba(17,25,42,.96))}
+.components-folder .palette-folder-head:hover{background:linear-gradient(100deg,rgba(54,43,80,.95),rgba(22,34,53,.98))}
+.components-folder .palette-folder-body{padding:9px}
+@media(prefers-reduced-motion:reduce){.palette-folder-chevron{transition:none}}
