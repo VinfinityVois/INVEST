@@ -25,3 +25,20 @@ def test_ci_token_rejects_empty_header(monkeypatch):
     with pytest.raises(HTTPException) as error:
         _require_ci_token("")
     assert error.value.status_code == 401
+
+
+def test_template_publish_token_is_disabled_without_configuration(monkeypatch):
+    from app.main import _require_template_publish_token
+    monkeypatch.setattr(settings, "template_publish_token", None)
+    with pytest.raises(HTTPException) as error:
+        _require_template_publish_token("anything")
+    assert error.value.status_code == 503
+
+
+def test_template_publish_token_requires_exact_secret(monkeypatch):
+    from app.main import _require_template_publish_token
+    monkeypatch.setattr(settings, "template_publish_token", "dedicated-template-publish-secret")
+    with pytest.raises(HTTPException) as error:
+        _require_template_publish_token("wrong")
+    assert error.value.status_code == 401
+    _require_template_publish_token("dedicated-template-publish-secret")
