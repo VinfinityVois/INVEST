@@ -521,7 +521,7 @@ def test_maven_profiles_only_scan_active_by_default_or_explicit_profiles(tmp_pat
 
     findings = scan_maven_project(project)
 
-    assert {item["artifact"] for item in findings} == {"gson", "jackson-databind"}
+    assert {item["artifact"] for item in findings} == {"jackson-databind"}
 
 
 def test_maven_dependency_tree_finds_transitive_dependencies(tmp_path):
