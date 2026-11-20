@@ -116,6 +116,19 @@ def _project_root(project: Project) -> Path:
     return resolved
 
 
+def _project_has_active_run(session, project: Project) -> bool:
+    runs = session.scalars(select(WorkflowRun).where(WorkflowRun.status.in_(["queued", "running"]))).all()
+    for run in runs:
+        graph = run.graph_snapshot if isinstance(run.graph_snapshot, dict) else {}
+        for node in graph.get("nodes", []):
+            if not isinstance(node, dict) or node.get("type") != "source.upload":
+                continue
+            config = node.get("config", {})
+            if isinstance(config, dict) and config.get("path") == project.workspace_path:
+                return True
+    return False
+
+
 def _project_payload(project: Project) -> dict:
     return {
         "id": str(project.id),
@@ -188,10 +201,12 @@ def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
+        if _project_has_active_run(session, project):
+            raise HTTPException(status_code=409, detail="Нельзя обновить проект, пока выполняется workflow с этим источником.")
         workspace_path = project.workspace_path
         staging_path = f"projects/.staging-{project_id}-{uuid4().hex}"
         root = Path(settings.workspace_root).resolve()
-        destination = root.joinpath(*PurePosixPath(workspace_path).parts)
+        destination = _project_root(project)
         staging = root.joinpath(*PurePosixPath(staging_path).parts)
         backup = root / "projects" / f".previous-{project_id}-{uuid4().hex}"
         try:
@@ -243,6 +258,8 @@ def delete_project(project_id: UUID):
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
+        if _project_has_active_run(session, project):
+            raise HTTPException(status_code=409, detail="Нельзя удалить проект, пока выполняется workflow с этим источником.")
         root = _project_root(project)
         shutil.rmtree(root)
         session.add(AuditLog(action="project.deleted", entity="project", entity_id=str(project_id), details={
