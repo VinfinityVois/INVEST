@@ -68,3 +68,29 @@ def test_project_export_excludes_secret_paths_and_secret_like_content():
     assert _project_export_file_is_safe(PurePosixPath("assets/logo.png"), 1024)
     assert not _project_export_file_is_safe(PurePosixPath("docs/large.txt"), 1_000_001)
     assert not _project_export_file_is_safe(PurePosixPath("archive.bin"), 512 * 1024 * 1024 + 1)
+
+
+
+def test_cache_telemetry_summary_counts_only_scanner_nodes_and_reports_hit_rate():
+    from app.main import _cache_telemetry_summary
+
+    summary = _cache_telemetry_summary([
+        {"type": "trigger.manual", "cached": False},
+        {"type": "scan.secrets", "cached": True},
+        {"type": "scan.sca", "cached": False},
+        {"type": "scan.sast", "cached": True},
+        {"type": "findings.merge", "cached": False},
+    ])
+
+    assert summary["scanner_blocks"] == 3
+    assert summary["cache_hits"] == 2
+    assert summary["fresh_scans"] == 1
+    assert summary["hit_rate"] == 0.6667
+    assert summary["ttl_seconds"] == 86400
+
+
+def test_cache_telemetry_summary_handles_empty_or_missing_trace():
+    from app.main import _cache_telemetry_summary
+
+    assert _cache_telemetry_summary([])["hit_rate"] == 0.0
+    assert _cache_telemetry_summary([{"type": "scan.secrets"}])["fresh_scans"] == 1
