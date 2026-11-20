@@ -37,7 +37,7 @@ def _workspace_source(relative_path: str) -> Path:
     return candidate
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -139,7 +139,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             for finding in merged:
                 unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
             try:
-                evaluation = evaluate_security_gate(list(unique.values()), node.config)
+                evaluation = evaluate_security_gate(list(unique.values()), node.config, finding_states)
                 output = {
                     "status": "blocked" if evaluation["blocked"] else "completed",
                     "decision": evaluation["decision"],
