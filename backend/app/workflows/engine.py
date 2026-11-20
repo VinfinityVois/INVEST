@@ -475,7 +475,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                         "message": "Уведомление доставлено.",
                         "delivered": True,
                         "http_status": delivery["http_status"],
-                        "summary": payload["summary"],
+                        "summary": {"total": payload["summary"]["total_findings"], **payload["summary"]},
                     }
                 except WebhookDeliveryError as exc:
                     output = {"status": "failed", "message": str(exc), "delivered": False}
