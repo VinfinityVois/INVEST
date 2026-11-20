@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "ecosystem": "Maven",
+  "snapshot": {
+    "date": "2026-11-21",
+    "springBootTag": "v3.2.0",
+    "sources": [
+      "https://github.com/spring-projects/spring-boot/blob/v3.2.0/spring-boot-project/spring-boot-dependencies/build.gradle",
+      "https://github.com/spring-projects/spring-boot/blob/v3.2.0/gradle.properties"
+    ],
+    "notes": "Curated static subset. Only coordinates whose managed versions are explicit in the tagged Spring Boot dependency catalog or its version properties are included. This is not a complete generated BOM."
+  },
+  "boms": {
+    "3.2.0": {
+      "managed": {
+        "com.google.code.gson:gson": "2.10.1",
+        "com.hazelcast:hazelcast": "5.3.6",
+        "net.minidev:json-smart": "2.5.0",
+        "org.apache.commons:commons-lang3": "3.13.0",
+        "org.yaml:snakeyaml": "2.2",
+        "com.fasterxml.jackson.core:jackson-databind": "2.15.3"
+      }
+    }
+  }
+}
