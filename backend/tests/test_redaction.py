@@ -1,3 +1,4 @@
+import json
 from app.security.redaction import redact_text
 
 def test_redacts_assignments_and_known_token_shapes():
@@ -13,12 +14,13 @@ def test_safe_report_value_redacts_secret_fields_and_bounds_nested_content():
 
     value = _safe_report_value({
         "api_key": "super-secret-value",
-        "message": "token=ghp_abcdefghijklmnopqrstuvwxyz012345",
+        "message": "token=ghp_abcdefghijklmnopqrstuvwxyz012345 api_key=inline-secret-value",
         "nested": [{"password": "hunter2", "text": "safe"}],
     })
 
     assert value["api_key"] == "[REDACTED]"
     assert "super-secret-value" not in json.dumps(value)
     assert "ghp_abcdefghijklmnopqrstuvwxyz012345" not in json.dumps(value)
+    assert "inline-secret-value" not in json.dumps(value)
     assert value["nested"][0]["password"] == "[REDACTED]"
     assert value["nested"][0]["text"] == "safe"
