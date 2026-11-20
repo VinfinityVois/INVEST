@@ -335,8 +335,13 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сохранить отчёт");
       setResult("Отчёт сохранён в " + activeProject.name + " · " + data.path);
-      await refreshProjectFiles(activeProject.id);
-      await refreshProjectHistory(activeProject.id);
+      await refreshProjects();
+      const [filesResponse, historyResponse] = await Promise.all([
+        fetch("/api/projects/" + activeProject.id + "/files"),
+        fetch("/api/projects/" + activeProject.id + "/history"),
+      ]);
+      if (filesResponse.ok) setProjectFiles(((await filesResponse.json()).files || []) as ProjectFile[]);
+      if (historyResponse.ok) setProjectHistory(await historyResponse.json() as ProjectHistoryEntry[]);
     } catch (error) { setResult("Ошибка сохранения отчёта: " + String(error)); }
   };
 
