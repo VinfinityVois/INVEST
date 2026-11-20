@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, Background, Controls, MiniMap, Handle, Position, addEdge, reconnectEdge,
   useEdgesState, useNodesState,
@@ -131,6 +131,10 @@ export default function App() {
   const [projectVisualPreview, setProjectVisualPreview] = useState<ProjectVisualPreview | null>(null);
   const [projectEditing, setProjectEditing] = useState(false);
   const [projectDraft, setProjectDraft] = useState("");
+  const [editorFind, setEditorFind] = useState("");
+  const [editorReplace, setEditorReplace] = useState("");
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorGutterRef = useRef<HTMLDivElement | null>(null);
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectContentQuery, setProjectContentQuery] = useState("");
   const [projectContentResults, setProjectContentResults] = useState<ProjectSearchResult[]>([]);
@@ -462,6 +466,25 @@ export default function App() {
       setResult(`Поиск завершён · ${(data.results || []).length} совпадений · проверено ${data.scanned_files} файлов`);
     } catch (error) { setResult("Поиск по содержимому: " + String(error)); }
     finally { setProjectContentSearching(false); }
+  };
+  const findNextInEditor = () => {
+    const needle = editorFind;
+    const editor = editorRef.current;
+    if (!needle || !editor) return;
+    const start = editor.selectionEnd;
+    const found = projectDraft.indexOf(needle, start);
+    const index = found >= 0 ? found : projectDraft.indexOf(needle);
+    if (index < 0) { setResult("Совпадений не найдено."); return; }
+    editor.focus();
+    editor.setSelectionRange(index, index + needle.length);
+    setResult(`Найдено совпадение на позиции ${index + 1}.`);
+  };
+  const replaceAllInEditor = () => {
+    if (!editorFind) return;
+    const matches = projectDraft.split(editorFind).length - 1;
+    if (!matches) { setResult("Совпадений для замены не найдено."); return; }
+    setProjectDraft(projectDraft.split(editorFind).join(editorReplace));
+    setResult(`Заменено совпадений: ${matches}. Не забудь сохранить файл.`);
   };
   const downloadProjectFile = () => {
     if (!activeProject) return;
@@ -898,7 +921,17 @@ export default function App() {
             <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || projectVisualPreview?.path || "Выбери файл в дереве проекта"}</span>
               {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
             </div>
-            {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <textarea className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} /> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
+            {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <>
+              <div className="project-editor-findbar">
+                <div><Search size={12}/><input value={editorFind} onChange={event => setEditorFind(event.target.value)} placeholder="Найти в файле…" onKeyDown={event => { if (event.key === "Enter") findNextInEditor(); }}/><button onClick={findNextInEditor} disabled={!editorFind}>Найти далее</button></div>
+                <div><ArrowLeftRight size={12}/><input value={editorReplace} onChange={event => setEditorReplace(event.target.value)} placeholder="Заменить на…"/><button onClick={replaceAllInEditor} disabled={!editorFind}>Заменить всё</button></div>
+                <small>{editorFind ? `${Math.max(0, projectDraft.split(editorFind).length - 1)} совп.` : "Поиск и замена · Ctrl+F в поле поиска"}</small>
+              </div>
+              <div className="project-editor-surface">
+                <div className="project-editor-gutter" ref={editorGutterRef}>{projectDraft.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div>
+                <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
+              </div>
+            </> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
         </div>
         {projectHistoryOpen && <aside className="project-history-drawer">
