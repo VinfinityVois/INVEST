@@ -536,7 +536,8 @@ export default function App() {
   const addNode = (manifest: Manifest) => {
     const id = manifest.type + "-" + Date.now();
     const position = { x: 180 + (nodes.length % 3) * 245, y: 90 + Math.floor(nodes.length / 3) * 145 };
-    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: {} } };
+    const initialConfig = manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {};
+    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig } };
     setNodes(current => [...current, node]); setSelectedNodeId(id); setSelectedEdgeId(null);
   };
   const updateNode = (id: string, patch: Partial<NodeData>) => setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node));
@@ -556,7 +557,7 @@ export default function App() {
     if (!selectedNode) return;
     const manifest = manifests.find(item => item.type === type);
     if (!manifest) return;
-    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, config: {} });
+    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
   };
   const saveNodeConfig = () => {
     if (!selectedNode) return;
