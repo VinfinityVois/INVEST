@@ -244,6 +244,16 @@ export default function App() {
   const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
 
   useEffect(() => {
+    if (!workflowId) { setScheduleStatus(null); return; }
+    let active = true;
+    fetch("/api/workflows/" + workflowId + "/schedule")
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (active) setScheduleStatus(data); })
+      .catch(() => { if (active) setScheduleStatus(null); });
+    return () => { active = false; };
+  }, [workflowId]);
+
+  useEffect(() => {
     fetch("/api/projects")
       .then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Project[]) => setProjects(data))
