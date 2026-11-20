@@ -534,3 +534,16 @@ def test_workflow_delivers_ai_report_to_webhook_node(tmp_path, monkeypatch):
     assert delivered["payload"]["summary"]["total_findings"] == 1
     assert delivered["payload"]["ai_summary"]
     assert result["outputs"]["notify"]["delivered"] is True
+
+
+
+def test_schedule_trigger_executes_as_workflow_event():
+    graph = WorkflowGraph(
+        nodes=[{"id": "schedule", "type": "trigger.schedule", "config": {"cron": "*/5 * * * *", "timezone": "UTC"}}],
+        edges=[],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["schedule"]["status"] == "completed"
