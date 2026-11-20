@@ -7,7 +7,7 @@ MAX_FILE_BYTES=1_000_000
 MAX_FILES=20_000
 SKIP_DIRS={".git","node_modules",".gradle","build","dist","target",".venv"}
 PLACEHOLDERS=("changeme","change-me","example","your_","xxx","dummy","placeholder")
-SECRET_NAME=re.compile(r"(?i)(password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|authorization|bearer|credential)")
+SECRET_NAME=re.compile(r"(?i)(password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|authorization|bearer|credential)")
 QUOTED=r"""["']([^"'\r\n]{8,})["']"""
 PATTERNS=[
  ("aws_access_key",re.compile(r"\bAKIA[0-9A-Z]{16}\b"),.99,"CRITICAL","api-key"),
