@@ -35,7 +35,8 @@ export default function App() {
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
-  const [busy, setBusy] = useState(false);\n  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetch("/api/node-types")
