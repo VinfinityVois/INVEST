@@ -55,3 +55,37 @@ def test_schedule_mutation_lookup_locks_schedule_row():
     sql = str(session.statement.compile(dialect=postgresql.dialect()))
     assert "FOR UPDATE" in sql
     assert "workflow_schedules" in sql
+
+
+def test_finding_risk_expiry_requires_timezone_and_future_date():
+    from datetime import datetime, timedelta, timezone
+    from uuid import uuid4
+
+    import pytest
+    from fastapi import HTTPException
+    from app.main import FindingStateUpdate, update_finding_state
+
+    workflow_id = uuid4()
+    with pytest.raises(HTTPException) as naive_error:
+        update_finding_state(
+            workflow_id,
+            "fingerprint",
+            FindingStateUpdate(
+                state="accepted_risk",
+                reason="Temporary exception",
+                expires_at=datetime(2030, 1, 1),
+            ),
+        )
+    assert naive_error.value.status_code == 422
+
+    with pytest.raises(HTTPException) as past_error:
+        update_finding_state(
+            workflow_id,
+            "fingerprint",
+            FindingStateUpdate(
+                state="accepted_risk",
+                reason="Temporary exception",
+                expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+            ),
+        )
+    assert past_error.value.status_code == 422
