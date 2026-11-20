@@ -573,3 +573,25 @@ def test_combined_sca_scans_gradle_and_maven_projects(tmp_path):
     findings = scan_project(project)
 
     assert {item["artifact"] for item in findings} == {"commons-text", "gson"}
+
+
+def test_maven_parent_relative_path_cannot_read_outside_project(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>parent</artifactId>"
+        "<properties><inherited.version>2.9.10.3</inherited.version></properties></project>",
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId>"
+        "<artifactId>parent</artifactId><version>1</version><relativePath>../outside/pom.xml</relativePath>"
+        "</parent><artifactId>app</artifactId><dependencies><dependency>"
+        "<groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId>"
+        "<version>$" "{inherited.version}</version></dependency></dependencies></project>",
+        encoding="utf-8",
+    )
+
+    assert scan_maven_project(project) == []
