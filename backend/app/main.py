@@ -839,6 +839,16 @@ def _lock_run_for_update(session, run_id: UUID):
     )
 
 
+def _lock_schedule_for_update(session, workflow_id: UUID, schedule_id: UUID):
+    """Serialize schedule edits/deletes with the due-schedule dispatcher."""
+    return session.scalar(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id,
+            WorkflowSchedule.workflow_id == workflow_id,
+        ).with_for_update()
+    )
+
+
 @app.put("/api/workflows/{workflow_id}")
 def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
     validation = validate_graph(graph, registry)
@@ -1000,9 +1010,7 @@ def create_workflow_schedule(workflow_id: UUID, request: WorkflowScheduleRequest
 def update_workflow_schedule(workflow_id: UUID, schedule_id: UUID, request: WorkflowScheduleRequest):
     next_at = next_run_time(request.cron_expression, request.timezone)
     with SessionLocal() as session:
-        schedule = session.scalar(select(WorkflowSchedule).where(
-            WorkflowSchedule.id == schedule_id, WorkflowSchedule.workflow_id == workflow_id
-        ))
+        schedule = _lock_schedule_for_update(session, workflow_id, schedule_id)
         if schedule is None:
             raise HTTPException(status_code=404, detail="Schedule not found")
         schedule.cron_expression = request.cron_expression
@@ -1020,9 +1028,7 @@ def update_workflow_schedule(workflow_id: UUID, schedule_id: UUID, request: Work
 @app.delete("/api/workflows/{workflow_id}/schedules/{schedule_id}", status_code=204)
 def delete_workflow_schedule(workflow_id: UUID, schedule_id: UUID):
     with SessionLocal() as session:
-        schedule = session.scalar(select(WorkflowSchedule).where(
-            WorkflowSchedule.id == schedule_id, WorkflowSchedule.workflow_id == workflow_id
-        ))
+        schedule = _lock_schedule_for_update(session, workflow_id, schedule_id)
         if schedule is None:
             raise HTTPException(status_code=404, detail="Schedule not found")
         session.delete(schedule)
