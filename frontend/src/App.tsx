@@ -202,7 +202,7 @@ export default function App() {
 
         <div className="section-caption library-caption">КОМПОНЕНТЫ API</div>
         {filtered.map(manifest => <article className="library-item" key={manifest.type}>
-          <div className="library-main"><div className={`library-icon tone-${(categoryMeta[manifest.category] || {tone:"slate"}).tone`}><Code2 size={15} /></div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
+          <div className="library-main"><div className={"library-icon tone-" + (categoryMeta[manifest.category] || {tone:"slate"}).tone}><Code2 size={15} /></div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
           <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{categoryMeta[manifest.category]?.label || manifest.category} · тип: {manifest.type}</span></details>
         </article>)}
         {!manifests.length && <div className="empty-library">Загружаем реестр компонентов API…</div>}
