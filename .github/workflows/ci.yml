@@ -37,3 +37,4 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: python eval/run_secrets_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
       - run: python eval/run_sca_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
+      - run: python eval/run_sast_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
