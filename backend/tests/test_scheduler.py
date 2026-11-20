@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 from app.scheduler import next_run_time
 
@@ -37,7 +37,7 @@ def test_enqueue_due_schedule_creates_run_and_advances_schedule(monkeypatch):
     now = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     schedule = SimpleNamespace(
         id=uuid4(), workflow_id=uuid4(), enabled=True,
-        next_run_at=now - __import__("datetime").timedelta(minutes=1),
+        next_run_at=now - timedelta(minutes=1),
         cron_expression="0 12 * * *", timezone="Europe/Stockholm",
         last_run_at=None, last_run_id=None,
     )
@@ -117,3 +117,37 @@ def test_enqueue_due_schedule_disables_orphaned_workflow(monkeypatch):
     assert schedule.enabled is False
     assert fake.added == []
     assert fake.committed
+
+
+def test_schedule_request_normalizes_cron_and_timezone():
+    from app.main import WorkflowScheduleRequest
+
+    request = WorkflowScheduleRequest(
+        cron_expression="  30 9 * * 1-5  ",
+        timezone=" Europe/Stockholm ",
+        enabled=False,
+    )
+
+    assert request.cron_expression == "30 9 * * 1-5"
+    assert request.timezone == "Europe/Stockholm"
+    assert request.enabled is False
+
+
+@pytest.mark.parametrize("expression", ["not a cron", "*/5 * * * * *", "0 0 * *"])
+def test_schedule_request_rejects_invalid_cron(expression):
+    from pydantic import ValidationError
+    from app.main import WorkflowScheduleRequest
+
+    with pytest.raises(ValidationError):
+        WorkflowScheduleRequest(cron_expression=expression)
+
+
+def test_schedule_request_rejects_unknown_timezone():
+    from pydantic import ValidationError
+    from app.main import WorkflowScheduleRequest
+
+    with pytest.raises(ValidationError):
+        WorkflowScheduleRequest(
+            cron_expression="0 9 * * *",
+            timezone="Mars/Olympus",
+        )
