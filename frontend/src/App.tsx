@@ -877,6 +877,25 @@ export default function App() {
     catch (error) { setResult("Не удалось сохранить workflow: " + String(error)); }
     finally { setBusy(false); }
   };
+  const updateSchedule = async (enabled: boolean) => {
+    setScheduleBusy(true);
+    try {
+      const id = await persistWorkflow();
+      const response = await fetch("/api/workflows/" + id + "/schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+      setScheduleStatus(data);
+      setResult(enabled ? "Расписание включено · " + String(data.cron || selectedNode?.data.config.cron || "") : "Расписание отключено.");
+    } catch (error) {
+      setResult("Не удалось обновить расписание: " + String(error));
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
   const validateWorkflow = async () => {
     setBusy(true);
     try {
