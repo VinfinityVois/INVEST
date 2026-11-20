@@ -39,7 +39,7 @@ def test_secret_values_are_redacted_from_source_context(tmp_path: Path):
 
     snippet = "\n".join(item["text"] for item in finding["code_context"])
     assert "super-secret-value-123" not in snippet
-    assert "[REDACTED]" in snippet
+    assert "[REDACTED:" in snippet
 
 
 def test_private_key_source_context_is_fully_hidden(tmp_path: Path):
