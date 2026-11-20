@@ -2,7 +2,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from app.config import settings
-from app.scanners.secrets import scan_directory
+from app.scanners.secrets import scan_directory\nfrom app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
 from .validator import validate_graph
@@ -15,9 +15,12 @@ class WorkflowExecutionError(RuntimeError):
 def _workspace_source(relative_path: str) -> Path:
     """Resolve an uploaded project directory strictly inside WORKSPACE_ROOT."""
     workspace = Path(settings.workspace_root).resolve()
-    unresolved = workspace / relative_path
+    relative = Path(relative_path)
+    if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+        raise WorkflowExecutionError("Source path must be a safe relative path")
+    unresolved = workspace.joinpath(relative)
     current = unresolved
-    while current != workspace.parent:
+    while current != workspace:
         if current.is_symlink():
             raise WorkflowExecutionError("Symlinks are not allowed in source paths")
         current = current.parent
@@ -76,7 +79,17 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
                 except (OSError, WorkflowExecutionError) as exc:
                     output = {"status": "failed", "message": str(exc)}
         elif node.type == "source.git":
-            output = {"status": "adapter_required", "message": "Git source adapter ещё не подключён."}
+            try:
+                source = clone_allowed_repository(
+                    url=node.config.get("url", ""),
+                    ref=node.config.get("ref"),
+                    workspace_root=settings.workspace_root,
+                    allowed_targets=settings.allowed_target_list,
+                )
+                artifacts[node_id] = _workspace_source(source["path"])
+                output = {"status": "ready", **source}
+            except (GitSourceError, OSError, WorkflowExecutionError) as exc:
+                output = {"status": "failed", "message": str(exc)}
         elif node.type == "scan.secrets":
             source_node = next(
                 (parent for parent in incoming[node_id] if parent in artifacts), None
