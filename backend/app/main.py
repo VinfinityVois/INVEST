@@ -1023,6 +1023,24 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
         gate_nodes = [node for node in graph.nodes if node.type == "ci.gate"]
         if len(gate_nodes) != 1:
             raise HTTPException(status_code=422, detail="CI workflow must contain exactly one Security Gate node")
+        gate_node = gate_nodes[0]
+        nodes_by_id = {node.id: node for node in graph.nodes}
+        gate_merge_ids = {
+            edge.source for edge in graph.edges
+            if edge.target == gate_node.id
+            and edge.source in nodes_by_id
+            and nodes_by_id[edge.source].type == "findings.merge"
+        }
+        if not gate_merge_ids:
+            raise HTTPException(status_code=422, detail="Security Gate must receive findings from a Merge findings node")
+        has_scanner_input = any(
+            edge.target in gate_merge_ids
+            and edge.source in nodes_by_id
+            and nodes_by_id[edge.source].type in {"scan.secrets", "scan.sca", "scan.sast"}
+            for edge in graph.edges
+        )
+        if not has_scanner_input:
+            raise HTTPException(status_code=422, detail="The findings merge connected to Security Gate must receive at least one scanner output")
         snapshot = graph.model_dump(mode="json")
         snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": False}
         run = WorkflowRun(
