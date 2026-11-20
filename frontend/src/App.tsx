@@ -342,7 +342,7 @@ export default function App() {
         : step?.status === "blocked" ? "blocked"
         : step?.status === "configuration_required" ? "configuration_required"
         : step?.status === "completed" || step?.status === "ready" ? "completed"
-        : telemetry.status === "queued" || telemetry.status === "running" ? "queued" : "idle";
+        : telemetry.status === "queued" || telemetry.status === "running" || telemetry.status === "cancelling" ? "queued" : "idle";
       let detail = output?.message || "";
       if (output?.status === "completed" && node.data.nodeType.startsWith("scan.")) {
         detail = `Проверка завершена · найдено: ${output.findings ?? 0}.`;
