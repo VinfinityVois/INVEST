@@ -6,7 +6,7 @@ findings and redacted source context, and returns advisory explanations.
 import json
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -22,11 +22,36 @@ def _endpoint(base_url: str) -> str:
     parsed = urlparse(base)
     if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
         raise ExplanationGatewayError("LLM_BASE_URL должен использовать HTTPS (для localhost разрешён HTTP).")
-    if not parsed.netloc:
+    if not parsed.netloc or not parsed.hostname:
         raise ExplanationGatewayError("LLM_BASE_URL имеет неверный формат.")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ExplanationGatewayError("LLM_BASE_URL содержит некорректный порт.") from exc
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ExplanationGatewayError("LLM_BASE_URL не должен содержать логин, пароль, query-параметры или fragment. Передавайте ключ через LLM_API_KEY.")
     if base.endswith("/chat/completions"):
         return base
     return base + "/chat/completions"
+
+
+def _safe_base_url(value: str) -> str | None:
+    """Return a display-safe endpoint without URL credentials or query secrets."""
+    try:
+        parsed = urlparse(value)
+        host = parsed.hostname or ""
+        if not host:
+            return None
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        netloc = f"{host}:{port}" if port else host
+        return urlunparse((parsed.scheme, netloc, parsed.path.rstrip("/"), "", "", ""))
+    except Exception:
+        return None
 
 
 def provider_configuration() -> dict[str, Any]:
@@ -50,7 +75,7 @@ def provider_configuration() -> dict[str, Any]:
         "endpoint_valid": endpoint_valid if base_url else None,
         "endpoint_error": endpoint_error,
         "model": model or None,
-        "base_url": base_url or None,
+        "base_url": _safe_base_url(base_url) if base_url else None,
         "key_is_exposed": False,
     }
 
