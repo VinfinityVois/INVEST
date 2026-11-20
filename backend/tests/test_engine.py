@@ -347,3 +347,30 @@ def test_engine_trace_contains_actionable_diagnostics_for_blocked_and_unconfigur
     assert trace["scan"]["diagnostic_level"] == "blocked"
     assert trace["scan"]["reason_code"] == "UPSTREAM_SOURCE_UNAVAILABLE"
     assert trace["scan"]["reason"] == result["outputs"]["scan"]["message"]
+
+
+
+def test_engine_stops_between_nodes_when_cancellation_is_requested():
+    graph = WorkflowGraph(
+        name="Cooperative cancellation",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+    checks = {"count": 0}
+
+    def should_cancel():
+        checks["count"] += 1
+        return checks["count"] > 1
+
+    result = execute_graph(graph, registry, should_cancel=should_cancel)
+
+    assert result["status"] == "cancelled"
+    assert [item["node_id"] for item in result["trace"]] == ["trigger"]
+    assert "source" not in result["outputs"]
