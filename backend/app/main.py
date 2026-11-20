@@ -258,6 +258,17 @@ def _run_telemetry(session, run: WorkflowRun):
         "total_nodes": progress.get("total_nodes", len(run.graph_snapshot.get("nodes", []))) if progress else len(run.graph_snapshot.get("nodes", [])),
         "current_node": progress.get("current_node") if progress else None,
         "scanner_progress": progress.get("scanner_progress") if progress else None,
+        "node_results": (
+            progress.get("node_results", {}) if progress else {
+                node_id: {
+                    "status": output.get("status"),
+                    **({"message": output["message"]} if output.get("message") else {}),
+                    **({"findings": output["summary"]["total"]} if isinstance(output.get("summary"), dict) else {}),
+                    **({"explained_count": output.get("explained_count", len(output.get("explanations", [])))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
+                    **({"total_findings": len(output.get("findings", []))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
+                } for node_id, output in (result.get("outputs", {}) if isinstance(result, dict) else {}).items()
+            }
+        ),
         "security_gate": result.get("security_gate"),
         "error": run.error,
     }
