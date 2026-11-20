@@ -26,6 +26,21 @@ type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_pos
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
+type RunComparison = {
+  from_run: { id: string; status: string; finished_at?: string | null };
+  to_run: { id: string; status: string; finished_at?: string | null };
+  findings: {
+    new: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
+    persisting: Array<{ fingerprint: string; rule_id?: string; severity?: string; previous_severity?: string; severity_changed: boolean; path?: string; line?: number | null }>;
+    disappeared: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
+    not_observed: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
+    absence_confirmed: boolean;
+    summary: { new: number; persisting: number; disappeared: number; not_observed: number };
+  };
+  nodes: Array<{ node_id: string; change: string; fields?: Record<string, { before: unknown; after: unknown }> }>;
+  summary: { new_findings: number; persisting_findings: number; disappeared_findings: number; not_observed_findings: number; changed_nodes: number };
+  limitations: { before_findings_truncated: boolean; after_findings_truncated: boolean; absence_confirmed: boolean; note?: string | null };
+};
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
@@ -158,6 +173,10 @@ export default function App() {
   const [workflowVersionDiff, setWorkflowVersionDiff] = useState<WorkflowVersionDiff | null>(null);
   const [versionDiffLoading, setVersionDiffLoading] = useState(false);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
+  const [runCompareFrom, setRunCompareFrom] = useState("");
+  const [runCompareTo, setRunCompareTo] = useState("");
+  const [runComparison, setRunComparison] = useState<RunComparison | null>(null);
+  const [runCompareLoading, setRunCompareLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -309,6 +328,21 @@ export default function App() {
       setResult("Версия " + version + " восстановлена как новая версия " + data.version + ". Перезагрузите workflow, чтобы применить граф.");
       await refreshWorkflowVersions(workflowId);
     } catch (error) { setResult("Ошибка восстановления версии: " + String(error)); }
+  };
+
+  const compareWorkflowRuns = async () => {
+    if (!workflowId || !runCompareFrom || !runCompareTo || runCompareFrom === runCompareTo) return;
+    setRunCompareLoading(true);
+    try {
+      const params = new URLSearchParams({ from_run: runCompareFrom, to_run: runCompareTo });
+      const response = await fetch("/api/workflows/" + workflowId + "/runs/compare?" + params.toString());
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось сравнить запуски");
+      setRunComparison(data as RunComparison);
+    } catch (error) {
+      setRunComparison(null);
+      setResult("Ошибка сравнения запусков: " + String(error));
+    } finally { setRunCompareLoading(false); }
   };
 
   const openHistoricalRun = async (run: WorkflowRunSummary) => {
@@ -1163,6 +1197,39 @@ export default function App() {
             <div className="run-comparison-total"><span>ИЗМЕНЕНИЕ НАХОДОК</span><strong className={runHistoryComparison.delta < 0 ? "delta-good" : runHistoryComparison.delta > 0 ? "delta-bad" : "delta-neutral"}>{runHistoryComparison.delta > 0 ? "+" : ""}{runHistoryComparison.delta}</strong><small>{runHistoryComparison.delta < 0 ? "меньше, чем в предыдущем запуске" : runHistoryComparison.delta > 0 ? "больше, чем в предыдущем запуске" : "без изменений"}</small></div>
             <div className="run-comparison-levels">{runHistoryComparison.severity.map(item => <div key={item.level}><span>{item.level}</span><b>{item.previous} → {item.current}</b><i className={item.current < item.previous ? "delta-good" : item.current > item.previous ? "delta-bad" : "delta-neutral"}>{item.current-item.previous > 0 ? "+" : ""}{item.current-item.previous}</i></div>)}</div>
             <small className="run-comparison-note">Сравнение двух последних завершённых запусков · {formatDate(runHistoryComparison.previous.finished_at || runHistoryComparison.previous.queued_at)} → {formatDate(runHistoryComparison.current.finished_at || runHistoryComparison.current.queued_at)}</small>
+          </div>}
+          {workflowRuns.filter(run => ["completed", "partial", "failed", "cancelled"].includes(run.status)).length >= 2 && <div className="run-compare-controls">
+            <label>ОТ ЗАПУСКА
+              <select value={runCompareFrom} onChange={event => { setRunCompareFrom(event.target.value); setRunComparison(null); }}>
+                <option value="">Выбрать запуск…</option>
+                {workflowRuns.filter(run => ["completed", "partial", "failed", "cancelled"].includes(run.status)).map(run => <option key={run.id} value={run.id}>#{workflowRuns.findIndex(item => item.id === run.id) + 1} · {formatDate(run.finished_at || run.queued_at)} · {run.status}</option>)}
+              </select>
+            </label>
+            <label>К ЗАПУСКУ
+              <select value={runCompareTo} onChange={event => { setRunCompareTo(event.target.value); setRunComparison(null); }}>
+                <option value="">Выбрать запуск…</option>
+                {workflowRuns.filter(run => ["completed", "partial", "failed", "cancelled"].includes(run.status)).map(run => <option key={run.id} value={run.id}>#{workflowRuns.findIndex(item => item.id === run.id) + 1} · {formatDate(run.finished_at || run.queued_at)} · {run.status}</option>)}
+              </select>
+            </label>
+            <button disabled={!runCompareFrom || !runCompareTo || runCompareFrom === runCompareTo || runCompareLoading} onClick={() => void compareWorkflowRuns()}>{runCompareLoading ? "СРАВНЕНИЕ…" : "СРАВНИТЬ ЗАПУСКИ"}</button>
+          </div>}
+          {runComparison && <div className="run-diff-panel">
+            <div className="run-diff-heading"><b>ИЗМЕНЕНИЯ МЕЖДУ ЗАПУСКАМИ</b><small>{formatDate(runComparison.from_run.finished_at || "")} → {formatDate(runComparison.to_run.finished_at || "")}</small></div>
+            <div className="run-diff-stats">
+              <div><b className="delta-bad">+{runComparison.findings.summary.new}</b><span>НОВЫЕ</span></div>
+              <div><b>{runComparison.findings.summary.persisting}</b><span>СОХРАНИЛИСЬ</span></div>
+              <div><b className="delta-good">−{runComparison.findings.summary.disappeared}</b><span>ИСЧЕЗЛИ</span></div>
+              <div><b>{runComparison.findings.summary.not_observed}</b><span>НЕ ПРОВЕРЕНЫ</span></div>
+              <div><b>{runComparison.summary.changed_nodes}</b><span>ИЗМЕНЕНИЯ БЛОКОВ</span></div>
+            </div>
+            {!runComparison.limitations.absence_confirmed && <p className="run-diff-warning">{runComparison.limitations.note || "Часть результатов нельзя считать подтверждённо исчезнувшими."}</p>}
+            {(runComparison.limitations.before_findings_truncated || runComparison.limitations.after_findings_truncated) && <p className="run-diff-warning">Один из отчётов содержит более 5000 находок: сравнение ограничено сохранённой выборкой.</p>}
+            {(["new", "persisting", "disappeared", "not_observed"] as const).map(kind => runComparison.findings[kind].length > 0 && <div className="run-diff-group" key={kind}>
+              <b>{kind === "new" ? "НОВЫЕ НАХОДКИ" : kind === "persisting" ? "СОХРАНЯЮЩИЕСЯ НАХОДКИ" : kind === "disappeared" ? "ОТСУТСТВУЮТ В ПОЛНОМ СКАНЕ" : "НЕ НАБЛЮДАЛИСЬ В ЧАСТИЧНОМ ЗАПУСКЕ"}</b>
+              {runComparison.findings[kind].slice(0, 30).map(item => <div key={item.fingerprint}><span>{item.severity || "—"}</span><code>{item.rule_id || item.fingerprint.slice(0, 12)}</code><small>{item.path}{item.line ? ":" + item.line : ""}</small>{kind === "persisting" && item.severity_changed && <i>{item.previous_severity} → {item.severity}</i>}</div>)}
+              {runComparison.findings[kind].length > 30 && <small>Показаны первые 30 из {runComparison.findings[kind].length}.</small>}
+            </div>)}
+            {runComparison.nodes.length > 0 && <div className="run-diff-group"><b>ИЗМЕНЕНИЯ ПО БЛОКАМ</b>{runComparison.nodes.map(item => <div key={item.node_id}><code>{item.node_id}</code><small>{item.change === "changed" ? Object.keys(item.fields || {}).join(" · ") : item.change === "added_to_trace" ? "появился в трассировке" : "нет в трассировке нового запуска"}</small></div>)}</div>}
           </div>}
           {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
             <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status === "cancelling" ? "ОТМЕНА" : run.status === "cancelled" ? "ОТМЕНЁН" : run.status}</span></div>
