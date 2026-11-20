@@ -25,6 +25,7 @@ from croniter import croniter
 
 from app.config import settings
 from app.ai.explanations import provider_configuration
+from app.ai.workflow_generation import WorkflowGenerationError, generate_workflow_graph
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
@@ -46,6 +47,18 @@ class ProjectRename(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Название проекта не может быть пустым.")
+        return value
+
+
+class WorkflowGenerateRequest(BaseModel):
+    prompt: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Опишите желаемый workflow (от 10 символов).")
         return value
 
 
@@ -761,6 +774,16 @@ def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_l
 @app.get("/api/node-types")
 def node_types():
     return [manifest.model_dump() for manifest in registry.all()]
+
+
+@app.post("/api/workflows/generate")
+def generate_workflow_draft(payload: WorkflowGenerateRequest):
+    try:
+        return generate_workflow_graph(payload.prompt)
+    except WorkflowGenerationError as exc:
+        message = str(exc)
+        status = 503 if "Настройте LLM_" in message or "endpoint" in message.lower() else 422
+        raise HTTPException(status_code=status, detail=message) from exc
 
 
 @app.post("/api/workflows/validate")
