@@ -374,3 +374,47 @@ def test_gradle_unknown_custom_catalog_is_not_guessed(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_gradle_catalog_prefer_and_range_are_not_treated_as_resolved_versions(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[versions]\n'
+        'preferred = { prefer = "3.17.0" }\n'
+        'bounded = { strictly = "[3.0, 4.0)" }\n'
+        '[libraries]\n'
+        'preferred-commons = { module = "org.apache.commons:commons-lang3", version.ref = "preferred" }\n'
+        'bounded-commons = { module = "org.apache.commons:commons-lang3", version.ref = "bounded" }\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies {\n'
+        '  implementation(libs.preferred.commons)\n'
+        '  implementation(libs.bounded.commons)\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
+
+
+def test_gradle_catalog_strict_exact_version_is_usable_without_lockfile(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[versions]\n'
+        'commons = { strictly = "3.17.0", prefer = "3.20.0" }\n'
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version.ref = "commons" }\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation(libs.commons) }\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["version"] == "3.17.0"
