@@ -139,6 +139,13 @@ export default function App() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
   useEffect(() => {
+    fetch("/api/projects")
+      .then(response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then((data: Project[]) => setProjects(data))
+      .catch(() => setResult("Не удалось загрузить библиотеку проектов."));
+  }, []);
+
+  useEffect(() => {
     fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
