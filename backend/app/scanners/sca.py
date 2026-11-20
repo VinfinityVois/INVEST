@@ -483,7 +483,8 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         if parent is not None:
             rel = _maven_text(parent, "relativePath")
             parent_path = (pom_path.parent / (rel if rel is not None else "../pom.xml")).resolve()
-            parent_source = _read_text(parent_path) if parent_path.is_file() and not parent_path.is_symlink() else None
+            parent_is_confined = parent_path == project or project in parent_path.parents
+            parent_source = _read_text(parent_path) if parent_is_confined and parent_path.is_file() and not parent_path.is_symlink() else None
             if parent_source:
                 try:
                     parent_properties = _maven_properties(ET.fromstring(parent_source))
