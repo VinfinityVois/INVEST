@@ -20,7 +20,7 @@ def add(t, title, category, description, ins=(), outs=(), config=None):
 
 add("trigger.manual","Manual trigger","Trigger","Запуск вручную.",outs=[("event","event")])
 add("trigger.schedule","Schedule trigger","Trigger","Запуск сохранённого workflow по cron-расписанию.",outs=[("event","event")],config={"type":"object","required":["cron"],"properties":{"cron":{"type":"string","title":"Cron expression","default":"*/5 * * * *","description":"Пять полей cron; время интерпретируется в выбранном часовом поясе."},"timezone":{"type":"string","title":"Timezone","default":"UTC","description":"IANA timezone, например Europe/Amsterdam."}}})
-add("source.git","Git repository","Source","Источник из allowlist Git.",[("event","event")],[("source","source")],{"type":"object","properties":{"url":{"type":"string"},"ref":{"type":"string"}}})
+add("source.git","Git repository","Source","Источник из allowlist Git.",[("event","event")],[("source","source")],{"type":"object","properties":{"url":{"type":"string"},"ref":{"type":"string"},"subdirectory":{"type":"string","description":"Необязательная папка внутри checkout, например training-project"}}})
 add("source.upload","Workspace source","Source","Каталог проекта внутри WORKSPACE_ROOT.",[("event","event")],[("source","source")],{"type":"object","properties":{"path":{"type":"string","description":"Относительный путь внутри WORKSPACE_ROOT"}}})
 add("scan.secrets","Secrets scanner","Security","Собственный поиск секретов.",[("source","source")],[("findings","findings")])
 add("scan.sca","Dependency scanner","Security","Проверка Gradle зависимостей по advisories.",[("source","source")],[("findings","findings")])
