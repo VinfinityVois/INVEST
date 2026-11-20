@@ -444,3 +444,8 @@ def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_
     assert calls["count"] == 3
     assert forced["cache_summary"]["force_full_scan"] is True
     assert forced["cache_summary"]["hits"] == 0
+
+    reset_one = execute_graph(graph, registry, cache_entries=first["cache_entries"], force_node_ids=["scan"])
+    assert calls["count"] == 4
+    assert reset_one["trace"][-1]["cached"] is False
+    assert reset_one["trace"][-1]["cache_bypass_reason"] == "Кэш блока сброшен пользователем"
