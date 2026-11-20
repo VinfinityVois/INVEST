@@ -3,3 +3,29 @@
 @media(max-width:1120px){.layout{grid-template-columns:235px minmax(300px,1fr)}.inspector{display:none}.brand{min-width:220px}.revision{display:none}}
 @media(max-width:700px){.shell{height:auto;min-height:100vh;padding:0 8px}.topbar{height:auto;min-height:62px;flex-wrap:wrap;padding:9px 0;gap:8px}.brand{min-width:0;flex:1}.status{order:3;flex-basis:100%}.actions{gap:4px}.actions button{height:30px;padding:0 7px;font-size:8px}.layout{display:flex;flex-direction:column}.palette{max-height:none;overflow:visible}.editor{min-height:520px}.editor-head{min-height:66px}.editor-head h1{font-size:15px}.counts{font-size:7px}.flow{height:500px;flex:none}.inspector{display:block;max-height:none}.flow-foot{font-size:6px}footer{font-size:6px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+
+/* 0.4.0 — functional inspector and editing controls */
+.edit-section{margin:12px 0;padding:12px;background:linear-gradient(155deg,#111e2e,#0b1420);border:1px solid #35506d;border-radius:8px}
+.edit-section .field-label{font-size:9px;margin:10px 0;color:#a9bdd3}
+.field-label select,.field-label textarea{display:block;width:100%;margin-top:5px;padding:9px;background:#080f19;border:1px solid #30445e;border-radius:5px;color:#dce9f7;font:9px 'DM Mono';outline:none}
+.field-label select:focus,.field-label textarea:focus{border-color:#69a9e8;box-shadow:0 0 0 2px #4b91d51c}
+.config-editor{min-height:112px;resize:vertical;line-height:1.55;tab-size:2}
+.save-config,.element-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:31px;padding:0 9px;border-radius:5px;font-size:8px;font-weight:700}
+.save-config{width:100%;background:#174b46;border:1px solid #287e70;color:#c8fff0}
+.save-config:hover{background:#1b6258}
+.element-actions{display:flex;gap:7px;margin-top:8px}
+.element-actions button{flex:1}
+.danger{background:#321b22;border:1px solid #78404c;color:#ffc0c8}
+.danger:hover{background:#4a222d;border-color:#b45c6c}
+.config-error{color:#ff9ba7;font-size:8px;line-height:1.4;margin:6px 0}
+.edit-hint{font-size:8px;line-height:1.5;color:#8297ae;margin:9px 0 0}
+.empty-inspector{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:24px 12px;color:#8ea4bd}
+.empty-inspector svg{color:#6ca9df}
+.empty-inspector b{font-size:10px;color:#d4e2f1}
+.empty-inspector p{font-size:8px;line-height:1.6;margin:0}
+.react-flow__edge.selected .react-flow__edge-path{stroke:#9ed2ff;stroke-width:3}
+.react-flow__edge-text{font:9px 'DM Mono';fill:#c3d8ed}
+.react-flow__edge-textbg{fill:#14263a}
+@media(max-width:1120px){.inspector{display:block;max-height:480px}.layout{grid-template-columns:220px minmax(280px,1fr)}}
+@media(max-width:700px){.inspector{max-height:none}.edit-section{padding:10px}.element-actions{flex-wrap:wrap}}
