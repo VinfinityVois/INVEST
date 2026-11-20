@@ -418,3 +418,43 @@ def test_gradle_catalog_strict_exact_version_is_usable_without_lockfile(tmp_path
 
     assert len(findings) == 1
     assert findings[0]["version"] == "3.17.0"
+
+
+def test_gradle_version_catalog_bundle_expands_to_vulnerable_libraries(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }\n'
+        '[bundles]\n'
+        'backend = ["commons"]\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation(libs.bundles.backend) }\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["artifact"] == "commons-lang3"
+    assert findings[0]["version"] == "3.17.0"
+
+
+def test_gradle_version_catalog_bundle_with_unknown_alias_is_ignored(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }\n'
+        '[bundles]\n'
+        'backend = ["commons", "missing-library"]\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation(libs.bundles.backend) }\n',
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
