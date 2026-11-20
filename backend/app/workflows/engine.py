@@ -185,6 +185,9 @@ def _condition_value(context: dict, field: str):
     for part in field.split("."):
         if isinstance(value, dict):
             value = value.get(part)
+        elif isinstance(value, list) and part.isdigit():
+            index = int(part)
+            value = value[index] if 0 <= index < len(value) else None
         else:
             return None
     return value
