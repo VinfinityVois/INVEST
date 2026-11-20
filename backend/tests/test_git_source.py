@@ -97,3 +97,65 @@ def test_clone_supports_pinned_commit_sha_with_detached_checkout(tmp_path, monke
     assert "--branch" not in calls[0][0]
     assert calls[1][0][-3:] == ["origin", commit] or calls[1][0][-2:] == ["origin", commit]
     assert calls[2][0][-3:] == ["checkout", "--detach", "FETCH_HEAD"]
+
+
+def test_clone_can_checkout_an_exact_commit_sha_without_running_hooks(tmp_path, monkeypatch):
+    commit_sha = "fe1fcbe212669783480666b9b60147c8a8c6eef4"
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        if "clone" in args:
+            destination = Path(args[-1])
+            (destination / ".git").mkdir(parents=True)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if "rev-parse" in args:
+            return SimpleNamespace(returncode=0, stdout=commit_sha + "\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.sources.git.subprocess.run", fake_run)
+
+    result = clone_allowed_repository(
+        "https://github.com/TBagirov/training",
+        commit_sha,
+        tmp_path,
+        {"https://github.com/TBagirov/training"},
+    )
+
+    clone_args, _ = calls[0]
+    fetch_args, fetch_kwargs = calls[1]
+    checkout_args, _ = calls[2]
+    verify_args, _ = calls[3]
+    assert result["ref"] == commit_sha
+    assert "--no-checkout" in clone_args
+    assert "--branch" not in clone_args
+    assert "--no-tags" in fetch_args
+    assert "fetch" in fetch_args and commit_sha in fetch_args
+    assert "checkout" in checkout_args and "--detach" in checkout_args
+    assert "rev-parse" in verify_args
+    assert fetch_kwargs["cwd"] == tmp_path / result["path"]
+
+
+def test_pinned_commit_sha_mismatch_is_rejected_and_workspace_removed(tmp_path, monkeypatch):
+    commit_sha = "fe1fcbe212669783480666b9b60147c8a8c6eef4"
+
+    def fake_run(args, **kwargs):
+        if "clone" in args:
+            destination = Path(args[-1])
+            (destination / ".git").mkdir(parents=True)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if "rev-parse" in args:
+            return SimpleNamespace(returncode=0, stdout="0" * 40 + "\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.sources.git.subprocess.run", fake_run)
+
+    with pytest.raises(GitSourceError, match="did not match"):
+        clone_allowed_repository(
+            "https://github.com/TBagirov/training",
+            commit_sha,
+            tmp_path,
+            {"https://github.com/TBagirov/training"},
+        )
+
+    assert not list(tmp_path.glob("git-*"))
