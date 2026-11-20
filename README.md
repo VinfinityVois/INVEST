@@ -77,6 +77,10 @@ ALLOWED_TARGETS=https://github.com/example/training
 ```
 
 
+## Logic.compare — фильтрация находок
+
+Нода `logic.compare` разделяет findings на выходы `true` и `false`. Поддерживаются поля severity, rule_id, path, category, message, cve, cwe и count; операторы equals/not_equals, contains/not_contains, greater_than/greater_or_equal/less_than/less_or_equal. Для severity числовое сравнение использует порядок CRITICAL > HIGH > MEDIUM > LOW > INFO. Выходы можно подключать независимо к следующим нодам.
+
 ## Демонстрационный сценарий: учебный Kotlin-проект
 
 Для воспроизводимого показа используйте публичный учебный репозиторий [TBagirov/training](https://github.com/TBagirov/training), зафиксированный CI на commit \`fe1fcbe212669783480666b9b60147c8a8c6eef4\`. Это специально подготовленный учебный стенд, а не production-цель. Добавьте точный URL в корневой \`.env\`:
