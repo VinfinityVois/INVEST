@@ -12,7 +12,7 @@ from app.notifications.webhook import (
 
 
 def _public_dns(_host, _port, type=None):
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("203.0.113.10", 443))]
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
 
 
 def test_webhook_payload_contains_summary_top_findings_and_ai_but_no_source_secrets():
