@@ -154,15 +154,6 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
     return result
 
 
-def _catalog_line(path: Path, alias: str) -> int:
-    text = _read_text(path)
-    if text is None:
-        return 1
-    escaped = re.escape(alias)
-    match = re.search(rf"(?m)^\\s*['\\"]?{escaped}['\\"]?\\s*=", text)
-    return text.count("\\n", 0, match.start()) + 1 if match else 1
-
-
 def _numeric_version(value: str) -> tuple[int, ...] | None:
     if not re.fullmatch(r"\d+(?:\.\d+)*", value):
         return None
