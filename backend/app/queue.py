@@ -35,6 +35,15 @@ def claim_next_run(worker_id: str) -> str | None:
         session.execute(
             update(WorkflowRun)
             .where(
+                WorkflowRun.status == "cancelling",
+                WorkflowRun.heartbeat_at.is_not(None),
+                WorkflowRun.heartbeat_at < now - STALE_AFTER,
+            )
+            .values(status="cancelled", finished_at=now, locked_by=None, heartbeat_at=None, error="Cancellation finalized after worker heartbeat expired")
+        )
+        session.execute(
+            update(WorkflowRun)
+            .where(
                 WorkflowRun.status == "running",
                 WorkflowRun.heartbeat_at.is_not(None),
                 WorkflowRun.heartbeat_at < now - STALE_AFTER,
@@ -68,7 +77,7 @@ def _heartbeat(run_id: str, worker_id: str, stop: threading.Event) -> None:
                     update(WorkflowRun)
                     .where(
                         WorkflowRun.id == UUID(run_id),
-                        WorkflowRun.status == "running",
+                        WorkflowRun.status.in_(["running", "cancelling"]),
                         WorkflowRun.locked_by == worker_id,
                     )
                     .values(heartbeat_at=datetime.now(timezone.utc))
@@ -99,7 +108,7 @@ def _findings_from_result(result: dict) -> list[dict]:
 def process_run(run_id: str, worker_id: str) -> None:
     with SessionLocal() as session:
         run = session.get(WorkflowRun, UUID(run_id))
-        if run is None or run.status != "running" or run.locked_by != worker_id:
+        if run is None or run.status not in {"running", "cancelling"} or run.locked_by != worker_id:
             return
         graph_snapshot = run.graph_snapshot
         state_rows = session.scalars(
@@ -122,14 +131,14 @@ def process_run(run_id: str, worker_id: str) -> None:
     try:
         graph = WorkflowGraph.model_validate(graph_snapshot)
 
-        def report_progress(snapshot: dict) -> None:
+        def is_cancel_requested() -> bool:\n            with SessionLocal() as cancel_session:\n                current_status = cancel_session.scalar(\n                    select(WorkflowRun.status).where(WorkflowRun.id == UUID(run_id))\n                )\n                return current_status in {"cancelling", "cancelled"}\n\n        def report_progress(snapshot: dict) -> None:
             try:
                 with SessionLocal() as progress_session:
                     progress_session.execute(
                         update(WorkflowRun)
                         .where(
                             WorkflowRun.id == UUID(run_id),
-                            WorkflowRun.status == "running",
+                            WorkflowRun.status.in_(["running", "cancelling"]),
                             WorkflowRun.locked_by == worker_id,
                         )
                         .values(result=snapshot, heartbeat_at=datetime.now(timezone.utc))
@@ -138,7 +147,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
@@ -157,7 +166,7 @@ def process_run(run_id: str, worker_id: str) -> None:
         if run is None or run.status != "running" or run.locked_by != worker_id:
             logger.warning("Run %s ownership changed before completion", run_id)
             return
-        run.status = final_status
+        run.status = "cancelled" if run.status == "cancelling" or final_status == "cancelled" else final_status
         run.result = result
         run.error = error
         run.finished_at = datetime.now(timezone.utc)
