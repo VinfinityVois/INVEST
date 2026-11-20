@@ -47,6 +47,7 @@ class ProjectRename(BaseModel):
 
 class SelectedRunRequest(BaseModel):
     node_ids: list[str] = Field(min_length=1, max_length=100)
+    force_full_scan: bool = False
 
     @field_validator("node_ids")
     @classmethod
@@ -825,7 +826,7 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
 
 
 @app.post("/api/workflows/{workflow_id}/runs", status_code=202)
-def execute_saved_workflow(workflow_id: UUID):
+def execute_saved_workflow(workflow_id: UUID, force_full_scan: bool = Query(default=False)):
     """Persist a run request; the dedicated worker performs the scan asynchronously."""
     with SessionLocal() as session:
         workflow = session.get(Workflow, workflow_id)
@@ -845,11 +846,13 @@ def execute_saved_workflow(workflow_id: UUID):
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
 
+        graph_snapshot = dict(version.graph)
+        graph_snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": force_full_scan}
         run = WorkflowRun(
             workflow_id=workflow_id,
             status="queued",
             source="ui",
-            graph_snapshot=version.graph,
+            graph_snapshot=graph_snapshot,
         )
         session.add(run)
         session.commit()
@@ -885,7 +888,7 @@ def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
         if unknown:
             raise HTTPException(status_code=422, detail={"message": "Выбраны отсутствующие блоки.", "unknown_node_ids": unknown})
         snapshot = graph.model_dump(mode="json")
-        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids}
+        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids, "force_full_scan": request.force_full_scan}
         run = WorkflowRun(
             workflow_id=workflow_id,
             status="queued",
