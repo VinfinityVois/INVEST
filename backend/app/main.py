@@ -1099,6 +1099,41 @@ def workflow_security_trend(
 
 
 
+def _compare_scanner_runs(before_result: dict, after_result: dict) -> dict:
+    """Compare cache use and scanner-specific findings across two runs."""
+    scanner_types = {"scan.secrets", "scan.sca", "scan.sast"}
+    before_trace = {str(item.get("node_id")): item for item in before_result.get("trace", []) if isinstance(item, dict) and item.get("type") in scanner_types and item.get("node_id")}
+    after_trace = {str(item.get("node_id")): item for item in after_result.get("trace", []) if isinstance(item, dict) and item.get("type") in scanner_types and item.get("node_id")}
+    before_outputs = before_result.get("outputs", {}) if isinstance(before_result.get("outputs"), dict) else {}
+    after_outputs = after_result.get("outputs", {}) if isinstance(after_result.get("outputs"), dict) else {}
+    before_meta = before_result.get("cache_metadata", {}) if isinstance(before_result.get("cache_metadata"), dict) else {}
+    after_meta = after_result.get("cache_metadata", {}) if isinstance(after_result.get("cache_metadata"), dict) else {}
+    scanners = []
+    for node_id in sorted(set(before_trace) | set(after_trace)):
+        old_trace, new_trace = before_trace.get(node_id), after_trace.get(node_id)
+        old_output, new_output = before_outputs.get(node_id, {}), after_outputs.get(node_id, {})
+        old_findings = {str(item.get("fingerprint")): item for item in old_output.get("findings", []) if isinstance(item, dict) and item.get("fingerprint")} if isinstance(old_output, dict) else {}
+        new_findings = {str(item.get("fingerprint")): item for item in new_output.get("findings", []) if isinstance(item, dict) and item.get("fingerprint")} if isinstance(new_output, dict) else {}
+        old_ids, new_ids = set(old_findings), set(new_findings)
+        old_metadata, new_metadata = before_meta.get(node_id), after_meta.get(node_id)
+        source_changed = None
+        if isinstance(old_metadata, dict) and isinstance(new_metadata, dict) and old_metadata.get("source_hash") and new_metadata.get("source_hash"):
+            source_changed = old_metadata["source_hash"] != new_metadata["source_hash"]
+        scanners.append({
+            "node_id": node_id, "type": (new_trace or old_trace).get("type"),
+            "before_present": old_trace is not None, "after_present": new_trace is not None,
+            "before_cached": old_trace.get("cached") is True if old_trace else None,
+            "after_cached": new_trace.get("cached") is True if new_trace else None,
+            "before_cache_age_seconds": old_trace.get("cache_age_seconds") if old_trace else None,
+            "after_cache_age_seconds": new_trace.get("cache_age_seconds") if new_trace else None,
+            "source_changed": source_changed,
+            "before_findings": len(old_ids), "after_findings": len(new_ids),
+            "added_findings": len(new_ids - old_ids), "removed_findings": len(old_ids - new_ids),
+        })
+    before_hits = sum(1 for item in before_trace.values() if item.get("cached") is True)
+    after_hits = sum(1 for item in after_trace.values() if item.get("cached") is True)
+    return {"cache_comparison": {"before_hits": before_hits, "after_hits": after_hits, "delta_hits": after_hits - before_hits, "before_scanners": len(before_trace), "after_scanners": len(after_trace)}, "scanner_comparison": scanners}
+
 def _compare_run_snapshots(before: dict, after: dict) -> dict:
     """Compare two completed scan snapshots without treating partial absence as a fix."""
     old_findings = {
@@ -1219,8 +1254,12 @@ def compare_workflow_runs(
         before_report = _build_run_report(session, before)
         after_report = _build_run_report(session, after)
         diff = _compare_run_snapshots(before_report, after_report)
+        before_result = before.result if isinstance(before.result, dict) else {}
+        after_result = after.result if isinstance(after.result, dict) else {}
+        scanner_diff = _compare_scanner_runs(before_result, after_result)
         return {
             "workflow_id": str(workflow_id),
+            **scanner_diff,
             "from_run": before_report["run"],
             "to_run": after_report["run"],
             **diff,
