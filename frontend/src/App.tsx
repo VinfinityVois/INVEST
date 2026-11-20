@@ -163,7 +163,7 @@ export default function App() {
     fetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
       .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Не удалось открыть исходник"); return data as SourcePreview; })
       .then(data => { setSourcePreview(data); setSourcePreviewError(""); })
-      .catch(error => { if (error.name !== "AbortError") { setSourcePreview(null); setSourcePreviewError(String(error.message || error)); } })
+      .catch(error => { if (!(error instanceof DOMException && error.name === "AbortError")) { setSourcePreview(null); setSourcePreviewError(error instanceof Error ? error.message : String(error)); } })
       .finally(() => { if (!controller.signal.aborted) setSourcePreviewLoading(false); });
     return () => controller.abort();
   }, [selectedFinding?.fingerprint, lastRunId, sourceWindowStart]);
