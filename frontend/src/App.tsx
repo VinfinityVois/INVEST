@@ -138,7 +138,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "completed" ? "success"
     : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
-    {(data.inputPorts?.length ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: \`\${((index + 1) / (ports.length + 1)) * 100}%\`, background: "var(--accent-600)" }} />)}
+    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
@@ -158,7 +158,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
-    {(data.outputPorts?.length ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: \`\${((index + 1) / (ports.length + 1)) * 100}%\`, background: "var(--accent-600)" }} />)}
+    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
   </div>;
 }
 const nodeTypes = { workflow: memo(WorkflowNode) };
