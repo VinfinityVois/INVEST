@@ -53,15 +53,19 @@ def scan_text(text,path):
    use_line=next((i for i,line in enumerate(lines,1) if "setBearerAuth" in line and concat.group(1) in line),max(first_line,second_line))
    add("reconstructed_auth_token","recoverable-token",first_line,first+second,"MEDIUM",.91,use_line)
  return sorted(findings,key=lambda x:(x["line"],x["rule_id"]))
-def scan_directory(root):
+def scan_directory(root, on_progress=None):
  root=Path(root).resolve(); results=[]; count=0
+ candidates=[]
  for path in root.rglob("*"):
   if any(part in SKIP_DIRS for part in path.parts) or path.is_symlink() or not path.is_file(): continue
   try:
    if not path.resolve().is_relative_to(root): continue
   except OSError: continue
+  candidates.append(path)
+ candidates=candidates[:MAX_FILES]
+ total_files=len(candidates)
+ for path in candidates:
   count+=1
-  if count>MAX_FILES: break
   try:
    if path.stat().st_size>MAX_FILE_BYTES: continue
    raw=path.read_bytes()
@@ -69,4 +73,7 @@ def scan_directory(root):
    content=raw.decode("utf-8")
   except (OSError,UnicodeDecodeError): continue
   results.extend(scan_text(content,path.relative_to(root).as_posix()))
+  if on_progress:
+   try: on_progress({"files_scanned":count,"total_files":total_files,"current_file":path.relative_to(root).as_posix()})
+   except Exception: pass
  return results
