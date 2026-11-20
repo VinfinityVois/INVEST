@@ -159,7 +159,10 @@ def _project_path_is_sensitive(relative: PurePosixPath) -> bool:
 
 
 def _project_content_is_safe(content: str) -> bool:
-    return all(_redact(line) == line for line in content.splitlines())
+    assignment = re.compile(r"(?i)\\b(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|authorization|token)\\b\\s*[:=]\\s*[\"']?[^,\\s\"'#]{8,}")
+    if "-----BEGIN " in content and "PRIVATE KEY-----" in content:
+        return False
+    return all(_redact(line) == line and not assignment.search(line) for line in content.splitlines())
 
 
 def _project_file_snapshot(root: Path) -> dict[str, dict[str, int | str]]:
