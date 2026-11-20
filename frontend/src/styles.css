@@ -821,3 +821,8 @@
 .security-trend-breakdown b{color:#d1e1ef;font:9px 'DM Mono'}
 @media(max-width:760px){.security-trend-breakdown{grid-template-columns:repeat(3,minmax(0,1fr))}.security-trend-legend>small{width:100%;margin-left:0}}
 @media(prefers-reduced-motion:reduce){.security-trend-point circle{transition:none}}
+
+.trace-cache-reset{margin:0 0 10px 48px;padding:6px 10px;border:1px solid rgba(115,145,180,.25);border-radius:7px;background:rgba(80,120,160,.08);color:var(--muted,#9aa9bc);font:inherit;font-size:11px;cursor:pointer;transition:background .18s,border-color .18s,color .18s}
+.trace-cache-reset:hover:not(:disabled){background:rgba(80,140,210,.16);border-color:rgba(100,160,230,.5);color:var(--text,#e7edf5)}
+.trace-cache-reset:disabled{opacity:.45;cursor:not-allowed}
+.trace-cache-hit{color:#72c9a0!important;font-weight:700}
