@@ -590,3 +590,16 @@
 .project-editor-tab-close:hover{opacity:1;color:#f0a6a0;background:rgba(180,75,75,.14)}
 .project-editor-tab:not(.active) .project-editor-tab-open:hover{color:#c6d8e9}
 @media(max-width:760px){.project-editor-tabs{min-height:32px}.project-editor-tab{min-width:96px;max-width:165px}.project-editor-tab-open{font-size:7px}}
+
+
+/* Finding lifecycle filters and live status summary */
+.finding-browser{grid-template-columns:minmax(0,1fr) auto auto auto}
+.finding-browser select{max-width:156px}
+.finding-lifecycle-summary{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;padding-top:7px;border-top:1px solid rgba(111,148,184,.14)}
+.finding-lifecycle-summary span{padding:3px 6px;border:1px solid rgba(111,148,184,.18);border-radius:3px;background:rgba(9,18,29,.62);font:7px 'DM Mono';letter-spacing:.2px}
+.finding-lifecycle-summary .is-open{color:#e7c17b;border-color:rgba(231,193,123,.25)}
+.finding-lifecycle-summary .is-risk{color:#b9a4e6;border-color:rgba(185,164,230,.24)}
+.finding-lifecycle-summary .is-fixed{color:#80d5b0;border-color:rgba(128,213,176,.24)}
+.finding-lifecycle-summary .is-false{color:#a1b0c0;border-color:rgba(161,176,192,.2)}
+@media(max-width:760px){.finding-browser{grid-template-columns:minmax(0,1fr) auto}.finding-browser select{max-width:100%}.finding-lifecycle-summary{grid-column:1/-1}}
+@media(max-width:420px){.finding-browser{grid-template-columns:1fr}.finding-browser select{width:100%}.finding-browser>span{text-align:left}.finding-lifecycle-summary{gap:4px}}
