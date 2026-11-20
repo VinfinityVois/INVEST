@@ -239,9 +239,12 @@ def test_engine_reports_node_timing_and_progress():
 
 
 
-def test_ai_explanation_result_is_exposed_in_node_trace_and_progress(monkeypatch):
+def test_ai_explanation_result_is_exposed_in_node_trace_and_progress(tmp_path, monkeypatch):
     import app.workflows.engine as engine
 
+    project = tmp_path / "sample"
+    project.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(engine, "explain_findings", lambda findings, config: {
         "status": "completed",
         "findings": findings,
@@ -258,12 +261,16 @@ def test_ai_explanation_result_is_exposed_in_node_trace_and_progress(monkeypatch
     graph = WorkflowGraph(
         nodes=[
             {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
             {"id": "merge", "type": "findings.merge"},
             {"id": "ai", "type": "ai.explain"},
         ],
         edges=[
-            {"id": "e1", "source": "trigger", "target": "merge"},
-            {"id": "e2", "source": "merge", "target": "ai"},
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "merge"},
+            {"id": "e4", "source": "merge", "target": "ai"},
         ],
     )
     progress = []
