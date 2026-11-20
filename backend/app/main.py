@@ -923,7 +923,7 @@ def _run_telemetry(session, run: WorkflowRun):
 
     result = run.result if isinstance(run.result, dict) else {}
     trace = result.get("trace", []) if isinstance(result, dict) else []
-    progress = result if run.status == "running" and "completed_nodes" in result else None
+    progress = result if run.status in {"running", "cancelling"} and "completed_nodes" in result else None
     if progress:
         severity = progress.get("severity", severity)
     total_findings = progress.get("total_findings", len(findings)) if progress else len(findings)
