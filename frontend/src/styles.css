@@ -576,3 +576,17 @@
 .ai-provider-run-state{margin:8px 0;padding:8px 9px;border:1px solid #35485d;border-radius:3px;background:rgba(12,24,37,.7);color:#a8bbcc;font-size:9px}
 .ai-provider-run-state b{font:8px 'DM Mono';letter-spacing:.45px;color:#c4d3df}
 .ai-provider-run-state p{margin:5px 0 0;line-height:1.5;color:#d1a7a3}
+
+
+/* Multi-file editor tabs */
+.project-editor-tabs{display:flex;align-items:stretch;gap:2px;min-height:34px;max-width:100%;overflow-x:auto;overflow-y:hidden;padding:4px 6px 0;border-bottom:1px solid #26394f;background:#0a1421;scrollbar-width:thin;scrollbar-color:#38516b transparent}
+.project-editor-tab{display:flex;align-items:center;flex:0 0 auto;max-width:220px;min-width:110px;border:1px solid transparent;border-bottom:0;border-radius:4px 4px 0 0;background:#101e2d;color:#7890a8}
+.project-editor-tab.active{border-color:#38516b;background:#17283b;color:#d5e5f3;box-shadow:inset 0 2px 0 #6e9bc0}
+.project-editor-tab-open,.project-editor-tab-close{height:28px;border:0;background:transparent;color:inherit;cursor:pointer}
+.project-editor-tab-open{display:flex;align-items:center;gap:7px;min-width:0;flex:1;padding:0 7px;font:8px 'DM Mono';text-align:left}
+.project-editor-tab-open span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-editor-tab-open i{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#e3b56e;box-shadow:0 0 7px rgba(227,181,110,.35)}
+.project-editor-tab-close{display:grid;place-items:center;width:25px;flex:0 0 25px;opacity:.65}
+.project-editor-tab-close:hover{opacity:1;color:#f0a6a0;background:rgba(180,75,75,.14)}
+.project-editor-tab:not(.active) .project-editor-tab-open:hover{color:#c6d8e9}
+@media(max-width:760px){.project-editor-tabs{min-height:32px}.project-editor-tab{min-width:96px;max-width:165px}.project-editor-tab-open{font-size:7px}}
