@@ -1,0 +1,24 @@
+{
+  "name": "INVEST · Kotlin training demo",
+  "nodes": [
+    {"id":"trigger","type":"trigger.manual","position":{"x":80,"y":300},"config":{}},
+    {"id":"source","type":"source.git","position":{"x":320,"y":300},"config":{"url":"https://github.com/TBagirov/training","ref":"main"}},
+    {"id":"secrets","type":"scan.secrets","position":{"x":600,"y":80},"config":{}},
+    {"id":"sca","type":"scan.sca","position":{"x":600,"y":230},"config":{}},
+    {"id":"sast","type":"scan.sast","position":{"x":600,"y":380},"config":{}},
+    {"id":"merge","type":"findings.merge","position":{"x":880,"y":230},"config":{}},
+    {"id":"ai","type":"ai.explain","position":{"x":1140,"y":230},"config":{"language":"ru","max_findings":20}},
+    {"id":"notify","type":"notify.webhook","position":{"x":1400,"y":230},"config":{"url":""}}
+  ],
+  "edges": [
+    {"id":"e-trigger-source","source":"trigger","target":"source"},
+    {"id":"e-source-secrets","source":"source","target":"secrets"},
+    {"id":"e-source-sca","source":"source","target":"sca"},
+    {"id":"e-source-sast","source":"source","target":"sast"},
+    {"id":"e-secrets-merge","source":"secrets","target":"merge"},
+    {"id":"e-sca-merge","source":"sca","target":"merge"},
+    {"id":"e-sast-merge","source":"sast","target":"merge"},
+    {"id":"e-merge-ai","source":"merge","target":"ai"},
+    {"id":"e-ai-notify","source":"ai","target":"notify"}
+  ]
+}
