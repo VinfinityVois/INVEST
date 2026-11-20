@@ -1054,6 +1054,23 @@ export default function App() {
             </div>}
           </> : <p className="telemetry-empty">Запусков пока нет. Телеметрия появится после первой проверки.</p>}
         </section>
+        {telemetry?.trace && telemetry.trace.length > 0 && <section className="execution-timeline">
+          <div className="run-history-heading"><div><span className="section-caption">EXECUTION TRACE</span><b>Хронология выполнения</b></div><span>{telemetry.trace.length} этапов</span></div>
+          <p className="execution-timeline-hint">Этапы показаны в порядке, который вернул исполнитель. Выбери запись, чтобы открыть соответствующий блок графа.</p>
+          <ol>{telemetry.trace.map((step, index) => {
+            const result = telemetry.node_results?.[step.node_id];
+            const node = nodes.find(item => item.id === step.node_id);
+            const status = step.status || result?.status || "unknown";
+            const label = status === "completed" || status === "ready" ? "ЗАВЕРШЁН" : status === "running" ? "В РАБОТЕ" : status === "failed" ? "ОШИБКА" : status === "blocked" ? "ЗАБЛОКИРОВАН" : status === "skipped" ? "ПРОПУЩЕН" : status.toUpperCase();
+            return <li key={step.node_id + "-" + index} className={"trace-item trace-" + status}>
+              <button type="button" onClick={() => { setSelectedNodeId(step.node_id); setSelectedEdgeId(null); }} className={selectedNodeId === step.node_id ? "trace-item-button is-selected" : "trace-item-button"}>
+                <span className="trace-index">{String(index + 1).padStart(2, "0")}</span>
+                <span className="trace-main"><b>{node?.data.label || step.type || step.node_id}</b><small>{step.type || step.node_id}</small>{result?.message && <em>{result.message}</em>}</span>
+                <span className="trace-meta"><strong>{label}</strong>{step.duration_ms != null && <small>{formatDuration(step.duration_ms)}</small>}{typeof step.findings === "number" && <small>{step.findings} находок</small>}</span>
+              </button>
+            </li>;
+          })}</ol>
+        </section>}
         <section className="run-history-card">
           <div className="run-history-heading"><div><span className="section-caption">ANALYSIS HISTORY</span><b>История запусков</b></div><button onClick={() => workflowId && void refreshWorkflowRuns(workflowId)} disabled={!workflowId || runHistoryLoading}>{runHistoryLoading ? "ЗАГРУЗКА…" : "ОБНОВИТЬ"}</button></div>
           {runHistoryComparison && <div className="run-comparison">
