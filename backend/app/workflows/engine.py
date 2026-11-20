@@ -15,7 +15,10 @@ class WorkflowExecutionError(RuntimeError):
 def _workspace_source(relative_path: str) -> Path:
     """Resolve an uploaded project directory strictly inside WORKSPACE_ROOT."""
     workspace = Path(settings.workspace_root).resolve()
-    candidate = (workspace / relative_path).resolve(strict=True)
+    unresolved = workspace / relative_path
+    if any(part.is_symlink() for part in [unresolved, *unresolved.parents] if part != workspace.parent):
+        raise WorkflowExecutionError("Symlinks are not allowed in source paths")
+    candidate = unresolved.resolve(strict=True)
     if not candidate.is_relative_to(workspace):
         raise WorkflowExecutionError("Source path is outside the configured workspace")
     if candidate.is_symlink() or not candidate.is_dir():
