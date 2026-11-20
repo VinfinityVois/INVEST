@@ -327,6 +327,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         if not any(part in SKIP_DIRS for part in path.parts) and not path.is_symlink()
     ][:MAX_FILES]
     total_files = len(candidates)
+    declared_coordinates: set[tuple[str, str]] = set()
+    lockfile_paths: set[Path] = set()
 
     for visited, build_file in enumerate(candidates, 1):
         build_text = _read_text(build_file)
@@ -337,7 +339,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         constants = _resolve_variables(build_text, properties)
         lockfile_path = _find_project_lockfile(build_file.parent, project)
         locked = _load_lockfile(lockfile_path) if lockfile_path else {}
-        declared_coordinates: set[tuple[str, str]] = set()
+        if lockfile_path:
+            lockfile_paths.add(lockfile_path)
         managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
         catalog_path = project / "gradle" / "libs.versions.toml"
         if not catalog_path.is_file():
@@ -390,21 +393,21 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                     if _affected(version, advisory.get("ranges", [])):
                         finding = _make_finding(group, artifact, version, advisory, relative_path, line)
                         findings.setdefault(finding["fingerprint"], finding)
-        # Lockfiles include resolved transitive dependencies absent from build scripts.
-        if lockfile_path:
-            lockfile_relative = lockfile_path.relative_to(project).as_posix()
-            for group, artifact, version, lock_line in _load_lockfile_entries(lockfile_path):
-                if (group, artifact) in declared_coordinates:
-                    continue
-                for advisory in advisory_index.get((group, artifact), []):
-                    if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line)
-                        findings.setdefault(finding["fingerprint"], finding)
-
         if on_progress:
             try:
                 on_progress({"files_scanned": visited, "total_files": total_files, "current_file": relative_path})
             except Exception:
                 pass
+
+    # Scan each lockfile once, after collecting direct coordinates from every module.
+    for lockfile_path in sorted(lockfile_paths):
+        lockfile_relative = lockfile_path.relative_to(project).as_posix()
+        for group, artifact, version, lock_line in _load_lockfile_entries(lockfile_path):
+            if (group, artifact) in declared_coordinates:
+                continue
+            for advisory in advisory_index.get((group, artifact), []):
+                if _affected(version, advisory.get("ranges", [])):
+                    finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line)
+                    findings.setdefault(finding["fingerprint"], finding)
 
     return sorted(findings.values(), key=lambda item: (item["path"], item["line"], item["rule_id"]))
