@@ -79,6 +79,11 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     assert result["status"] == "completed"
     assert len(result["explanations"]) == 1
     assert result["explanations"][0]["fingerprint"] == "abc"
+    assert result["explained_count"] == 1
+    assert result["coverage"] == 1.0
+    assert result["explanations"][0]["source_evidence"] == [
+        {"line": 12, "text": 'token = "[REDACTED]"', "is_finding": True}
+    ]
 
 
 def test_gateway_rejects_non_https_remote_endpoint(monkeypatch):
@@ -147,3 +152,54 @@ def test_provider_configuration_never_returns_api_key(monkeypatch):
     assert status["configured"] is True
     assert status["endpoint_valid"] is True
     assert "very-secret-key" not in str(status)
+
+
+
+def test_gateway_rejects_incomplete_model_explanation(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    def fake_post(url, **kwargs):
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "abc",
+                "root_cause": "Cause",
+                "impact": "",
+                "recommendation": "Fix",
+                "confidence": 0.8,
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "abc",
+        "code_context": [{"line": 7, "text": "dangerousCall()", "is_finding": True}],
+    }])
+
+    assert result["status"] == "completed"
+    assert result["explained_count"] == 0
+    assert result["unexplained_count"] == 1
+    assert result["coverage"] == 0.0
+    assert result["explanations"] == []
+    assert "0 из 1" in result["message"]
+
+
+def test_gateway_does_not_accept_model_explanation_without_fingerprint(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    def fake_post(url, **kwargs):
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "root_cause": "Cause", "impact": "Impact",
+                "recommendation": "Fix", "confidence": 0.8,
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"code_context": [{"line": 1, "text": "x"}]}])
+
+    assert result["explained_count"] == 0
+    assert result["explanations"] == []
