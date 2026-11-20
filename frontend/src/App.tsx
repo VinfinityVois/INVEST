@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -237,6 +237,14 @@ export default function App() {
   const [configError, setConfigError] = useState("");
   const [scheduleStatus, setScheduleStatus] = useState<{enabled:boolean;configured:boolean;cron?:string;timezone?:string;next_run_at?:string|null;last_run_at?:string|null} | null>(null);
   const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const [templateItems, setTemplateItems] = useState<Array<{id:string;name:string;description:string;category:string;node_count:number;created_at?:string}>>([]);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("Все");
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState("");
+
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -872,6 +880,49 @@ export default function App() {
     if (!response.ok) throw new Error(JSON.stringify(data));
     setWorkflowId(data.id); return data.id as string;
   };
+  const loadTemplateLibrary = async () => {
+    setTemplateLoading(true);
+    setTemplateError("");
+    try {
+      const params = new URLSearchParams();
+      if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
+      if (templateSearch.trim()) params.set("q", templateSearch.trim());
+      const response = await fetch("/api/templates" + (params.size ? "?" + params.toString() : ""));
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
+      setTemplateItems(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setTemplateError(String(error));
+      setTemplateItems([]);
+    } finally { setTemplateLoading(false); }
+  };
+  useEffect(() => {
+    if (templateLibraryOpen) void loadTemplateLibrary();
+  }, [templateLibraryOpen, templateCategory]);
+  const cloneTemplateIntoEditor = async (templateId: string) => {
+    setTemplateBusyId(templateId);
+    setTemplateError("");
+    try {
+      const response = await fetch("/api/templates/" + templateId + "/clone", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const loaded = await fetch("/api/workflows/" + data.id);
+      const workflow = await loaded.json();
+      if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
+      setWorkflowId(workflow.id);
+      setNodes(workflow.graph.nodes || []);
+      setEdges(workflow.graph.edges || []);
+      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
+      setSelectedEdgeId(null);
+      setTemplateLibraryOpen(false);
+      setResult("Шаблон скопирован в новый workflow · " + workflow.name + ". Перед запуском проверь конфигурацию источника и webhook.");
+      setShowResult(true);
+    } catch (error) {
+      setTemplateError(String(error));
+    } finally { setTemplateBusyId(null); }
+  };
   const saveWorkflow = async () => {
     setBusy(true);
     try { const id = await persistWorkflow(); setResult("Сохранено · workflow " + id); }
@@ -1070,6 +1121,7 @@ export default function App() {
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
+        <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
         <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
@@ -1533,6 +1585,26 @@ export default function App() {
           </div>
         </aside>}
         <footer className="project-workspace-footer"><span>READ-ONLY SOURCE VIEW · SECRET MASKING ENABLED</span><span>Запуск анализа доступен на основном холсте</span></footer>
+      </section>
+    </div>}
+    {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
+      <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
+        <header className="template-library-header">
+          <div><span className="eyebrow">WORKFLOW CATALOG</span><h2 id="template-library-title"><Library size={18}/> Библиотека шаблонов</h2><p>Готовые графы для быстрого старта. Копирование не запускает анализ.</p></div>
+          <button className="icon-button" onClick={() => setTemplateLibraryOpen(false)} aria-label="Закрыть библиотеку"><X size={16}/></button>
+        </header>
+        <div className="template-library-tools">
+          <label className="template-library-search"><Search size={14}/><input value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void loadTemplateLibrary(); }} placeholder="Поиск шаблона…"/><button onClick={() => void loadTemplateLibrary()}><SearchCheck size={13}/> Найти</button></label>
+          <div className="template-category-filters">{["Все","general","security","ci","kotlin","secrets"].map(item => <button key={item} className={templateCategory === item ? "active" : ""} onClick={() => setTemplateCategory(item)}>{item === "Все" ? "Все категории" : item}</button>)}</div>
+        </div>
+        {templateError && <div className="template-library-error"><AlertTriangle size={14}/><span>{templateError}</span><button onClick={() => void loadTemplateLibrary()}>Повторить</button></div>}
+        <div className="template-library-list">
+          {templateLoading ? <div className="template-library-empty">Загружаем каталог…</div> : templateItems.length ? templateItems.map(item => <article className="template-library-card" key={item.id}>
+            <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>{item.category}</span></div><p>{item.description || "Описание не добавлено."}</p><small>{item.node_count} блоков · опубликован {formatDate(item.created_at)}</small></div>
+            <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void cloneTemplateIntoEditor(item.id)}>{templateBusyId === item.id ? "Копирование…" : "Клонировать"}</button>
+          </article>) : <div className="template-library-empty"><Library size={25}/><b>Шаблоны не найдены</b><span>Попробуй изменить поиск или категорию. Новые шаблоны появятся после публикации администратором.</span></div>}
+        </div>
+        <footer className="template-library-footer"><span>SAFE CLONE · NO AUTO EXECUTION</span><button onClick={() => setTemplateLibraryOpen(false)}>Закрыть</button></footer>
       </section>
     </div>}
     <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.7.0</span></footer>
