@@ -16,8 +16,11 @@ def _workspace_source(relative_path: str) -> Path:
     """Resolve an uploaded project directory strictly inside WORKSPACE_ROOT."""
     workspace = Path(settings.workspace_root).resolve()
     unresolved = workspace / relative_path
-    if any(part.is_symlink() for part in [unresolved, *unresolved.parents] if part != workspace.parent):
-        raise WorkflowExecutionError("Symlinks are not allowed in source paths")
+    current = unresolved
+    while current != workspace.parent:
+        if current.is_symlink():
+            raise WorkflowExecutionError("Symlinks are not allowed in source paths")
+        current = current.parent
     candidate = unresolved.resolve(strict=True)
     if not candidate.is_relative_to(workspace):
         raise WorkflowExecutionError("Source path is outside the configured workspace")
