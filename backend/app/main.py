@@ -531,6 +531,55 @@ def download_project_archive(project_id: UUID):
             raise HTTPException(status_code=500, detail="Не удалось сформировать ZIP-экспорт проекта.") from exc
 
 
+@app.get("/api/projects/{project_id}/file/download")
+def download_project_file(project_id: UUID, path: str = Query(min_length=1, max_length=1000)):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=404, detail="Project file is unavailable")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        candidate = root.joinpath(*relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(root) or not resolved.is_file():
+                raise OSError("File is unavailable")
+            size = resolved.stat().st_size
+            if size > 100 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Скачивание одного файла ограничено 100 MiB.")
+            content = None
+            if relative.suffix.lower() in PROJECT_EXPORT_TEXT_SUFFIXES:
+                if size > 1_000_000:
+                    raise HTTPException(status_code=413, detail="Текстовые файлы больше 1 MiB нельзя скачать без полной проверки на секреты.")
+                content = resolved.read_text(encoding="utf-8")
+            if not _project_export_file_is_safe(relative, size, content):
+                raise HTTPException(status_code=403, detail="Файл исключён из скачивания проверкой безопасности.")
+        except HTTPException:
+            raise
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Файл недоступен для скачивания.") from exc
+        session.add(AuditLog(action="project.file_downloaded", entity="project", entity_id=str(project_id), details={
+            "path": relative.as_posix(), "bytes": size,
+        }))
+        session.commit()
+        return FileResponse(
+            resolved,
+            media_type="application/octet-stream",
+            filename=resolved.name,
+            content_disposition_type="attachment",
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+        )
+
+
 @app.api_route("/api/projects/{project_id}/preview", methods=["GET", "HEAD"])
 def preview_project_asset(
     project_id: UUID,
