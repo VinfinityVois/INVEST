@@ -88,6 +88,23 @@ NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
 
 После добавления workflow сохраните его, создайте уникальный endpoint на [webhook.site](https://webhook.site/), укажите полный HTTPS URL в настройках Webhook-ноды и нажмите «Запустить всё». В webhook.site должен прийти JSON с количеством находок, распределением severity, первыми десятью находками и краткими AI-объяснениями. Содержимое исходного кода, code context, masked values и ключи API в уведомление не включаются.
 
+Для автоматического запуска этого сценария из PowerShell используйте готовый скрипт (он создаёт workflow через API, ставит run в очередь, опрашивает его статус и выводит execution trace):
+
+\`\`\`powershell
+.\scripts\demo.ps1 -WebhookUrl "https://webhook.site/ВАШ-УНИКАЛЬНЫЙ-ID"
+\`\`\`
+
+Перед запуском задайте в корневом \`.env\`:
+\`\`\`env
+ALLOWED_TARGETS=https://github.com/TBagirov/training
+NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=ВАША_OPENAI_COMPATIBLE_MODEL
+LLM_API_KEY=ВАШ_API_KEY
+\`\`\`
+После изменения \`.env\` перезапустите API и worker. Для провайдера, отличного от OpenAI, укажите его OpenAI-compatible endpoint и модель.
+
+
 ### Настройка Webhook
 
 - В \`.env\` задаётся \`NOTIFY_WEBHOOK_ALLOWED_HOSTS\` — точный список разрешённых DNS-hostname через запятую; по умолчанию разрешён только \`webhook.site\`.
