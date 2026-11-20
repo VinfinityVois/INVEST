@@ -8,7 +8,7 @@ from app.models import WorkflowRun, WorkflowSchedule, WorkflowVersion
 
 
 def next_run_time(expression: str, timezone_name: str, after: datetime | None = None) -> datetime:
-    if not isinstance(expression, str) or len(expression) > 120 or not croniter.is_valid(expression):
+    if not isinstance(expression, str) or len(expression) > 120 or len(expression.split()) != 5 or not croniter.is_valid(expression):
         raise ValueError("Некорректное cron-выражение (ожидается 5 полей).")
     try:
         zone = ZoneInfo(timezone_name)
