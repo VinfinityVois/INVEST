@@ -54,7 +54,7 @@ type Telemetry = {
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
-  trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number }>;
+  trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number; cached?: boolean }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
@@ -1183,7 +1183,7 @@ export default function App() {
               <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
                 <i>{step.status === "completed" ? "✓" : step.status === "failed" ? "!" : step.status === "blocked" ? "Ⅱ" : index + 1}</i>
-                <span><b>{step.type}</b><small>{step.status === "completed" ? "Завершён" : step.status === "failed" ? "Ошибка" : step.status === "blocked" ? "Заблокирован" : step.status}</small></span>
+                <span><b>{step.type}</b><small>{step.cached ? "Из кэша" : step.status === "completed" ? "Завершён" : step.status === "failed" ? "Ошибка" : step.status === "blocked" ? "Заблокирован" : step.status}</small></span>
                 <em>{formatDuration(step.duration_ms)}</em>
                 {typeof step.findings === "number" && <strong>{step.findings} находок</strong>}
               </div>)}
