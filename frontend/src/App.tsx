@@ -74,6 +74,7 @@ export default function App() {
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
+  const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState("");
@@ -102,6 +103,16 @@ export default function App() {
       .catch(() => { if (active) setTelemetry(null); });
     return () => { active = false; };
   }, [workflowId]);
+
+  useEffect(() => {
+    if (!lastRunId) return;
+    let active = true;
+    fetch("/api/runs/" + lastRunId + "/telemetry")
+      .then(response => response.ok ? response.json() : null)
+      .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [lastRunId]);
 
   const selectedNode = nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = edges.find(edge => edge.id === selectedEdgeId) || null;
@@ -212,6 +223,7 @@ export default function App() {
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
       setResult("Задание поставлено в очередь · " + queued.run_id);
+      setLastRunId(queued.run_id); window.localStorage.setItem("invest.lastRunId", queued.run_id);
 
       const completed = await new Promise<Telemetry>((resolve, reject) => {
         const stream = new EventSource("/api/runs/" + queued.run_id + "/events");
@@ -355,6 +367,6 @@ export default function App() {
         </>}
       </aside>
     </div>
-    <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.4.0</span></footer>
+    <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.6.0</span></footer>
   </main>;
 }
