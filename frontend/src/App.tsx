@@ -12,7 +12,8 @@ import {
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download,
 } from "lucide-react";
 
-type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
+type PortManifest = { name: string; data_type: string };
+type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: Record<string, unknown> };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
@@ -524,13 +525,46 @@ export default function App() {
   }, [selectedNodeId, nodes.find(n => n.id === selectedNodeId)?.data.config]);
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
+  const connectionIssue = useCallback((connection: Connection): string | null => {
+    const sourceNode = nodes.find(node => node.id === connection.source);
+    const targetNode = nodes.find(node => node.id === connection.target);
+    if (!sourceNode || !targetNode) return "Источник или получатель связи отсутствует.";
+    const sourceManifest = manifests.find(item => item.type === sourceNode.data.nodeType);
+    const targetManifest = manifests.find(item => item.type === targetNode.data.nodeType);
+    if (!sourceManifest || !targetManifest) return "Не удалось загрузить типы портов для одного из блоков.";
+    const sourcePorts = sourceManifest.outputs || [];
+    const targetPorts = targetManifest.inputs || [];
+    const output = connection.sourceHandle
+      ? sourcePorts.find(port => port.name === connection.sourceHandle)
+      : sourcePorts.length === 1 ? sourcePorts[0] : undefined;
+    const input = connection.targetHandle
+      ? targetPorts.find(port => port.name === connection.targetHandle)
+      : targetPorts.length === 1 ? targetPorts[0] : undefined;
+    if (!output || !input) return "Выберите конкретный выходной и входной порт.";
+    if (output.data_type !== input.data_type) {
+      return "Несовместимые типы портов: " + output.data_type + " → " + input.data_type + ".";
+    }
+    return null;
+  }, [nodes, manifests]);
   const onConnect = useCallback((connection: Connection) => {
+    const issue = connectionIssue(connection);
+    if (issue) {
+      setResult("Связь не создана · " + issue);
+      setShowResult(true);
+      return;
+    }
     setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current));
     setSelectedNodeId(null); setSelectedEdgeId(null);
-  }, [setEdges]);
+  }, [setEdges, connectionIssue]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
+    const issue = connectionIssue(newConnection);
+    if (issue) {
+      setResult("Связь не переназначена · " + issue);
+      setShowResult(true);
+      return;
+    }
     setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false }));
-  }, [setEdges]);
+  }, [setEdges, connectionIssue]);
 
   const addNode = (manifest: Manifest) => {
     const id = manifest.type + "-" + Date.now();
@@ -1141,7 +1175,7 @@ export default function App() {
         <div className="editor-head"><div><span className="eyebrow">EDITOR / WORKFLOW 001</span><h1>Security pipeline</h1><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
         <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect}
+          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect} isValidConnection={connection => !connectionIssue(connection as Connection)}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
