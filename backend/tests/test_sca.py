@@ -596,3 +596,26 @@ def test_maven_parent_relative_path_cannot_read_outside_project(tmp_path):
     )
 
     assert scan_maven_project(project) == []
+
+
+def test_maven_child_inherits_parent_dependency_management(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "parent-pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>parent</artifactId>"
+        "<version>1</version><dependencyManagement><dependencies><dependency>"
+        "<groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.8.8</version>"
+        "</dependency></dependencies></dependencyManagement></project>",
+        encoding="utf-8",
+    )
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId><artifactId>parent</artifactId>"
+        "<version>1</version><relativePath>parent-pom.xml</relativePath></parent><artifactId>app</artifactId>"
+        "<dependencies><dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId>"
+        "</dependency></dependencies></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project)
+
+    assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
