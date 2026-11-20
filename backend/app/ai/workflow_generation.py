@@ -114,6 +114,23 @@ def normalize_generated_graph(raw: object, prompt: str) -> WorkflowGraph:
             "id": f"ai-edge-{index + 1}", "source": source, "target": target,
             "source_handle": source_handle, "target_handle": target_handle,
         })
+    trigger_ids = {node["id"] for node in nodes if node["type"] in {"trigger.manual", "trigger.schedule"}}
+    if len(trigger_ids) != 1:
+        raise WorkflowGenerationError("Граф должен содержать ровно один триггер.")
+    if not any(node["type"] in {"source.git", "source.upload"} for node in nodes):
+        raise WorkflowGenerationError("Добавь хотя бы один источник проекта.")
+    if not any(node["type"] in {"scan.secrets", "scan.sca", "scan.sast"} for node in nodes):
+        raise WorkflowGenerationError("Добавь хотя бы один security scanner.")
+    reachable = set(trigger_ids)
+    changed = True
+    while changed:
+        changed = False
+        for edge in edges:
+            if edge["source"] in reachable and edge["target"] not in reachable:
+                reachable.add(edge["target"])
+                changed = True
+    if len(reachable) != len(nodes):
+        raise WorkflowGenerationError("Все блоки должны быть соединены с триггером.")
     graph = WorkflowGraph.model_validate({"name": name, "nodes": nodes, "edges": edges})
     validation = validate_graph(graph, registry)
     if not validation.valid:
