@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from pathlib import Path
+from time import perf_counter
 
 from app.config import settings
 from app.scanners.secrets import scan_directory
@@ -35,7 +36,7 @@ def _workspace_source(relative_path: str) -> Path:
     return candidate
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -65,6 +66,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
     outputs = {}
     artifacts = {}
     for node_id in order:
+        node_started = perf_counter()
         node = nodes[node_id]
         parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
 
@@ -140,8 +142,21 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
             "node_id": node_id,
             "type": node.type,
             "status": output.get("status", "completed"),
+            "duration_ms": round((perf_counter() - node_started) * 1000, 2),
             **({"findings": output["summary"]["total"]} if "summary" in output else {}),
         })
+        if on_progress is not None:
+            try:
+                on_progress({
+                    "status": "running",
+                    "completed_nodes": len(trace),
+                    "total_nodes": len(order),
+                    "current_node": node_id,
+                    "trace": list(trace),
+                })
+            except Exception:
+                # Progress reporting must never break a security scan.
+                pass
 
     failed = any(item["status"] in {"failed", "blocked"} for item in outputs.values())
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
