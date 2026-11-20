@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -163,6 +163,8 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
 const nodeTypes = { workflow: memo(WorkflowNode) };
 
 export default function App() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "dark" ? "dark" : "light");
+  useEffect(() => { window.localStorage.setItem("invest.theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
@@ -1185,16 +1187,16 @@ export default function App() {
     return <button key={item.path} className={"project-file-row project-leaf-row" + (projectFilePreview?.path === item.path ? " selected" : "")} style={{ paddingLeft: 24 + depth * 13 }} onClick={() => file && void openProjectFile(file)}><FileText size={12}/><span title={item.path}>{item.name}</span><small>{(item.size || 0) < 1024 ? (item.size || 0) + " B" : ((item.size || 0) / 1024).toFixed(0) + " KB"}</small></button>;
   });
 
-  return <main className="shell">
+  return <main className="shell" data-theme={theme}>
     <header className="topbar">
-      <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
+      <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
-        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
+        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button><button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === "light" ? "dark" : "light")} title={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"} aria-label={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"}>{theme === "light" ? <Moon size={16}/> : <Sun size={16}/>}</button>
       </div>
     </header>
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
