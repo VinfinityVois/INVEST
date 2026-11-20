@@ -38,6 +38,6 @@ def validate_graph(graph: WorkflowGraph, registry: NodeRegistry) -> ValidationRe
             indegree[nxt]-=1
             if indegree[nxt]==0: queue.append(nxt)
     if visited != len(graph.nodes): issues.append(ValidationIssue(code="cycle_detected",message="Циклические workflow пока не поддерживаются."))
-    if graph.nodes and not any(n.type=="trigger.manual" for n in graph.nodes):
-        issues.append(ValidationIssue(code="missing_trigger",message="Добавьте Manual trigger.",severity="warning"))
+    if graph.nodes and not any(n.type in {"trigger.manual", "trigger.schedule"} for n in graph.nodes):
+        issues.append(ValidationIssue(code="missing_trigger",message="Добавьте Manual trigger или Schedule trigger.",severity="warning"))
     return ValidationResult(valid=not any(i.severity=="error" for i in issues),issues=issues)
