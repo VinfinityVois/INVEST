@@ -213,7 +213,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             **({"message": output["message"]} if output.get("message") else {}),
             **({
                 "explained_count": output.get("explained_count", len(output.get("explanations", []))),
-                "analyzed_count": output.get("analyzed_count", min(len(output.get("findings", [])), int(node.config.get("max_findings", 20) or 20))),
+                "analyzed_count": output.get("analyzed_count", output.get("analyzed_count", 0)),
                 "skipped_count": output.get("skipped_count", max(0, len(output.get("findings", [])) - min(len(output.get("findings", [])), int(node.config.get("max_findings", 20) or 20)))),
                 "coverage": output.get("coverage", 0),
             } if node.type == "ai.explain" else {}),
