@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import re
+import tomllib
 from pathlib import Path
 
 from app.config import settings
@@ -94,6 +95,72 @@ def _load_lockfile(path: Path) -> dict[tuple[str, str], str]:
             group, artifact, version, _configuration = match.groups()
             result[(group, artifact)] = version
     return result
+
+
+def _catalog_alias_key(value: str) -> str:
+    """Normalize Gradle catalog aliases and generated accessor paths."""
+    return re.sub(r"[-_.]+", ".", value).strip(".")
+
+
+def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
+    """Read Gradle's TOML version catalog without evaluating Gradle expressions."""
+    text = _read_text(path)
+    if text is None:
+        return {}
+    try:
+        payload = tomllib.loads(text)
+    except (tomllib.TOMLDecodeError, TypeError):
+        return {}
+
+    versions = payload.get("versions", {})
+    libraries = payload.get("libraries", {})
+    if not isinstance(versions, dict) or not isinstance(libraries, dict):
+        return {}
+
+    result: dict[str, tuple[str, str, str | None]] = {}
+    for alias, entry in libraries.items():
+        if not isinstance(alias, str) or not isinstance(entry, dict):
+            continue
+        module = entry.get("module")
+        group, artifact = None, None
+        if isinstance(module, str) and module.count(":") == 1:
+            group, artifact = module.split(":", 1)
+        else:
+            group, artifact = entry.get("group"), entry.get("name")
+        if not isinstance(group, str) or not isinstance(artifact, str) or not group or not artifact:
+            continue
+
+        version = entry.get("version")
+        if isinstance(version, str):
+            resolved_version = version
+        elif isinstance(version, dict):
+            resolved_version = None
+            reference = version.get("ref")
+            if isinstance(reference, str):
+                candidate = versions.get(reference)
+                if isinstance(candidate, str):
+                    resolved_version = candidate
+                elif isinstance(candidate, dict):
+                    resolved_version = candidate.get("strictly") or candidate.get("require") or candidate.get("prefer")
+            else:
+                resolved_version = version.get("strictly") or version.get("require") or version.get("prefer")
+        elif isinstance(entry.get("version.ref"), str):
+            candidate = versions.get(entry["version.ref"])
+            resolved_version = candidate if isinstance(candidate, str) else None
+        else:
+            resolved_version = None
+
+        result[_catalog_alias_key(alias)] = (group, artifact, resolved_version if isinstance(resolved_version, str) else None)
+    return result
+
+
+def _catalog_line(path: Path, alias: str) -> int:
+    text = _read_text(path)
+    if text is None:
+        return 1
+    escaped = re.escape(alias)
+    match = re.search(rf"(?m)^\\s*['\\"]?{escaped}['\\"]?\\s*=", text)
+    return text.count("\\n", 0, match.start()) + 1 if match else 1
 
 
 def _numeric_version(value: str) -> tuple[int, ...] | None:
@@ -192,9 +259,33 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
         locked = _load_lockfile(build_file.parent / "gradle.lockfile")
+        catalog_path = project / "gradle" / "libs.versions.toml"
+        if not catalog_path.is_file():
+            catalog_path = build_file.parent / "gradle" / "libs.versions.toml"
+        catalog = _load_version_catalog(catalog_path) if catalog_path.is_file() else {}
         relative_path = build_file.relative_to(project).as_posix()
 
         for block_start, _block_end, block in _dependency_blocks(build_text):
+            # Version-catalog accessors (for example libs.apache.commons.text).
+            for alias_match in re.finditer(
+                r"\\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\\s*\\(\\s*libs((?:\\.[A-Za-z_]\\w*)+)\\s*\\)",
+                block,
+            ):
+                accessor = alias_match.group(1).lstrip(".")
+                normalized = _catalog_alias_key(accessor)
+                candidates = [entry for key, entry in catalog.items() if key == normalized]
+                if len(candidates) != 1:
+                    continue
+                group, artifact, declared_version = candidates[0]
+                version = locked.get((group, artifact), declared_version)
+                if not version or "$" in version:
+                    continue
+                line = build_text.count("\\n", 0, block_start + alias_match.start()) + 1
+                for advisory in advisory_index.get((group, artifact), []):
+                    if _affected(version, advisory.get("ranges", [])):
+                        finding = _make_finding(group, artifact, version, advisory, relative_path, line)
+                        findings.setdefault(finding["fingerprint"], finding)
+
             for match in DEPENDENCY_CALL.finditer(block):
                 coordinate = match.group("coordinate") or match.group("add_coordinate")
                 if not coordinate:
