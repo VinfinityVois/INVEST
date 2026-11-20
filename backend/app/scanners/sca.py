@@ -480,6 +480,7 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         except ET.ParseError:
             continue
         parent_properties = {}
+        parent_managed = {}
         parent = _maven_child(pom, "parent")
         if parent is not None:
             rel = _maven_text(parent, "relativePath")
@@ -488,11 +489,14 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
             parent_source = _read_text(parent_path) if parent_is_confined and parent_path.is_file() and not parent_path.is_symlink() else None
             if parent_source:
                 try:
-                    parent_properties = _maven_properties(ET.fromstring(parent_source))
+                    parent_pom = ET.fromstring(parent_source)
+                    parent_properties = _maven_properties(parent_pom)
+                    parent_managed = _maven_managed(parent_path, parent_pom, parent_properties, bom_snapshots)
                 except ET.ParseError:
                     pass
         props = _maven_properties(pom, parent_properties)
-        managed = _maven_managed(pom_path, pom, props, bom_snapshots)
+        managed = dict(parent_managed)
+        managed.update(_maven_managed(pom_path, pom, props, bom_snapshots))
         relative = pom_path.relative_to(project).as_posix()
         for section in _maven_profile_sections(pom_path, pom):
             section_properties = _maven_properties(section, props)
