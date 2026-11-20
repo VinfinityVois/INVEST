@@ -97,6 +97,147 @@ def _scan_sql(path: str, text: str) -> list[dict]:
                 break
     return findings
 
+
+_TAINT_SOURCE_ANNOTATIONS = re.compile(
+    r"@(?:RequestParam|PathVariable|RequestBody|RequestHeader|CookieValue)\\b"
+)
+_SQL_SINK_CALL = re.compile(r"\\b(?:queryForList|queryForObject|query|update|execute)\\s*\\(\\s*([^,\\n]+)", re.I)
+_SQL_CONTEXT = re.compile(r"\\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\\b", re.I)
+
+
+def _split_call_arguments(value: str) -> list[str]:
+    """Split a Kotlin argument list without splitting nested calls or quoted commas."""
+    parts, start, depth, quote, escaped = [], 0, 0, None, False
+    for index, char in enumerate(value):
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char in "([{<":
+            depth += 1
+        elif char in ")]}>":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            parts.append(value[start:index].strip())
+            start = index + 1
+    tail = value[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _method_parameters(signature: str) -> list[tuple[str, bool]]:
+    match = re.search(r"\\bfun\\s+[A-Za-z_]\\w*\\s*\\((.*)\\)", signature, re.S)
+    if not match:
+        return []
+    parameters = []
+    for part in _split_call_arguments(match.group(1)):
+        name = re.search(r"(?:\\b(?:val|var)\\s+)?([A-Za-z_]\\w*)\\s*:", part)
+        if name:
+            parameters.append((name.group(1), bool(_TAINT_SOURCE_ANNOTATIONS.search(part))))
+    return parameters
+
+
+def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
+    """Conservative same-file call-graph taint analysis for Kotlin SQL sinks.
+
+    Tracks explicitly annotated HTTP inputs through local assignments and direct
+    function arguments. It only reports when tainted data reaches a SQL API's
+    first argument and that expression is SQL-like or derived from such SQL.
+    """
+    methods = []
+    for name, start, body_start, end, body in _method_blocks(text):
+        signature = text[start:body_start]
+        parameters = _method_parameters(signature)
+        methods.append({
+            "name": name, "start": start, "body_start": body_start,
+            "body": body, "parameters": parameters,
+            "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
+        })
+    if not methods:
+        return []
+
+    by_name: dict[str, list[int]] = {}
+    for index, method in enumerate(methods):
+        by_name.setdefault(method["name"], []).append(index)
+
+    tainted_arguments = [set(method["tainted_parameters"]) for method in methods]
+    tainted_variables: list[set[str]] = [set() for _ in methods]
+    # Fixed point over direct calls. A hard cap protects against pathological graphs.
+    for _iteration in range(min(12, len(methods) + 1)):
+        changed = False
+        for index, method in enumerate(methods):
+            variables = set(name for position, (name, _source) in enumerate(method["parameters"])
+                            if position in tainted_arguments[index])
+            body = method["body"]
+            for _pass in range(8):
+                before = len(variables)
+                for assignment in re.finditer(
+                    r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*([^\\n;]+)", body
+                ):
+                    variable, expression = assignment.groups()
+                    if re.search(r"\\brequest\\s*\\.\\s*(?:getParameter|getHeader|getQueryString)\\s*\\(", expression):
+                        variables.add(variable)
+                    elif any(re.search(rf"\\b{re.escape(item)}\\b", expression) for item in variables):
+                        variables.add(variable)
+                    elif "$" in expression and _SQL_CONTEXT.search(expression):
+                        # A template is a taint carrier only when an interpolation
+                        # references a value already marked as tainted.
+                        if any(re.search(rf"\\$\\{{?{re.escape(item)}\\}}?", expression) for item in variables):
+                            variables.add(variable)
+                if len(variables) == before:
+                    break
+            if variables != tainted_variables[index]:
+                tainted_variables[index] = variables
+                changed = True
+
+            for call in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(([^()\\n]*)\\)", body):
+                targets = by_name.get(call.group(1), [])
+                if not targets:
+                    continue
+                args = _split_call_arguments(call.group(2))
+                for target in targets:
+                    target_parameters = methods[target]["parameters"]
+                    for position, argument in enumerate(args[:len(target_parameters)]):
+                        if any(re.search(rf"\\b{re.escape(item)}\\b", argument) for item in variables):
+                            if position not in tainted_arguments[target]:
+                                tainted_arguments[target].add(position)
+                                changed = True
+        if not changed:
+            break
+
+    findings = []
+    for index, method in enumerate(methods):
+        variables = set(tainted_variables[index])
+        body = method["body"]
+        for sink in _SQL_SINK_CALL.finditer(body):
+            expression = sink.group(1).strip()
+            if not _SQL_CONTEXT.search(expression) and not any(
+                re.search(rf"\\b{re.escape(item)}\\b", expression) for item in variables
+            ):
+                continue
+            reaches_sink = any(
+                re.search(rf"\\$\\{{?{re.escape(item)}\\}}?", expression)
+                or re.search(rf"\\b{re.escape(item)}\\b", expression)
+                for item in variables
+            )
+            if not reaches_sink:
+                continue
+            findings.append(_finding(
+                "kotlin.taint.interprocedural-sql-injection", path,
+                _line(text, method["body_start"] + sink.start()), "HIGH",
+                "Данные HTTP-запроса проходят через вызов функции и попадают в SQL-выражение. "
+                "Используйте bind-параметры вместо конкатенации или Kotlin string templates.",
+                "CWE-89", 0.91,
+            ))
+    return findings
+
+
 def _scan_tls(path: str, text: str) -> list[dict]:
     findings = []
     pattern = re.compile(r"hostnameVerifier\s*=\s*HostnameVerifier\s*\{[^{}]*->\s*true\s*\}", re.S)
@@ -205,6 +346,7 @@ def scan_kotlin_project(root: str | Path, on_progress=None) -> list[dict]:
     findings = []
     for path, text in files.items():
         findings.extend(_scan_sql(path, text))
+        findings.extend(_scan_interprocedural_sql_taint(path, text))
         findings.extend(_scan_tls(path, text))
         findings.extend(_scan_cors(path, text))
     findings.extend(_scan_public_sensitive_route(files))
