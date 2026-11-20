@@ -77,6 +77,20 @@ ALLOWED_TARGETS=https://github.com/example/training
 ```
 
 
+## Библиотека шаблонов workflow
+
+Публичная библиотека содержит только опубликованные графы, очищенные от конфигурационных секретов. Просмотр и клонирование не запускают workflow. При клонировании генерируются новые ID узлов и рёбер, а затем граф повторно проходит серверную валидацию.
+
+Публикация отключена, пока в backend `.env` не задан отдельный `TEMPLATE_PUBLISH_TOKEN`. Используйте случайное значение не короче 32 байт; не переиспользуйте `APP_SECRET_KEY`, `CI_TRIGGER_TOKEN` или `LLM_API_KEY`. Запрос публикации передаёт секрет только в заголовке `X-Template-Publish-Token`. Не помещайте его во frontend или в граф workflow.
+
+API:
+- `GET /api/templates` — список опубликованных шаблонов (фильтры `category` и `q`);
+- `GET /api/templates/{id}` — очищенный граф шаблона;
+- `POST /api/templates/publish` — публикация сохранённого workflow; требует `X-Template-Publish-Token`;
+- `POST /api/templates/{id}/clone` — создание нового сохранённого workflow без выполнения.
+
+При публикации рекурсивно удаляются поля с именами, похожими на секреты/учётные данные, локальные пути `source.upload` и URL назначения `notify.webhook`. Git URL очищается от user-info, query и fragment. В webhook-ноду записывается безопасный placeholder `example.invalid`, который необходимо заменить перед использованием. Сама публикация не ставит задания в очередь. До появления пользовательской аутентификации и RBAC токен публикации следует хранить только у доверенного администратора и не выдавать клиентам.
+
 ## Logic.compare — фильтрация находок
 
 Нода `logic.compare` разделяет findings на выходы `true` и `false`. Поддерживаются поля severity, rule_id, path, category, message, cve, cwe и count; операторы equals/not_equals, contains/not_contains, greater_than/greater_or_equal/less_than/less_or_equal. Для severity числовое сравнение использует порядок CRITICAL > HIGH > MEDIUM > LOW > INFO. Выходы можно подключать независимо к следующим нодам.
