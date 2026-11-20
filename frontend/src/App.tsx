@@ -25,7 +25,7 @@ type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: s
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
-type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
+type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
 type SecurityTrend = {
   points: Array<{ run_id: string; status: string; queued_at?: string | null; finished_at?: string | null; duration_ms?: number | null; total_findings: number; severity: Record<string, number>; security_gate?: { decision?: "PASS" | "WARN" | "BLOCK"; blocked?: boolean } | null }>;
   summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
@@ -51,6 +51,7 @@ type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
   finished_at?: string; duration_ms?: number | null; total_findings: number;
   severity: Record<string, number>;
+  cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number };
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
@@ -298,7 +299,7 @@ export default function App() {
           const telemetryResponse = await fetch("/api/runs/" + run.id + "/telemetry");
           if (!telemetryResponse.ok) return run;
           const data = await telemetryResponse.json() as Telemetry;
-          return { ...run, total_findings: data.total_findings, severity: data.severity };
+          return { ...run, total_findings: data.total_findings, severity: data.severity, cache: data.cache };
         } catch { return run; }
       }));
       setWorkflowRuns(summaries);
@@ -1180,7 +1181,7 @@ export default function App() {
               <small>Сейчас: {telemetry.scanner_progress.current_file}</small>
             </div>}
             {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
-              <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>
+              <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>{telemetry.cache && telemetry.cache.scanner_blocks > 0 && <div className="cache-telemetry-strip"><span><b>{telemetry.cache.cache_hits}</b> из {telemetry.cache.scanner_blocks} сканеров взято из кэша</span><span>{Math.round(telemetry.cache.hit_rate * 100)}% повторного использования</span><small>Срок актуальности: {Math.round(telemetry.cache.ttl_seconds / 3600)} ч</small></div>}
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
                 <i>{step.status === "completed" ? "✓" : step.status === "failed" ? "!" : step.status === "blocked" ? "Ⅱ" : index + 1}</i>
                 <span><b>{step.type}</b><small>{step.cached ? "Из кэша" : step.status === "completed" ? "Завершён" : step.status === "failed" ? "Ошибка" : step.status === "blocked" ? "Заблокирован" : step.status}</small></span>
@@ -1285,7 +1286,7 @@ export default function App() {
           </div>}
           {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
             <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status === "cancelling" ? "ОТМЕНА" : run.status === "cancelled" ? "ОТМЕНЁН" : run.status}</span></div>
-            <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
+            <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>{run.cache && run.cache.scanner_blocks > 0 && <small className="run-cache-summary">{run.cache.cache_hits}/{run.cache.scanner_blocks} сканеров из кэша · {Math.round(run.cache.hit_rate * 100)}%</small>}
             <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>{["queued", "running", "cancelling"].includes(run.status) ? <button className="run-action-cancel" onClick={() => void cancelWorkflowRun(run)} disabled={run.status === "cancelling"}>{run.status === "cancelling" ? "ОТМЕНА…" : "ОТМЕНИТЬ"}</button> : ["completed", "partial", "failed", "cancelled"].includes(run.status) ? <button className="run-action-retry" onClick={() => void retryWorkflowRun(run)}>ПОВТОРИТЬ</button> : null}<div className="run-report-links">{activeProject && <button type="button" onClick={() => void saveRunReportToProject(run)} title="Сохранить JSON-отчёт в активный проект">В ПРОЕКТ</button>}<a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
           </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
         </section>
