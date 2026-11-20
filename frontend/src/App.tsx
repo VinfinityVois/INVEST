@@ -441,8 +441,7 @@ export default function App() {
             {configError && <p className="config-error">{configError}</p>}
             <button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>
           </>}
-          {configError && <p className="config-error">{configError}</p>}
-          <button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>
+          {selectedNode.data.nodeType !== "ai.explain" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
