@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -143,7 +143,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <details className="node-description-details nodrag"><summary>О БЛОКЕ <ChevronDown size={10} /></summary><p>{data.description}</p></details>
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
-      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "!" : "·"}</i></div>
+      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? <CircleX size={13}/> : outputTone === "success" ? <CircleCheck size={13}/> : outputTone === "active" ? <LoaderCircle size={13} className="node-output-spinner"/> : outputTone === "warning" ? <CircleAlert size={13}/> : <MinusCircle size={13}/>}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
       {data.executionProgress != null && <div className="node-live-progress" aria-label={`Прогресс сканирования: ${Math.round(data.executionProgress)}%`}><div><span>СКАНИРОВАНИЕ ФАЙЛОВ</span><b>{Math.round(data.executionProgress)}%</b></div><i><span style={{ width: `${data.executionProgress}%` }} /></i>{data.executionProgressLabel && <small title={data.executionProgressLabel}>{data.executionProgressLabel}</small>}</div>}
        {(data.executionDuration != null || data.executionCount != null || data.executionCoverage != null) && <div className="node-execution-metrics">
@@ -156,7 +156,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       </div>}
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
-    <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
+    <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
     <Handle type="source" position={Position.Right} />
   </div>;
 }
@@ -1194,7 +1194,7 @@ export default function App() {
     <header className="topbar">
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
-      <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
+      <div className="actions">
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
@@ -1282,7 +1282,7 @@ export default function App() {
       </aside>
 
       <section className="editor">
-        <div className="editor-head"><div><span className="eyebrow">EDITOR / WORKFLOW 001</span><h1>Security pipeline</h1><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
+        <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => setWorkflowDraftName(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (!workflowId ? " is-draft" : "")}><i/>{workflowId ? "Сохранённая версия" : "Черновик"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
         <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect}
@@ -1290,7 +1290,7 @@ export default function App() {
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
           edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
-          <Background color="#31445c" gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.type === "workflow" ? "#426b91" : "#526176"} /><Controls />
+          <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.data?.category === "Security" ? (theme === "light" ? "#157A44" : "#3BB56F") : node.data?.category === "AI" ? "#6B7682" : theme === "light" ? "#8B95A1" : "#4F5863"} /><Controls />
         </ReactFlow></div>
         <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span></div>
       </section>
