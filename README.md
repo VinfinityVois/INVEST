@@ -5,7 +5,7 @@
 ## Архитектура
 
 - **backend** — FastAPI, Pydantic, SQLAlchemy 2, PostgreSQL.
-- **worker** — отдельный процесс исполнения графов.
+- **worker** — отдельный процесс исполнения графов (постоянная очередь ещё в разработке).
 - **frontend** — React, Vite, TypeScript, React Flow.
 - **rules/** — собственные YAML-правила детекторов.
 - **data/** — локальные справочники advisories и Spring Boot managed versions.
@@ -15,7 +15,6 @@
 
 ```bash
 cp .env.example .env
-# Generate a 256-bit key and paste it into MASTER_KEY_HEX in .env:
 python -c "import secrets; print(secrets.token_hex(32))"
 docker compose up --build
 ```
@@ -24,9 +23,37 @@ API: http://localhost:8000/docs
 Frontend: http://localhost:5173  
 Health: http://localhost:8000/health
 
+## Источники проектов
+
+### ZIP upload
+
+В редакторе workflow выберите ZIP проекта. API распаковывает архив в уникальный каталог внутри `WORKSPACE_ROOT`. Ограничения:
+
+- ZIP до 50 MiB;
+- распакованный объём до 250 MiB;
+- не более 5000 записей;
+- коэффициент сжатия не более 100;
+- отклоняются traversal/абсолютные пути, дубликаты, символьные ссылки и специальные файловые записи;
+- файлы проекта не исполняются.
+
+Endpoint: `POST /api/sources/upload` (multipart field `file`).
+
+### Git source
+
+Для Git-ноды задайте HTTPS URL и необязательную ветку или тег. Репозиторий должен быть явно внесён в `ALLOWED_TARGETS` в backend environment. Сопоставление выполняется по точному адресу owner/repository; URL с логином, паролем, query, fragment и нестандартным портом отклоняются.
+
+Git clone выполняется shallow, без тегов, hooks, LFS smudge и submodules. Используется только HTTPS. Для работы Git-ноды в среде backend должен быть установлен Git. Частные репозитории и credential helper пока не поддерживаются.
+
+Пример:
+
+```env
+WORKSPACE_ROOT=/data/workspaces
+ALLOWED_TARGETS=https://github.com/example/training
+```
+
 ## Текущий статус
 
-Начальная реализация P0. Доступны редактор React Flow, реестр нод, проверка типизированных связей и циклов, базовый topological executor, сохранение workflow с версиями и первая собственная проверка секретов как отдельный модуль. SCA/SAST, постоянная очередь worker, SSE и AI-объяснения находятся в разработке.
+Реализованы редактор React Flow, реестр нод, валидация графа, синхронный executor, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, сохранение запусков и findings API/UI. SCA/SAST, постоянная очередь worker, SSE, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
 
 ## Принципы безопасности
 
@@ -34,4 +61,5 @@ Health: http://localhost:8000/health
 - Никаких готовых security-сканеров; детекция реализуется собственными правилами.
 - LLM не определяет уязвимости и не придумывает CVE — только объясняет уже найденные проблемы.
 - Секреты не должны попадать в логи, API-ответы или AI-контекст в открытом виде.
-- Сканирование ограничено разрешённым allowlist целей.
+- Git scanning разрешён только для точных URL из allowlist.
+- ZIP/Git checkout выполняется в workspace; запуск проектных файлов запрещён.
