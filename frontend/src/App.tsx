@@ -61,7 +61,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
   const meta = categoryMeta[data.category] || { label: data.category, tone: "slate" };
   return <div className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
     <Handle type="target" position={Position.Left} />
-    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" ? "В РАБОТЕ" : data.executionStatus === "completed" ? "ГОТОВО" : data.executionStatus === "failed" ? "ОШИБКА" : data.executionStatus === "blocked" ? "БЛОК" : "ОЖИДАНИЕ"}</span></div>
+    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" ? "В РАБОТЕ" : data.executionStatus === "completed" ? "ГОТОВО" : data.executionStatus === "failed" ? "ОШИБКА" : data.executionStatus === "blocked" ? "БЛОК" : data.executionStatus === "configuration_required" ? "НУЖНА НАСТРОЙКА" : "ОЖИДАНИЕ"}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <p className="node-description">{data.description}</p>
@@ -145,6 +145,7 @@ export default function App() {
       const status = telemetry.current_node === node.id ? "running"
         : traceStatus === "failed" ? "failed"
         : traceStatus === "blocked" ? "blocked"
+        : traceStatus === "configuration_required" ? "configuration_required"
         : traceStatus === "completed" || traceStatus === "ready" ? "completed"
         : telemetry.status === "running" ? "idle" : node.data.executionStatus || "idle";
       return { ...node, data: { ...node.data, executionStatus: status } };
