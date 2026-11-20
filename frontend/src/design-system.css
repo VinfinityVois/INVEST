@@ -285,3 +285,93 @@
 @media (prefers-reduced-motion:reduce) {
   .shell *, .shell *::before, .shell *::after { animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important; }
 }
+
+/* Domain panels and lifecycle states */
+.shell .palette-note,.shell .safe {
+  border:1px solid var(--accent-200);border-radius:4px;background:var(--soft-accent);color:var(--accent-text);
+}
+.shell[data-theme="dark"] .palette-note,.shell[data-theme="dark"] .safe { border-color:var(--gray-700); }
+.shell .palette-note span,.shell .safe p,.shell .safe b { color:var(--text-secondary); }
+.shell .finding-browser,.shell .finding-file-group,.shell .finding-history,.shell .finding-lifecycle-summary,
+.shell .run-diff-panel,.shell .security-trend-panel,.shell .run-compare-controls {
+  border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text-secondary);
+}
+.shell .finding-browser input,.shell .finding-browser select,.shell .finding-lifecycle select {
+  border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font:12px Inter,sans-serif;
+}
+.shell .finding-file-heading { background:var(--gray-50);border-color:var(--border);color:var(--text-secondary); }
+.shell[data-theme="dark"] .finding-file-heading { background:var(--gray-800); }
+.shell .finding-file-heading b,.shell .finding-file-heading span { color:var(--text-secondary); }
+.shell .finding-explanation,.shell .finding-remediation,.shell .finding-ai-explanation {
+  border:1px solid var(--border);border-left:2px solid var(--gray-400);border-radius:4px;background:var(--gray-50);
+}
+.shell[data-theme="dark"] .finding-explanation,.shell[data-theme="dark"] .finding-remediation,
+.shell[data-theme="dark"] .finding-ai-explanation { background:var(--gray-800); }
+.shell .finding-explanation> b,.shell .finding-remediation> b,.shell .finding-ai-explanation>div { color:var(--text-secondary); }
+.shell .finding-explanation p,.shell .finding-remediation p,.shell .finding-ai-explanation p,
+.shell .finding-ai-explanation>small { color:var(--text-secondary);font-size:12px;line-height:1.5; }
+.shell .finding-ai-explanation { border-left-color:var(--gray-500); }
+.shell .finding-ai-explanation>div span { color:var(--muted); }
+.shell .finding-identifiers span { border-color:var(--border);border-radius:2px;color:var(--text-secondary);font:10px "IBM Plex Mono"; }
+.shell .finding-location { color:var(--text-secondary)!important;font:11px "IBM Plex Mono"; }
+.shell .node-output-success,.shell .node-output-active,.shell .node-output-warning,.shell .node-output-danger {
+  background:var(--gray-50);border:1px solid var(--border);border-left:2px solid var(--gray-400);
+}
+.shell[data-theme="dark"] .node-output-success,.shell[data-theme="dark"] .node-output-active,
+.shell[data-theme="dark"] .node-output-warning,.shell[data-theme="dark"] .node-output-danger { background:var(--gray-800); }
+.shell .node-output-success { border-left-color:var(--accent-500); }
+.shell .node-output-active { border-left-color:var(--info); }
+.shell .node-output-warning { border-left-color:var(--warning); }
+.shell .node-output-danger { border-left-color:var(--danger); }
+.shell .node-output-success .node-output-heading,.shell .node-output-success .node-output-heading i { color:var(--accent-text); }
+.shell .node-output-active .node-output-heading,.shell .node-output-active .node-output-heading i { color:var(--info); }
+.shell .node-output-warning .node-output-heading,.shell .node-output-warning .node-output-heading i { color:var(--warning); }
+.shell .node-output-danger .node-output-heading,.shell .node-output-danger .node-output-heading i { color:var(--danger); }
+.shell .node-output>p,.shell .node-ai-note { color:var(--text-secondary); }
+.shell .node-output-heading i { background:var(--surface); }
+.shell .node-live-progress>div { color:var(--text-secondary); }
+.shell .node-severity { border-radius:2px; }
+.shell .security-trend-head>div:first-child>b,.shell .security-trend-latest>strong,
+.shell .security-trend-breakdown b { color:var(--text); }
+.shell .security-trend-head small,.shell .security-trend-latest>small,.shell .security-trend-breakdown span,
+.shell .security-trend-legend { color:var(--muted); }
+.shell .security-trend-chart line { stroke:var(--border); }
+.shell .security-trend-chart text { fill:var(--muted); }
+.shell .security-trend-chart polyline { stroke:var(--accent-600);filter:none; }
+.shell .security-trend-point circle { fill:var(--accent-500);stroke:var(--surface); }
+.shell .trend-gate-pass { color:var(--accent-600); }
+.shell .trend-gate-warn { color:var(--warning); }
+.shell .trend-gate-block { color:var(--danger); }
+.shell .run-diff-heading,.shell .run-diff-group>b { color:var(--text-secondary); }
+.shell .run-diff-stats>div,.shell .run-diff-group>div,.shell .run-cache-diff,
+.shell .run-source-stats>span,.shell .run-source-file-list {
+  border:1px solid var(--border);border-radius:4px;background:var(--gray-50);
+}
+.shell[data-theme="dark"] .run-diff-stats>div,.shell[data-theme="dark"] .run-diff-group>div,
+.shell[data-theme="dark"] .run-cache-diff,.shell[data-theme="dark"] .run-source-stats>span,
+.shell[data-theme="dark"] .run-source-file-list { background:var(--gray-800); }
+.shell .run-diff-stats b,.shell .run-source-stats strong,.shell .run-cache-diff b { color:var(--text); }
+.shell .run-diff-stats span,.shell .run-source-stats span,.shell .run-cache-diff span { color:var(--muted); }
+.shell .run-diff-warning { border-left-color:var(--warning);background:var(--warning-bg);color:var(--warning); }
+.shell .run-diff-group>div>span { color:var(--text-secondary); }
+.shell .run-diff-group code,.shell .run-source-file-list code { color:var(--text-secondary); }
+.shell .run-diff-group small,.shell .run-diff-footnote { color:var(--muted); }
+.shell .run-report-links button { color:var(--accent-text); }
+.shell .run-report-links button:hover { color:var(--accent-700); }
+.shell .trace-cache-hit { color:var(--accent-text)!important; }
+.shell .cache-telemetry-strip { border-color:var(--border);background:var(--soft-accent);color:var(--text-secondary); }
+.shell .cache-telemetry-strip b { color:var(--accent-text); }
+.shell .run-cache-summary { color:var(--accent-text)!important; }
+.shell .project-library-empty,.shell .empty-library { border-color:var(--border);border-radius:4px;color:var(--muted);font-size:11px; }
+.shell .project-library-item.project-active { border-color:var(--accent-500);background:var(--soft-accent); }
+.shell .project-library-copy b { color:var(--text); }
+.shell .project-library-copy small { color:var(--muted); }
+.shell .project-library-actions button { border-color:var(--border);border-radius:4px;background:var(--surface);color:var(--text-secondary); }
+.shell .project-library-actions .project-apply-button { border-color:var(--accent-500);background:var(--soft-accent);color:var(--accent-text); }
+.shell .project-library-actions .project-delete { color:var(--danger); }
+.shell .status-completed { color:var(--accent-text); }
+.shell .status-failed { color:var(--danger); }
+.shell .status-running,.shell .status-queued { color:var(--info); }
+.shell .security-gate-result.gate-pass { border-color:var(--accent-300); }
+.shell .security-gate-result.gate-warn { border-color:var(--warning); }
+.shell .security-gate-result.gate-block { border-color:var(--danger); }
