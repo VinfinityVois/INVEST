@@ -696,3 +696,18 @@
 .edge-flow-payload>b.edge-flow-unknown{color:#8b9eb0;font-size:8px;font-weight:400}
 .edge-flow-payload p,.edge-flow-empty{margin:0;color:#a9bacb;font-size:8px;line-height:1.5;overflow-wrap:anywhere}
 .edge-flow-empty{color:#8299ae}
+
+
+/* Ordered workflow execution trace */
+.execution-timeline{display:grid;gap:9px;margin:12px 0;padding:12px;border:1px solid rgba(105,151,192,.2);border-radius:7px;background:rgba(8,18,29,.58)}
+.execution-timeline-hint{margin:0;color:#8299ae;font-size:8px;line-height:1.5}
+.execution-timeline ol{display:grid;gap:5px;margin:0;padding:0;list-style:none}
+.trace-item{min-width:0}
+.trace-item-button{display:grid;width:100%;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px;border:1px solid rgba(103,137,168,.14);border-radius:5px;background:rgba(10,23,36,.72);color:inherit;text-align:left;cursor:pointer;transition:border-color .18s ease,background .18s ease}
+.trace-item-button:hover,.trace-item-button.is-selected{border-color:rgba(106,174,220,.52);background:rgba(27,53,75,.65)}
+.trace-index{display:grid;width:22px;height:22px;place-items:center;border-radius:4px;background:rgba(99,139,176,.13);color:#91b5d3;font:8px 'DM Mono'}
+.trace-main{display:grid;gap:3px;min-width:0}.trace-main>b{overflow:hidden;color:#c5d8e9;font:8px 'DM Mono';text-overflow:ellipsis;white-space:nowrap}
+.trace-main>small,.trace-meta>small{color:#7f99b1;font:7px 'DM Mono'}.trace-main>em{overflow:hidden;color:#d1a8a2;font-size:7px;font-style:normal;line-height:1.4;text-overflow:ellipsis}
+.trace-meta{display:grid;justify-items:end;gap:3px}.trace-meta>strong{color:#9bb8cf;font:6px 'DM Mono';letter-spacing:.3px}
+.trace-completed .trace-index{color:#8bd1b1;background:rgba(67,151,113,.14)}.trace-running .trace-index{color:#a6d9f2;background:rgba(69,145,190,.2)}.trace-failed .trace-index,.trace-blocked .trace-index{color:#e6a19b;background:rgba(171,75,69,.17)}.trace-skipped .trace-index{color:#9ba7b3;background:rgba(110,124,138,.13)}
+@media(prefers-reduced-motion:reduce){.trace-item-button{transition:none}}
