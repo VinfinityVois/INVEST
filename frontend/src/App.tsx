@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
-type Finding = { id?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string };
+type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string };
+type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
   finished_at?: string; duration_ms?: number | null; total_findings: number;
@@ -76,6 +77,8 @@ export default function App() {
   const [notice, setNotice] = useState("Подключение к API…");
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [findingStates, setFindingStates] = useState<Record<string, FindingLifecycle>>({});
+  const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
@@ -104,6 +107,18 @@ export default function App() {
       .then(response => response.ok ? response.json() : null)
       .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
       .catch(() => { if (active) setTelemetry(null); });
+    return () => { active = false; };
+  }, [workflowId]);
+
+  useEffect(() => {
+    if (!workflowId) { setFindingStates({}); return; }
+    let active = true;
+    fetch("/api/workflows/" + workflowId + "/finding-states")
+      .then(response => response.ok ? response.json() : [])
+      .then((rows: Array<FindingLifecycle & { fingerprint: string }>) => {
+        if (active) setFindingStates(Object.fromEntries(rows.map(row => [row.fingerprint, row])));
+      })
+      .catch(() => undefined);
     return () => { active = false; };
   }, [workflowId]);
 
@@ -273,6 +288,29 @@ export default function App() {
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
+  const updateFindingLifecycle = async (finding: Finding, state: FindingLifecycle["state"]) => {
+    if (!workflowId || !finding.fingerprint) return;
+    const reason = window.prompt("Причина изменения статуса уязвимости:", state === "open" ? "Повторная проверка" : "");
+    if (reason === null || !reason.trim()) return;
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state, reason: reason.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось изменить статус");
+      setFindingStates(current => ({ ...current, [finding.fingerprint!]: data }));
+      setResult("Статус уязвимости обновлён · " + state);
+    } catch (error) { setResult("Ошибка статуса уязвимости: " + String(error)); }
+  };
+  const loadFindingHistory = async (fingerprint: string) => {
+    if (!workflowId) return;
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
+      if (!response.ok) throw new Error("Не удалось загрузить историю");
+      setFindingHistory(current => ({ ...current, [fingerprint]: await response.json() }));
+    } catch (error) { setResult(String(error)); }
+  };
   const categories = ["Все", ...Array.from(new Set(manifests.map(item => item.category)))];
   const filtered = manifests.filter(item => (category === "Все" || item.category === category) && (item.title + " " + item.description + " " + item.type).toLowerCase().includes(search.toLowerCase()));
 
@@ -365,7 +403,17 @@ export default function App() {
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> :
-          findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}><div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div><small>{finding.path}{finding.line ? ":" + finding.line : ""}</small><p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>{finding.masked_value && <code>{finding.masked_value}</code>}</article>)}
+          findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}><div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div><small>{finding.path}{finding.line ? ":" + finding.line : ""}</small><p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>{finding.masked_value && <code>{finding.masked_value}</code>}
+            {finding.fingerprint && <div className="finding-lifecycle">
+              <label>Статус
+                <select value={findingStates[finding.fingerprint]?.state || "open"} onChange={event => void updateFindingLifecycle(finding, event.target.value as FindingLifecycle["state"])}>
+                  <option value="open">Открыта</option><option value="accepted_risk">Принятый риск</option><option value="fixed">Исправлена</option><option value="false_positive">Ложное срабатывание</option>
+                </select>
+              </label>
+              <button className="history-button" onClick={() => void loadFindingHistory(finding.fingerprint!)}>История</button>
+              {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
+            </div>}
+          </article>)}
         {showResult && <section className="result-section"><div className="result-title"><span>Последний ответ API</span><AlertTriangle size={13} /></div><pre>{result}</pre></section>}
         <div className="safe"><Shield size={16} /><div><b>Изолированный анализ</b><p>Проект не запускается. ZIP проверяется, Git ограничен allowlist. Секреты маскируются.</p></div></div>
         </>}
