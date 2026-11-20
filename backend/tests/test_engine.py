@@ -226,7 +226,7 @@ def test_ci_gate_blocks_workflow_on_critical_findings(tmp_path, monkeypatch):
     project = tmp_path / "sample"
     project.mkdir()
     monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
-    monkeypatch.setattr(engine, "scan_directory", lambda _path: [{
+    monkeypatch.setattr(engine, "scan_directory", lambda _path, **_kwargs: [{
         "fingerprint": "critical-1",
         "rule_id": "TEST_CRITICAL",
         "severity": "CRITICAL",
