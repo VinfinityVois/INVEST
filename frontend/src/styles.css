@@ -911,3 +911,17 @@
  .template-library-footer{padding:10px 15px}
  .actions .revision{display:none}
 }
+
+
+/* AI-assisted graph draft dialog */
+.ai-graph-dialog{width:min(720px,100%)}
+.ai-graph-form{display:grid;gap:10px;padding:20px 24px 22px}
+.ai-graph-form>label{color:#8da6bc;font:8px 'DM Mono';letter-spacing:.12em}
+.ai-graph-form textarea{width:100%;min-height:150px;resize:vertical;padding:13px;border:1px solid #314960;border-radius:6px;outline:0;background:#091421;color:#dce9f5;font:11px/1.65 Manrope,system-ui,sans-serif}
+.ai-graph-form textarea:focus{border-color:#5792cc;box-shadow:0 0 0 2px #3b82f615}
+.ai-graph-form textarea::placeholder{color:#647c92}
+.ai-graph-guidance{display:flex;justify-content:space-between;gap:12px;color:#71879b;font-size:8px}
+.ai-graph-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;padding-top:13px;border-top:1px solid rgba(75,104,132,.25)}
+.ai-graph-actions button{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:5px;font-size:9px}
+.ai-graph-actions .template-card-clone:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:760px){.ai-graph-form{padding:15px}.ai-graph-form textarea{min-height:135px}.ai-graph-guidance{flex-direction:column;gap:4px}}
