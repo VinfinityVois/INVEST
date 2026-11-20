@@ -224,8 +224,8 @@ export default function App() {
         <button className="run" disabled={busy} onClick={runWorkflow}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить"}</button>
       </div>
     </header>
-    <div className="layout">
-      <aside className="panel palette">
+    <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
+      <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>\n        {leftCollapsed ? <button className="collapsed-rail" onClick={() => setLeftCollapsed(false)} title="Развернуть библиотеку блоков" aria-label="Развернуть библиотеку блоков"><PanelLeftOpen size={17} /><span>БЛОКИ</span></button> : <>
         <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
         <p className="panel-intro">Добавляй компоненты на холст. Настройки, замена и удаление доступны в инспекторе выбранного блока.</p>
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
