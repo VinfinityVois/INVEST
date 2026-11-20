@@ -445,6 +445,8 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
         raise HTTPException(status_code=415, detail="Этот тип файла нельзя редактировать в браузере.")
     if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами доступны только для чтения.")
+    if len(payload.content.encode("utf-8")) > 1_000_000:
+        raise HTTPException(status_code=413, detail="Размер файла после UTF-8 кодирования превышает 1 MiB.")
     if not _project_content_is_safe(payload.content):
         raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
     with SessionLocal() as session:
