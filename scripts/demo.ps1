@@ -40,6 +40,22 @@ if ($run.result) {
     if ($result -is [string]) { $result = $result | ConvertFrom-Json }
     Write-Host "`nExecution trace:" -ForegroundColor Cyan
     $result.trace | Select-Object node_id, type, status, findings, reason | Format-Table -AutoSize
+    if ($result.security_gate) {
+        $gate = $result.security_gate
+        Write-Host ("Security Gate: {0}" -f $gate.decision) -ForegroundColor $(if ($gate.decision -eq "BLOCK") { "Red" } elseif ($gate.decision -eq "WARN") { "Yellow" } else { "Green" })
+        $gate.counts | Format-List
+        if ($gate.decision -eq "BLOCK") {
+            Write-Error "Security Gate blocked the demo workflow. Run ID: $runId"
+            exit 1
+        }
+        if ($gate.decision -notin @("PASS", "WARN")) {
+            Write-Error "Security Gate returned no valid decision. Run ID: $runId"
+            exit 1
+        }
+    } else {
+        Write-Error "Demo workflow completed without a Security Gate decision. Run ID: $runId"
+        exit 1
+    }
     if ($result.outputs.notify) {
         Write-Host "Webhook:" -ForegroundColor Cyan
         $result.outputs.notify | ConvertTo-Json -Depth 10
