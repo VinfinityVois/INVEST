@@ -23,6 +23,7 @@ type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
 type Telemetry = {
@@ -150,6 +151,8 @@ export default function App() {
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([]);
+  const [workflowVersions, setWorkflowVersions] = useState<WorkflowVersionSummary[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -265,6 +268,32 @@ export default function App() {
     if (!workflowId) { setWorkflowRuns([]); return; }
     void refreshWorkflowRuns(workflowId);
   }, [workflowId]);
+
+  useEffect(() => {
+    if (!workflowId) { setWorkflowVersions([]); return; }
+    void refreshWorkflowVersions(workflowId);
+  }, [workflowId]);
+
+  const refreshWorkflowVersions = async (id: string) => {
+    setVersionsLoading(true);
+    try {
+      const response = await fetch("/api/workflows/" + id + "/versions");
+      if (!response.ok) throw new Error("Не удалось загрузить версии workflow");
+      setWorkflowVersions(await response.json() as WorkflowVersionSummary[]);
+    } catch { setWorkflowVersions([]); }
+    finally { setVersionsLoading(false); }
+  };
+
+  const restoreWorkflowVersion = async (version: number) => {
+    if (!workflowId || !window.confirm("Восстановить версию " + version + "? Текущая конфигурация останется в истории.")) return;
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/versions/" + version + "/restore", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось восстановить версию");
+      setResult("Версия " + version + " восстановлена как новая версия " + data.version + ". Перезагрузите workflow, чтобы применить граф.");
+      await refreshWorkflowVersions(workflowId);
+    } catch (error) { setResult("Ошибка восстановления версии: " + String(error)); }
+  };
 
   const openHistoricalRun = async (run: WorkflowRunSummary) => {
     try {
@@ -1107,6 +1136,14 @@ export default function App() {
             <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
             <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>{["queued", "running", "cancelling"].includes(run.status) ? <button className="run-action-cancel" onClick={() => void cancelWorkflowRun(run)} disabled={run.status === "cancelling"}>{run.status === "cancelling" ? "ОТМЕНА…" : "ОТМЕНИТЬ"}</button> : ["completed", "partial", "failed", "cancelled"].includes(run.status) ? <button className="run-action-retry" onClick={() => void retryWorkflowRun(run)}>ПОВТОРИТЬ</button> : null}<div className="run-report-links"><a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
           </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
+        </section>
+        <section className="workflow-version-card">
+          <div className="run-history-heading"><div><span className="section-caption">CONFIGURATION HISTORY</span><b>Версии workflow</b></div><button onClick={() => workflowId && void refreshWorkflowVersions(workflowId)} disabled={!workflowId || versionsLoading}>{versionsLoading ? "ЗАГРУЗКА…" : "ОБНОВИТЬ"}</button></div>
+          {workflowVersions.length ? <div className="workflow-version-list">{workflowVersions.map(item => <div className="workflow-version-row" key={item.version}>
+            <div><b>V{item.version}</b><span>{item.name}</span><small>{formatDate(item.created_at)} · {item.node_count} блоков · {item.edge_count} связей</small></div>
+            {item.version !== workflowVersions[0].version && <button onClick={() => void restoreWorkflowVersion(item.version)}>ВОССТАНОВИТЬ</button>}
+            {item.version === workflowVersions[0].version && <em>ТЕКУЩАЯ</em>}
+          </div>)}</div> : <p className="run-history-empty">{versionsLoading ? "Загружаем версии…" : "Сохранённые версии появятся здесь."}</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length > 0 && <div className="finding-browser">
