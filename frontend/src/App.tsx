@@ -340,6 +340,7 @@ export default function App() {
       await refreshProjects();
       if (activeProject?.id === data.id) {
         setActiveProject(data);
+        setProjectVisualPreview(null);
         const filesResponse = await fetch(`/api/projects/${data.id}/files`);
         if (filesResponse.ok) {
           const updatedFiles = ((await filesResponse.json()).files || []) as ProjectFile[];
@@ -367,6 +368,7 @@ export default function App() {
       setActiveProject(data.project || project);
       setProjectFiles(data.files || []);
       setProjectFilePreview(null);
+      setProjectVisualPreview(null);
       setProjectHistoryOpen(false);
       const historyResponse = await fetch(`/api/projects/${project.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
@@ -409,7 +411,7 @@ export default function App() {
           label: "Project source", description: "Выбери ZIP из библиотеки или настрой Git-источник.", config: {},
           executionStatus: "idle", executionDetail: "", executionNotes: [], executionSeverity: undefined,
         });
-        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectHistory([]); setProjectHistoryOpen(false); setProjectWorkspaceOpen(false);
+        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectVisualPreview(null); setProjectHistory([]); setProjectHistoryOpen(false); setProjectWorkspaceOpen(false);
       }
       setResult("Проект удалён · " + project.name);
     } catch (error) { setResult("Ошибка удаления: " + String(error)); }
