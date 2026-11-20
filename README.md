@@ -98,3 +98,20 @@ each finding card in the editor.
 Security findings include a concise root-cause explanation (`why_it_matters`), a remediation recommendation, CWE/CVE identifiers where available, and a short source excerpt with the affected line highlighted. Source excerpts are path-confined to the scanned workspace, size-limited, and redact common credential assignments, bearer values, and known token formats before they are returned to the UI. Secret scanner values remain masked.
 
 The editor shows live workflow node states and an execution timeline from persisted worker events. Secrets, SCA, and SAST scanners report file-level progress (files scanned / total and current relative path); this is real scanner progress, not a simulated animation. Findings can expand an inline source preview with line numbers.
+
+
+## AI Explanation Gateway
+
+The optional `ai.explain` node calls an OpenAI-compatible `/chat/completions` endpoint.
+Configure `LLM_BASE_URL`, `LLM_MODEL`, and `LLM_API_KEY` in the root `.env`
+file (the worker reads the same environment). Remote endpoints must use HTTPS;
+localhost is allowed for local development. No API key is stored in a workflow graph.
+
+The gateway receives only an allowlisted subset of finding fields and redacted code
+context; masked values, secret hashes, and raw secret fields are excluded. The model
+may explain impact and remediation but cannot add findings, change severity, or
+replace scanner decisions. Returned explanations are matched to known fingerprints,
+validated, persisted with findings, and displayed separately from deterministic
+scanner explanations. If the provider is not configured, the node reports
+`configuration_required` and the workflow remains partial rather than silently
+pretending that AI analysis ran.
