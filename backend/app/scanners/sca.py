@@ -457,8 +457,8 @@ def _maven_properties(pom, inherited=None):
     for key, name in (("groupId", "project.groupId"), ("artifactId", "project.artifactId"), ("version", "project.version")):
         value = _maven_text(pom, key)
         if value:
-            values.setdefault(name, value)
-            values.setdefault("pom." + key, value)
+            values[name] = value
+            values["pom." + key] = value
     return values
 
 
