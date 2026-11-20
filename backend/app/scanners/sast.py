@@ -184,19 +184,23 @@ def _scan_idor(files: dict[str, str]) -> list[dict]:
                 break
     return findings
 
-def scan_kotlin_project(root: str | Path) -> list[dict]:
+def scan_kotlin_project(root: str | Path, on_progress=None) -> list[dict]:
     project = Path(root).resolve()
+    candidates = [
+        path for path in project.rglob("*.kt")
+        if not any(part in SKIP_DIRS for part in path.parts) and not path.is_symlink()
+    ][:MAX_FILES]
     files: dict[str, str] = {}
-    count = 0
-    for path in project.rglob("*.kt"):
-        if any(part in SKIP_DIRS for part in path.parts) or path.is_symlink():
-            continue
-        count += 1
-        if count > MAX_FILES:
-            break
+    total_files = len(candidates)
+    for count, path in enumerate(candidates, 1):
         text = _read_kotlin(path)
         if text is not None:
             files[path.relative_to(project).as_posix()] = text
+        if on_progress:
+            try:
+                on_progress({"files_scanned": count, "total_files": total_files, "current_file": path.relative_to(project).as_posix()})
+            except Exception:
+                pass
 
     findings = []
     for path, text in files.items():
