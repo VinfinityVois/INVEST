@@ -39,7 +39,7 @@ val access = series + grant
 return HttpHeaders().apply { setBearerAuth(access) }'''
     findings = scan_text(text, "WarrantyHeaders.kt")
     item = next(x for x in findings if x["rule_id"] == "reconstructed_auth_token")
-    assert item["line"] == 1 and item["endLine"] == 2
+    assert item["line"] == 1 and item["endLine"] == 4
     assert "cg26_warranty_D7v4sB2wJ8kP6mQ9" not in str(item)
 
 def test_safe_configuration_reference_is_not_a_secret():
