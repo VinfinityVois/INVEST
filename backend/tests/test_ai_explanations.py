@@ -272,3 +272,50 @@ def test_gateway_rejects_credentials_embedded_in_base_url(monkeypatch):
     assert result["status"] == "failed"
     assert "не должен содержать логин" in result["message"]
     assert "secret" not in result["message"]
+
+
+def test_gateway_returns_safe_provider_request_diagnostics(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "never-expose-this")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            return FakeResponse({"error": "response_format unsupported"}, status_code=400)
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "abc", "root_cause": "Cause", "impact": "Impact",
+                "recommendation": "Fix", "confidence": 0.8, "evidence_limits": ""
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert result["provider"] == "openai-compatible"
+    assert result["provider_attempts"] == 2
+    assert result["provider_http_status"] == 200
+    assert result["provider_error_code"] is None
+    assert result["provider_request_ms"] >= 0
+    assert "never-expose-this" not in json.dumps(result)
+
+
+def test_gateway_returns_machine_readable_provider_failure(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "never-expose-this")
+
+    def fake_post(url, **kwargs):
+        request = httpx.Request("POST", url)
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError("provider rate limit", request=request, response=response)
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert result["provider_error_code"] == "PROVIDER_HTTP_429"
+    assert result["provider_http_status"] == 429
+    assert result["provider_attempts"] == 1
+    assert "never-expose-this" not in json.dumps(result)
