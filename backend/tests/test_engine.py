@@ -322,3 +322,28 @@ def test_ci_gate_blocks_workflow_on_critical_findings(tmp_path, monkeypatch):
     assert result["outputs"]["gate"]["counts"]["CRITICAL"] == 1
     assert progress[-1]["node_results"]["scan"]["severity"]["CRITICAL"] == 1
     assert progress[-1]["node_results"]["merge"]["severity"]["CRITICAL"] == 1
+
+
+def test_engine_trace_contains_actionable_diagnostics_for_blocked_and_unconfigured_nodes():
+    graph = WorkflowGraph(
+        name="Diagnostics",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+    trace = {item["node_id"]: item for item in result["trace"]}
+
+    assert trace["source"]["diagnostic_level"] == "warning"
+    assert trace["source"]["reason_code"] == "NODE_CONFIGURATION_REQUIRED"
+    assert trace["source"]["reason"] == result["outputs"]["source"]["message"]
+    assert trace["scan"]["diagnostic_level"] == "blocked"
+    assert trace["scan"]["reason_code"] == "UPSTREAM_SOURCE_UNAVAILABLE"
+    assert trace["scan"]["reason"] == result["outputs"]["scan"]["message"]
