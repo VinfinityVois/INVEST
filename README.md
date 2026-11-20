@@ -70,6 +70,33 @@ WORKSPACE_ROOT=/workspace
 ALLOWED_TARGETS=https://github.com/example/training
 ```
 
+
+## Демонстрационный сценарий: учебный Kotlin-проект
+
+Для воспроизводимого показа используйте публичный учебный репозиторий [TBagirov/training](https://github.com/TBagirov/training), зафиксированный CI на commit \`fe1fcbe212669783480666b9b60147c8a8c6eef4\`. Это специально подготовленный учебный стенд, а не production-цель. Добавьте точный URL в корневой \`.env\`:
+
+\`\`\`env
+ALLOWED_TARGETS=https://github.com/TBagirov/training
+NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
+\`\`\`
+
+Путь демонстрационного Kotlin/Spring-проекта внутри репозитория: \`training-project/\`. Создайте workflow с цепочкой:
+
+\`Manual trigger → Git repository → Secrets scanner / Dependency scanner / Kotlin SAST → Merge findings → AI explanation → Webhook\`
+
+Для Git source задайте URL репозитория и ref \`fe1fcbe212669783480666b9b60147c8a8c6eef4\`. Репозиторий сканируется как данные; Gradle и приложение не запускаются. В репозитории также есть ground-truth и benchmark-файлы — для формальной оценки используйте команды из \`eval/README.md\`, которые направляют сканеры непосредственно на \`training-project/\`.
+
+После добавления workflow сохраните его, создайте уникальный endpoint на [webhook.site](https://webhook.site/), укажите полный HTTPS URL в настройках Webhook-ноды и нажмите «Запустить всё». В webhook.site должен прийти JSON с количеством находок, распределением severity, первыми десятью находками и краткими AI-объяснениями. Содержимое исходного кода, code context, masked values и ключи API в уведомление не включаются.
+
+### Настройка Webhook
+
+- В \`.env\` задаётся \`NOTIFY_WEBHOOK_ALLOWED_HOSTS\` — точный список разрешённых DNS-hostname через запятую; по умолчанию разрешён только \`webhook.site\`.
+- Нода принимает только HTTPS на порту 443, без credentials, query и fragment.
+- DNS-адреса проверяются на публичную маршрутизируемость; redirects запрещены, proxy из окружения не используется.
+- Таймаут доставки — 10 секунд. Ошибка доставки помечает ноду и запуск как failed; незаданный URL отображается как configuration required.
+- В payload попадают только ограниченные поля находок и AI summary. Секретоподобные значения и фрагменты исходников не передаются.
+
+
 ## Текущий статус
 
 Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, Gradle и Maven SCA-анализаторы с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, устойчивая очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач.
