@@ -91,7 +91,8 @@ def clone_allowed_repository(
         "--no-tags",
         "--no-recurse-submodules",
     ]
-    if safe_ref:
+    pinned_commit = bool(safe_ref and re.fullmatch(r"[0-9a-fA-F]{40}", safe_ref))
+    if safe_ref and not pinned_commit:
         args.extend(["--branch", safe_ref])
     args.extend([canonical_url, str(destination)])
 
@@ -123,6 +124,23 @@ def clone_allowed_repository(
             raise GitSourceError(f"Git clone failed: {detail}")
         if not destination.is_dir() or not (destination / ".git").is_dir():
             raise GitSourceError("Git did not create the expected repository directory")
+        if pinned_commit:
+            fetch_args = [
+                "git", "-c", f"core.hooksPath={disabled_hooks}",
+                "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=" ,
+                "fetch", "--depth", "1", "origin", safe_ref,
+            ]
+            fetched = subprocess.run(fetch_args, cwd=destination, env=env, capture_output=True, text=True, timeout=120, check=False)
+            if fetched.returncode != 0:
+                detail = (fetched.stderr or fetched.stdout or "Pinned commit fetch failed")[-500:]
+                raise GitSourceError(f"Git pinned commit fetch failed: {detail}")
+            checkout = subprocess.run(
+                ["git", "-c", f"core.hooksPath={disabled_hooks}", "checkout", "--detach", "FETCH_HEAD"],
+                cwd=destination, env=env, capture_output=True, text=True, timeout=120, check=False,
+            )
+            if checkout.returncode != 0:
+                detail = (checkout.stderr or checkout.stdout or "Pinned commit checkout failed")[-500:]
+                raise GitSourceError(f"Git pinned commit checkout failed: {detail}")
         return {
             "path": destination.name,
             "source": "git",
