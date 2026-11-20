@@ -167,6 +167,24 @@ def _project_content_is_safe(content: str) -> bool:
     return all(_redact(line) == line and not assignment.search(line) for line in content.splitlines())
 
 
+PROJECT_EXPORT_TEXT_SUFFIXES = {
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
+    ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml",
+    ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1",
+}
+
+
+def _project_export_file_is_safe(relative: PurePosixPath, size: int, content: str | None = None) -> bool:
+    if _project_path_is_sensitive(relative) or size < 0 or size > 512 * 1024 * 1024:
+        return False
+    if relative.suffix.lower() in PROJECT_EXPORT_TEXT_SUFFIXES:
+        # Large text files are omitted rather than exported without a complete secret scan.
+        if size > 1_000_000 or content is None:
+            return False
+        return _project_content_is_safe(content)
+    return True
+
+
 def _project_file_snapshot(root: Path) -> dict[str, dict[str, int | str]]:
     """Build a bounded, content-addressed manifest for safe project files."""
     manifest: dict[str, dict[str, int | str]] = {}
@@ -441,11 +459,6 @@ def preview_project_file(
 @app.get("/api/projects/{project_id}/download")
 def download_project_archive(project_id: UUID):
     """Export a project without VCS metadata, symlinks, or likely credentials."""
-    text_suffixes = {
-        ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
-        ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml",
-        ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1",
-    }
     max_archive_bytes = 1024 * 1024 * 1024
     temporary_path = None
     with SessionLocal() as session:
@@ -472,24 +485,19 @@ def download_project_archive(project_id: UUID):
                         if source.is_symlink():
                             continue
                         relative = PurePosixPath(source.relative_to(root).as_posix())
-                        if _project_path_is_sensitive(relative):
-                            skipped_sensitive += 1
-                            continue
                         try:
                             if not source.is_file():
                                 continue
                             size = source.stat().st_size
-                            if size > 512 * 1024 * 1024:
-                                skipped_sensitive += 1
-                                continue
-                            if relative.suffix.lower() in text_suffixes and size <= 1_000_000:
+                            content = None
+                            if relative.suffix.lower() in PROJECT_EXPORT_TEXT_SUFFIXES and size <= 1_000_000:
                                 try:
                                     content = source.read_text(encoding="utf-8")
                                 except (UnicodeDecodeError, OSError):
                                     content = None
-                                if content is not None and not _project_content_is_safe(content):
-                                    skipped_sensitive += 1
-                                    continue
+                            if not _project_export_file_is_safe(relative, size, content):
+                                skipped_sensitive += 1
+                                continue
                             archive.write(source, arcname=relative.as_posix())
                             included += 1
                             if os.path.getsize(temporary_path) > max_archive_bytes:
