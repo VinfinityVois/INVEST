@@ -4,6 +4,7 @@ import shutil
 import re
 import os
 import hashlib
+import tempfile
 from pathlib import Path, PurePosixPath
 from datetime import datetime, timezone
 from typing import Literal
@@ -373,6 +374,11 @@ def list_project_files(project_id: UUID):
         return {"project": _project_payload(project), "files": sorted(files, key=lambda item: item["path"].lower()), "truncated": len(files) >= 10000}
 
 
+
+class ProjectFileUpdate(BaseModel):
+    content: str = Field(max_length=1_000_000)
+
+
 @app.get("/api/projects/{project_id}/file")
 def preview_project_file(
     project_id: UUID,
@@ -401,6 +407,9 @@ def preview_project_file(
         except (OSError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=404, detail="Файл недоступен для текстового просмотра (лимит 1 MiB).") from exc
         lines = content.splitlines()
+        safe_name = not any(token in relative.name.lower() for token in ("secret", "credential", "password", "token", "private", ".env"))
+        editable_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
+        editable = safe_name and relative.suffix.lower() in editable_suffixes and all(_redact(line) == line for line in lines)
         first = min(start_line, max(1, len(lines)))
         last = min(len(lines), first + 299)
         return {
@@ -408,8 +417,99 @@ def preview_project_file(
             "start_line": first,
             "end_line": last,
             "total_lines": len(lines),
+            "editable": editable,
+            "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
         }
+
+
+@app.put("/api/projects/{project_id}/file")
+def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str = Query(min_length=1, max_length=1000)):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if relative.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}:
+        raise HTTPException(status_code=415, detail="Этот тип файла нельзя редактировать в браузере.")
+    if any(token in relative.name.lower() for token in ("secret", "credential", "password", "token", "private", ".env")):
+        raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами доступны только для чтения.")
+    if any(_redact(line) != line for line in payload.content.splitlines()):
+        raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if _project_has_active_run(session, project):
+            raise HTTPException(status_code=409, detail="Проект используется активным workflow; редактирование временно заблокировано.")
+        root = _project_root(project)
+        candidate = root.joinpath(*relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                raise OSError("File is unavailable or too large")
+            original = resolved.read_text(encoding="utf-8")
+            if any(_redact(line) != line for line in original.splitlines()):
+                raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
+            temp_name = None
+            try:
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
+                    temp_name = temporary.name
+                    temporary.write(payload.content)
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                os.replace(temp_name, resolved)
+            finally:
+                if temp_name and os.path.exists(temp_name):
+                    os.unlink(temp_name)
+        except HTTPException:
+            raise
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="Не удалось сохранить файл. Проверь размер и кодировку UTF-8.") from exc
+        session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
+            "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))
+        }))
+        session.commit()
+    return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
+
+
+@app.get("/api/projects/{project_id}/search")
+def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_length=100)):
+    needle = q.casefold()
+    text_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
+    results = []
+    scanned = 0
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        for current, directories, filenames in os.walk(root, followlinks=False):
+            directories[:] = [name for name in directories if name != ".git" and not (Path(current) / name).is_symlink()]
+            for filename in filenames:
+                if scanned >= 3000 or len(results) >= 100:
+                    break
+                item = Path(current) / filename
+                if item.is_symlink() or item.suffix.lower() not in text_suffixes or any(token in filename.lower() for token in ("secret", "credential", "password", "token", "private", ".env")):
+                    continue
+                try:
+                    if item.stat().st_size > 512_000:
+                        continue
+                    content = item.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                scanned += 1
+                for number, line in enumerate(content.splitlines(), 1):
+                    if needle in line.casefold() and _redact(line) == line:
+                        results.append({"path": item.relative_to(root).as_posix(), "line": number, "text": line.strip()[:240]})
+                        if len(results) >= 100:
+                            break
+            if scanned >= 3000 or len(results) >= 100:
+                break
+    return {"results": results, "scanned_files": scanned, "truncated": len(results) >= 100 or scanned >= 3000}
 
 
 @app.get("/api/node-types")
