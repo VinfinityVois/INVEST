@@ -1046,6 +1046,51 @@ def list_workflow_runs(workflow_id: UUID):
             for run in rows
         ]
 
+@app.get("/api/workflows/{workflow_id}/security-trend")
+def workflow_security_trend(
+    workflow_id: UUID,
+    limit: int = Query(default=20, ge=2, le=100),
+):
+    """Return a bounded chronological security trend for the workflow."""
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        rows = session.scalars(
+            select(WorkflowRun)
+            .where(WorkflowRun.workflow_id == workflow_id)
+            .where(WorkflowRun.status.in_(["completed", "partial", "failed", "cancelled"]))
+            .order_by(WorkflowRun.queued_at.desc())
+            .limit(limit)
+        ).all()
+        points = []
+        for run in reversed(rows):
+            telemetry = _run_telemetry(session, run)
+            points.append({
+                "run_id": str(run.id),
+                "status": run.status,
+                "queued_at": run.queued_at,
+                "finished_at": run.finished_at,
+                "duration_ms": telemetry.get("duration_ms"),
+                "total_findings": telemetry.get("total_findings", 0),
+                "severity": telemetry.get("severity", {}),
+                "security_gate": telemetry.get("security_gate"),
+            })
+        return {
+            "workflow_id": str(workflow_id),
+            "limit": limit,
+            "points": points,
+            "summary": {
+                "runs": len(points),
+                "latest_findings": points[-1]["total_findings"] if points else 0,
+                "previous_findings": points[-2]["total_findings"] if len(points) > 1 else None,
+                "delta": (
+                    points[-1]["total_findings"] - points[-2]["total_findings"]
+                    if len(points) > 1 else None
+                ),
+            },
+        }
+
+
 
 def _compare_run_snapshots(before: dict, after: dict) -> dict:
     """Compare two completed scan snapshots without treating partial absence as a fix."""
