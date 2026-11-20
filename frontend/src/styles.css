@@ -478,3 +478,23 @@
 .project-file-row.project-folder-row span{font-size:8px}
 .project-file-row.project-folder-row small{color:#6f8aa4;font-size:7px}
 @media(prefers-reduced-motion:reduce){.project-tree-chevron{transition:none}}
+
+
+.project-content-search{margin:8px 0 10px;padding:8px;border:1px solid #263d54;border-radius:5px;background:#0a1725}
+.project-content-search>.section-caption{margin-bottom:6px}
+.project-content-search>div:last-child{height:29px;display:flex;align-items:center;gap:6px;color:#7893ae}
+.project-content-search input{width:100%;min-width:0;flex:1;border:0;outline:0;background:transparent;color:#c7d8e8;font:8px 'DM Mono'}
+.project-content-search input::placeholder{color:#61788f}
+.project-content-search button{height:23px;padding:0 8px;border:1px solid #365573;border-radius:3px;background:#132940;color:#a9c8e5;font:7px 'DM Mono';cursor:pointer}
+.project-content-search button:disabled{opacity:.4;cursor:not-allowed}
+.project-content-results{max-height:190px;overflow:auto;margin:0 0 10px;border:1px solid #29415a;border-radius:4px;background:#091522}
+.project-content-results>button{width:100%;display:flex;flex-direction:column;gap:4px;padding:7px 8px;border:0;border-bottom:1px solid #1d3044;background:transparent;text-align:left;cursor:pointer}
+.project-content-results>button:hover{background:#14283c}
+.project-content-results b{color:#91b8dc;font:7px 'DM Mono'}
+.project-content-results span{overflow:hidden;color:#91a6bc;font:7px 'DM Mono';text-overflow:ellipsis;white-space:nowrap}
+.project-file-tools{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.project-file-tools>button{height:24px;display:flex;align-items:center;gap:5px;padding:0 8px;border:1px solid #314c67;border-radius:3px;background:#102237;color:#a9c4dd;font:7px 'DM Mono';cursor:pointer}
+.project-file-tools>button:hover{border-color:#5a83aa;background:#17304a}
+.project-file-tools>button.save{border-color:#38785e;background:#102b25;color:#8ce0b4}
+.project-file-tools>button:disabled{opacity:.5;cursor:wait}
+.project-code-editor{flex:1;width:100%;min-height:0;resize:none;padding:14px 16px;border:0;outline:0;background:#080e17;color:#c6d5e5;font:9px/1.7 'DM Mono';tab-size:4;white-space:pre;overflow:auto}
