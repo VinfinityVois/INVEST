@@ -669,3 +669,25 @@ def test_maven_empty_parent_relative_path_disables_local_parent_lookup(tmp_path)
     )
 
     assert scan_maven_project(project / "module") == []
+
+
+def test_maven_profiles_activate_from_mvn_user_properties(tmp_path):
+    project = tmp_path / "project"
+    (project / ".mvn").mkdir(parents=True)
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId>"
+        "<profiles>"
+        "<profile><id>default-vulnerable</id><activation><activeByDefault>true</activeByDefault></activation>"
+        "<dependencies><dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId>"
+        "<version>2.8.8</version></dependency></dependencies></profile>"
+        "<profile><id>property-vulnerable</id><activation><property><name>env</name><value>prod</value>"
+        "</property></activation><dependencies><dependency><groupId>com.fasterxml.jackson.core</groupId>"
+        "<artifactId>jackson-databind</artifactId><version>2.9.10.3</version></dependency></dependencies></profile>"
+        "</profiles></project>",
+        encoding="utf-8",
+    )
+    (project / ".mvn" / "maven.config").write_text("-Denv=prod\n", encoding="utf-8")
+
+    findings = scan_maven_project(project)
+
+    assert {item["artifact"] for item in findings} == {"jackson-databind"}
