@@ -31,6 +31,8 @@ type SecurityTrend = {
   summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
 };
 type RunComparison = {
+  cache_comparison?: { before_hits: number; after_hits: number; delta_hits: number; before_scanners: number; after_scanners: number };
+  scanner_comparison?: Array<{ node_id: string; type: string; before_present: boolean; after_present: boolean; before_cached: boolean | null; after_cached: boolean | null; before_cache_age_seconds?: number | null; after_cache_age_seconds?: number | null; source_changed: boolean | null; before_findings: number; after_findings: number; added_findings: number; removed_findings: number }>;
   from_run: { id: string; status: string; finished_at?: string | null };
   to_run: { id: string; status: string; finished_at?: string | null };
   findings: {
@@ -1275,6 +1277,20 @@ export default function App() {
               <div><b>{runComparison.findings.summary.not_observed}</b><span>НЕ ПРОВЕРЕНЫ</span></div>
               <div><b>{runComparison.summary.changed_nodes}</b><span>ИЗМЕНЕНИЯ БЛОКОВ</span></div>
             </div>
+            {runComparison.cache_comparison && <div className="run-cache-diff">
+              <div><span>ПОПАДАНИЯ В КЭШ</span><b>{runComparison.cache_comparison.before_hits} → {runComparison.cache_comparison.after_hits}</b><small>{runComparison.cache_comparison.delta_hits > 0 ? "+" : ""}{runComparison.cache_comparison.delta_hits} к предыдущему запуску</small></div>
+              <div><span>СКАНЕРОВ</span><b>{runComparison.cache_comparison.before_scanners} → {runComparison.cache_comparison.after_scanners}</b><small>сопоставление по ID блока</small></div>
+            </div>}
+            {runComparison.scanner_comparison && runComparison.scanner_comparison.length > 0 && <div className="run-diff-group run-scanner-diff">
+              <b>СКАНЕРЫ · КЭШ И ИЗМЕНЕНИЯ НАХОДОК</b>
+              {runComparison.scanner_comparison.map(item => <div key={item.node_id}>
+                <code>{item.node_id}</code>
+                <span>{item.before_cached == null ? "—" : item.before_cached ? "КЭШ" : "НОВЫЙ СКАН"} → {item.after_cached == null ? "—" : item.after_cached ? "КЭШ" : "НОВЫЙ СКАН"}</span>
+                <small>Находки: {item.before_findings} → {item.after_findings} · +{item.added_findings} / −{item.removed_findings}{item.source_changed === true ? " · исходники изменились" : item.source_changed === false ? " · исходники без изменений" : ""}</small>
+                <i>{item.after_cache_age_seconds != null ? "возраст кэша: " + Math.round(item.after_cache_age_seconds / 60) + " мин" : item.after_present ? "без повторного использования кэша" : "нет в новом запуске"}</i>
+              </div>)}
+              <small className="run-diff-footnote">Добавленные и отсутствующие находки сравниваются по fingerprint внутри каждого сканера; отсутствие в частичном запуске не считается исправлением.</small>
+            </div>}
             {!runComparison.limitations.absence_confirmed && <p className="run-diff-warning">{runComparison.limitations.note || "Часть результатов нельзя считать подтверждённо исчезнувшими."}</p>}
             {(runComparison.limitations.before_findings_truncated || runComparison.limitations.after_findings_truncated) && <p className="run-diff-warning">Один из отчётов содержит более 5000 находок: сравнение ограничено сохранённой выборкой.</p>}
             {(["new", "not_observed_before", "persisting", "disappeared", "not_observed"] as const).map(kind => runComparison.findings[kind].length > 0 && <div className="run-diff-group" key={kind}>
