@@ -15,6 +15,8 @@
 
 ```bash
 cp .env.example .env
+# Generate a 256-bit key and paste it into MASTER_KEY_HEX in .env:
+python -c "import secrets; print(secrets.token_hex(32))"
 docker compose up --build
 ```
 
@@ -24,7 +26,7 @@ Health: http://localhost:8000/health
 
 ## Текущий статус
 
-Начальная реализация P0. Доступны типизированный реестр нод, проверка графа, базовый executor и API для валидации/запуска. Анализаторы подключаются отдельными нодами и не исполняют код проверяемого репозитория.
+Начальная реализация P0. Доступны редактор React Flow, реестр нод, проверка типизированных связей и циклов, базовый topological executor, сохранение workflow с версиями и первая собственная проверка секретов как отдельный модуль. SCA/SAST, постоянная очередь worker, SSE и AI-объяснения находятся в разработке.
 
 ## Принципы безопасности
 
