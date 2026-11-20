@@ -40,7 +40,7 @@ const categoryMeta: Record<string, { label: string; tone: string }> = {
 };
 const seedNodes: FlowNode[] = [
   { id: "trigger", type: "workflow", position: { x: 70, y: 190 }, data: { label: "Manual trigger", nodeType: "trigger.manual", category: "Trigger", description: "Ручной запуск проверки по кнопке «Запустить».", config: {} } },
-  { id: "source", type: "workflow", position: { x: 300, y: 190 }, data: { label: "Workspace source", nodeType: "source.upload", category: "Source", description: "Передаёт сканерам каталог проекта из безопасного workspace.", config: { path: "sample" } } },
+  { id: "source", type: "workflow", position: { x: 300, y: 190 }, data: { label: "Project source", nodeType: "source.upload", category: "Source", description: "Выбери ZIP-архив или Git-репозиторий. Пока источник не задан, сканеры не запускаются.", config: {} } },
   { id: "secrets", type: "workflow", position: { x: 550, y: 100 }, data: { label: "Secrets scanner", nodeType: "scan.secrets", category: "Security", description: "Ищет токены, ключи и другие потенциально раскрытые секреты.", config: {} } },
   { id: "sca", type: "workflow", position: { x: 550, y: 285 }, data: { label: "Dependency scanner", nodeType: "scan.sca", category: "Security", description: "Проверяет Gradle-зависимости по локальному advisory snapshot.", config: {} } },
   { id: "sast", type: "workflow", position: { x: 550, y: 470 }, data: { label: "Kotlin SAST", nodeType: "scan.sast", category: "Security", description: "Статически анализирует Kotlin/Spring-код на поддерживаемые классы проблем.", config: {} } },
@@ -49,15 +49,15 @@ const seedNodes: FlowNode[] = [
   { id: "ai-explain", type: "workflow", position: { x: 1120, y: 70 }, data: { label: "AI explanation", nodeType: "ai.explain", category: "AI", description: "Объясняет подтверждённые находки: причина, влияние и рекомендации. Требует LLM-настройки в корневом .env.", config: { language: "ru", max_findings: 20 } } },
 ];
 const seedEdges: Edge[] = [
-  { id: "e1", source: "trigger", target: "source", animated: true, label: "запуск" },
-  { id: "e2", source: "source", target: "secrets", animated: true },
-  { id: "e3", source: "source", target: "sca", animated: true },
-  { id: "e4", source: "source", target: "sast", animated: true },
-  { id: "e5", source: "secrets", target: "merge", animated: true },
-  { id: "e6", source: "sca", target: "merge", animated: true },
-  { id: "e7", source: "sast", target: "merge", animated: true },
-  { id: "e8", source: "merge", target: "gate", animated: true, label: "policy" },
-  { id: "e9", source: "merge", target: "ai-explain", animated: true, label: "объяснение" },
+  { id: "e1", source: "trigger", target: "source", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 }, label: "запуск" },
+  { id: "e2", source: "source", target: "secrets", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e3", source: "source", target: "sca", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e4", source: "source", target: "sast", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e5", source: "secrets", target: "merge", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e6", source: "sca", target: "merge", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e7", source: "sast", target: "merge", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } },
+  { id: "e8", source: "merge", target: "gate", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 }, label: "policy" },
+  { id: "e9", source: "merge", target: "ai-explain", type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 }, label: "объяснение" },
 ];
 
 function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
@@ -295,7 +295,7 @@ export default function App() {
       setResult("Задание поставлено в очередь · " + queued.run_id);
       setLastRunId(queued.run_id); window.localStorage.setItem("invest.lastRunId", queued.run_id);
 
-      const completed = await new Promise<Telemetry>((resolve, reject) => {
+      setTelemetry({ status: "queued", total_findings: 0, severity: {}, scanners: [], completed_nodes: 0, total_nodes: nodes.length });\n      const completed = await new Promise<Telemetry>((resolve, reject) => {
         const stream = new EventSource("/api/runs/" + queued.run_id + "/events");
         let settled = false;
         let fallbackStarted = false;
