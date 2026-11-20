@@ -1,8 +1,11 @@
 import json
 import time
+import shutil
+import re
+from pathlib import Path, PurePosixPath
 from datetime import datetime, timezone
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -16,11 +19,23 @@ from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, Workflow, WorkflowRun, WorkflowVersion
+from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import execute_graph, WorkflowExecutionError
+
+class ProjectRename(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Название проекта не может быть пустым.")
+        return value
+
 
 class FindingStateUpdate(BaseModel):
     state: Literal["open", "accepted_risk", "fixed", "false_positive"]
@@ -75,6 +90,232 @@ def upload_source(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail="Не удалось сохранить архив в рабочую директорию.") from exc
+
+
+
+def _project_root(project: Project) -> Path:
+    workspace = Path(settings.workspace_root).resolve()
+    relative = PurePosixPath(project.workspace_path)
+    if (
+        relative.is_absolute()
+        or len(relative.parts) != 2
+        or relative.parts[0] != "projects"
+        or not relative.parts[1].startswith("project-")
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise HTTPException(status_code=500, detail="Invalid project workspace reference")
+    root = workspace.joinpath(*relative.parts)
+    if root.is_symlink():
+        raise HTTPException(status_code=404, detail="Project files are unavailable")
+    try:
+        resolved = root.resolve(strict=True)
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Project files are unavailable") from exc
+    if not resolved.is_relative_to(workspace) or not resolved.is_dir():
+        raise HTTPException(status_code=404, detail="Project files are unavailable")
+    return resolved
+
+
+def _project_payload(project: Project) -> dict:
+    return {
+        "id": str(project.id),
+        "name": project.name,
+        "workspace_path": project.workspace_path,
+        "original_filename": project.original_filename,
+        "file_count": project.file_count,
+        "expanded_bytes": project.expanded_bytes,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+    }
+
+
+def _safe_project_name(filename: str | None) -> str:
+    stem = Path(filename or "Новый проект").stem
+    cleaned = re.sub(r"[^\\w .()\\-]+", " ", stem, flags=re.UNICODE).strip(" .-_")
+    return (cleaned or "Новый проект")[:200]
+
+
+@app.get("/api/projects")
+def list_projects():
+    with SessionLocal() as session:
+        rows = session.scalars(select(Project).order_by(Project.updated_at.desc(), Project.name)).all()
+        return [_project_payload(item) for item in rows]
+
+
+@app.post("/api/projects", status_code=201)
+def create_project(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
+    project_id = uuid4()
+    workspace_path = f"projects/project-{project_id}"
+    staging_path = f"projects/.staging-{project_id}"
+    try:
+        result = extract_project_archive(file.file, settings.workspace_root, staging_path)
+        root = Path(settings.workspace_root).resolve()
+        destination = root / workspace_path
+        result_path = root / staging_path
+        result_path.rename(destination)
+        with SessionLocal() as session:
+            project = Project(
+                id=project_id,
+                name=_safe_project_name(file.filename),
+                workspace_path=workspace_path,
+                original_filename=Path(file.filename).name[:255],
+                file_count=result["files"],
+                expanded_bytes=result["expanded_bytes"],
+            )
+            session.add(project)
+            session.add(AuditLog(action="project.created", entity="project", entity_id=str(project_id), details={
+                "file_count": result["files"], "expanded_bytes": result["expanded_bytes"]
+            }))
+            session.commit()
+            session.refresh(project)
+            return _project_payload(project)
+    except ArchiveValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        shutil.rmtree(Path(settings.workspace_root) / staging_path, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="Не удалось сохранить проект в рабочую папку.") from exc
+    finally:
+        file.file.close()
+
+
+@app.put("/api/projects/{project_id}/archive")
+def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        workspace_path = project.workspace_path
+        staging_path = f"projects/.staging-{project_id}-{uuid4().hex}"
+        root = Path(settings.workspace_root).resolve()
+        destination = root.joinpath(*PurePosixPath(workspace_path).parts)
+        staging = root.joinpath(*PurePosixPath(staging_path).parts)
+        backup = root / "projects" / f".previous-{project_id}-{uuid4().hex}"
+        try:
+            result = extract_project_archive(file.file, root, staging_path)
+            destination.rename(backup)
+            try:
+                staging.rename(destination)
+            except Exception:
+                backup.rename(destination)
+                raise
+            shutil.rmtree(backup, ignore_errors=True)
+            project.file_count = result["files"]
+            project.expanded_bytes = result["expanded_bytes"]
+            project.original_filename = Path(file.filename).name[:255]
+            session.add(AuditLog(action="project.updated", entity="project", entity_id=str(project_id), details={
+                "file_count": result["files"], "expanded_bytes": result["expanded_bytes"]
+            }))
+            session.commit()
+            session.refresh(project)
+            return _project_payload(project)
+        except ArchiveValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except OSError as exc:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise HTTPException(status_code=500, detail="Не удалось обновить файлы проекта.") from exc
+        finally:
+            file.file.close()
+
+
+@app.patch("/api/projects/{project_id}")
+def rename_project(project_id: UUID, payload: ProjectRename):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        previous = project.name
+        project.name = payload.name
+        session.add(AuditLog(action="project.renamed", entity="project", entity_id=str(project_id), details={
+            "previous_name": previous, "name": payload.name
+        }))
+        session.commit()
+        session.refresh(project)
+        return _project_payload(project)
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+def delete_project(project_id: UUID):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        shutil.rmtree(root)
+        session.add(AuditLog(action="project.deleted", entity="project", entity_id=str(project_id), details={
+            "name": project.name, "workspace_path": project.workspace_path
+        }))
+        session.delete(project)
+        session.commit()
+    return None
+
+
+@app.get("/api/projects/{project_id}/files")
+def list_project_files(project_id: UUID):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        files = []
+        for current, directories, filenames in __import__("os").walk(root, followlinks=False):
+            directories[:] = [name for name in directories if name != ".git" and not (Path(current) / name).is_symlink()]
+            for filename in filenames:
+                item = Path(current) / filename
+                if item.is_symlink():
+                    continue
+                try:
+                    relative = item.relative_to(root).as_posix()
+                    files.append({"path": relative, "size": item.stat().st_size})
+                except OSError:
+                    continue
+                if len(files) >= 10000:
+                    break
+            if len(files) >= 10000:
+                break
+        return {"project": _project_payload(project), "files": sorted(files, key=lambda item: item["path"].lower()), "truncated": len(files) >= 10000}
+
+
+@app.get("/api/projects/{project_id}/file")
+def preview_project_file(
+    project_id: UUID,
+    path: str = Query(min_length=1, max_length=1000),
+    start_line: int = Query(default=1, ge=1),
+):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        candidate = root.joinpath(*relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                raise OSError("File is unavailable or too large")
+            content = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Файл недоступен для текстового просмотра (лимит 1 MiB).") from exc
+        lines = content.splitlines()
+        first = min(start_line, max(1, len(lines)))
+        last = min(len(lines), first + 299)
+        return {
+            "path": relative.as_posix(),
+            "start_line": first,
+            "end_line": last,
+            "total_lines": len(lines),
+            "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
+        }
 
 
 @app.get("/api/node-types")
