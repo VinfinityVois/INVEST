@@ -370,3 +370,13 @@
 .workflow-node .node-footer{margin-top:7px}
 .workflow-node .react-flow__handle{width:9px;height:9px;border:2px solid #0b1420;background:#78b9ed}
 @media(prefers-reduced-motion:reduce){.node-live-dot{animation:none!important}}
+
+
+.node-severity-breakdown{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.node-severity{display:inline-flex;align-items:center;gap:4px;padding:3px 5px;border:1px solid rgba(255,255,255,.09);border-radius:4px;background:rgba(7,13,21,.55);color:#9eafc2;font:6px 'DM Mono';letter-spacing:.35px}
+.node-severity b{font-size:8px;color:#e4edf7}
+.node-severity.severity-critical{border-color:rgba(224,88,99,.35);background:rgba(126,34,46,.2);color:#f0a0a5}
+.node-severity.severity-high{border-color:rgba(214,129,81,.32);background:rgba(126,69,31,.18);color:#efb38a}
+.node-severity.severity-medium{border-color:rgba(207,169,91,.3);background:rgba(118,91,30,.16);color:#e7cb88}
+.node-severity.severity-low{border-color:rgba(93,157,198,.27);background:rgba(37,84,119,.16);color:#9ac9e8}
+.node-severity.severity-info{border-color:rgba(130,145,164,.22);background:rgba(66,79,96,.16);color:#aebdce}
