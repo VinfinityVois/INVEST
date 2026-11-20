@@ -1167,10 +1167,18 @@ export default function App() {
             <label className="field-label">HTTPS URL webhook.site<input value={String(selectedNode.data.config.url || "")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, url: event.target.value } })} placeholder="https://webhook.site/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false}/></label>
             <p className="edit-hint">Разрешённый домен задаётся через NOTIFY_WEBHOOK_ALLOWED_HOSTS в корневом .env. Только HTTPS:443, без redirects.</p>
             {telemetry?.node_results?.[selectedNode.id]?.message && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ РЕЗУЛЬТАТ: {String(telemetry.node_results[selectedNode.id].status || "unknown").toUpperCase()}</b><p>{telemetry.node_results[selectedNode.id].message}</p></div>}
+          </> : selectedNode.data.nodeType === "trigger.schedule" ? <>
+            <div className="ai-node-guide"><div><Activity size={15}/><b>SCHEDULE · АВТОМАТИЧЕСКИЙ ЗАПУСК</b></div><p>Worker проверяет наступление времени по расписанию и ставит workflow в обычную очередь запусков. Код проекта не запускается.</p></div>
+            <label className="field-label">Cron · 5 полей<input value={String(selectedNode.data.config.cron || "*/5 * * * *")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, cron: event.target.value } })} placeholder="*/5 * * * *" spellCheck={false}/></label>
+            <label className="field-label">Часовой пояс IANA<input value={String(selectedNode.data.config.timezone || "UTC")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, timezone: event.target.value } })} placeholder="Europe/Amsterdam" spellCheck={false}/></label>
+            <div className="ai-provider-run-state"><b>СОСТОЯНИЕ: {scheduleStatus?.enabled ? "ВКЛЮЧЕНО" : "ОТКЛЮЧЕНО"}</b>{scheduleStatus?.next_run_at && <p>Следующий запуск: {formatDate(scheduleStatus.next_run_at)}</p>}{scheduleStatus?.last_run_at && <small>Последний запуск: {formatDate(scheduleStatus.last_run_at)}</small>}</div>
+            <button className="save-config" disabled={scheduleBusy || busy} onClick={() => void updateSchedule(true)}>{scheduleBusy ? "СОХРАНЕНИЕ…" : "Сохранить и включить расписание"}</button>
+            <button className="ghost" disabled={scheduleBusy || !scheduleStatus?.enabled} onClick={() => void updateSchedule(false)}>Отключить расписание</button>
+            <p className="edit-hint">Примеры: <code>*/5 * * * *</code> — каждые 5 минут; <code>0 9 * * 1-5</code> — будни в 09:00. Часовой пояс влияет на локальное время.</p>
           </> : <>
             <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
           </>}
-          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
+          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
