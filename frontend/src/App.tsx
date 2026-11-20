@@ -9,6 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
@@ -72,6 +73,8 @@ export default function App() {
   const [configText, setConfigText] = useState("{}");
   const [configError, setConfigError] = useState("");
   const [edgeLabel, setEdgeLabel] = useState("");
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   useEffect(() => {
     fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
@@ -207,7 +210,7 @@ export default function App() {
     </header>
     <div className="layout">
       <aside className="panel palette">
-        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><span className="counter">{manifests.length}</span></div>
+        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
         <p className="panel-intro">Добавляй компоненты на холст. Настройки, замена и удаление доступны в инспекторе выбранного блока.</p>
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
         <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
@@ -240,8 +243,8 @@ export default function App() {
         <div className="flow-foot"><span><Activity size={13} /> Редактор графа <i /> Сетка 22 px</span><span>Связь можно выбрать и перетащить за конец для переназначения</span></div>
       </section>
 
-      <aside className="panel inspector">
-        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / EDITOR</div><h3><Activity size={17} /> Свойства элемента</h3></div><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div>
+      <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>\n        {rightCollapsed ? <button className="collapsed-rail" onClick={() => setRightCollapsed(false)} title="Развернуть инспектор" aria-label="Развернуть инспектор"><PanelRightOpen size={17} /><span>ИНСПЕКТОР</span></button> : <>
+        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / EDITOR</div><h3><Activity size={17} /> Свойства элемента</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
         {selectedNode && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ БЛОКА</div>
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
