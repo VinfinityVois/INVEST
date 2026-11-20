@@ -827,7 +827,34 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
         )
         version = (latest.version if latest else 0) + 1
         workflow.name = graph.name
-        session.add(WorkflowVersion(workflow_id=workflow_id, version=version, graph=graph.model_dump(mode="json")))
+        graph_data = graph.model_dump(mode="json")
+        session.add(WorkflowVersion(workflow_id=workflow_id, version=version, graph=graph_data))
+        active_schedule = session.scalar(
+            select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
+        )
+        if active_schedule is not None and active_schedule.enabled:
+            schedule_nodes = [node for node in graph.nodes if node.type == "trigger.schedule"]
+            if len(schedule_nodes) != 1:
+                active_schedule.enabled = False
+                active_schedule.next_run_at = None
+            else:
+                schedule_config = schedule_nodes[0].config
+                expression = str(schedule_config.get("cron", "")).strip()
+                timezone_name = str(schedule_config.get("timezone", "UTC")).strip() or "UTC"
+                try:
+                    zone = ZoneInfo(timezone_name)
+                    valid_cron = len(expression.split()) == 5 and croniter.is_valid(expression)
+                except (ValueError, KeyError):
+                    valid_cron = False
+                    zone = None
+                if not valid_cron:
+                    active_schedule.enabled = False
+                    active_schedule.next_run_at = None
+                elif expression != active_schedule.cron_expression or timezone_name != active_schedule.timezone:
+                    now = datetime.now(timezone.utc)
+                    active_schedule.cron_expression = expression
+                    active_schedule.timezone = timezone_name
+                    active_schedule.next_run_at = croniter(expression, now.astimezone(zone)).get_next(datetime).astimezone(timezone.utc)
         session.commit()
         return {"id": str(workflow.id), "name": workflow.name, "version": version}
 
@@ -887,7 +914,7 @@ def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate)
         config = triggers[0].config
         expression = str(config.get("cron", "")).strip()
         timezone_name = str(config.get("timezone", "UTC")).strip() or "UTC"
-        if not expression or not croniter.is_valid(expression):
+        if len(expression.split()) != 5 or not croniter.is_valid(expression):
             raise HTTPException(status_code=422, detail="Укажите корректное cron-выражение из пяти полей.")
         try:
             zone = ZoneInfo(timezone_name)
