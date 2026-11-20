@@ -320,7 +320,7 @@ export default function App() {
         : step?.status === "blocked" ? "blocked"
         : step?.status === "configuration_required" ? "configuration_required"
         : step?.status === "completed" || step?.status === "ready" ? "completed"
-        : telemetry.status === "queued" ? "queued" : "idle";
+        : telemetry.status === "queued" || telemetry.status === "running" ? "queued" : "idle";
       let detail = output?.message || "";
       if (output?.status === "completed" && node.data.nodeType.startsWith("scan.")) {
         detail = `Проверка завершена · найдено: ${output.findings ?? 0}.`;
@@ -346,9 +346,12 @@ export default function App() {
     setEdges(currentEdges => currentEdges.map(edge => {
       const sourceStep = trace.get(edge.source);
       const targetStep = trace.get(edge.target);
+      const sourceOutput = nodeResults[edge.source];
       const active = current === edge.target && (sourceStep?.status === "completed" || sourceStep?.status === "ready");
       const complete = !!sourceStep && !!targetStep && ["completed", "ready"].includes(sourceStep.status) && ["completed", "ready"].includes(targetStep.status);
-      return { ...edge, animated: active, className: active ? "edge-active" : complete ? "edge-completed" : "edge-idle" };
+      const flowCount = typeof sourceOutput?.findings === "number" ? sourceOutput.findings : typeof sourceOutput?.total_findings === "number" ? sourceOutput.total_findings : undefined;
+      const flowLabel = edge.source === "ai-explain" && typeof sourceOutput?.explained_count === "number" ? `${sourceOutput.explained_count} объяснений` : flowCount != null ? `${flowCount} находок` : edge.label;
+      return { ...edge, label: flowLabel, labelShowBg: true, labelBgStyle: { fill: "#14263a", fillOpacity: 0.94 }, labelStyle: { fill: "#c3d8ed", fontSize: 9 }, animated: active, className: active ? "edge-active" : complete ? "edge-completed" : "edge-idle" };
     }));
   }, [telemetry, setNodes, setEdges]);
 
@@ -963,7 +966,7 @@ export default function App() {
           edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
           <Background color="#31445c" gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.type === "workflow" ? "#426b91" : "#526176"} /><Controls />
         </ReactFlow></div>
-        <div className="flow-foot"><span><Activity size={13} /> Редактор графа <i /> Сетка 22 px</span><span>Связь можно выбрать и перетащить за конец для переназначения</span></div>
+        <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span></div>
       </section>
 
       <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>
