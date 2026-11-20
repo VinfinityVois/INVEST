@@ -149,3 +149,43 @@ def test_listing_finding_states_expires_risk_and_writes_audit(monkeypatch):
     assert len(session.added) == 1
     assert session.added[0].action == "finding.state.expired"
     assert session.added[0].details["previous_state"] == "accepted_risk"
+
+
+
+def test_finding_state_history_query_is_bounded():
+    from uuid import uuid4
+
+    from app.main import finding_state_history
+
+    workflow_id = uuid4()
+    class FakeSession:
+        statement = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, model, identifier):
+            return object()
+
+        def scalars(self, statement):
+            self.statement = statement
+            class Rows:
+                def all(self):
+                    return []
+            return Rows()
+
+    session = FakeSession()
+    from app import main
+    original = main.SessionLocal
+    main.SessionLocal = lambda: session
+    try:
+        assert finding_state_history(workflow_id, "a" * 64) == []
+    finally:
+        main.SessionLocal = original
+
+    sql = str(session.statement.compile(dialect=postgresql.dialect()))
+    assert "LIMIT 100" in sql
+    assert "ORDER BY" in sql
