@@ -61,7 +61,7 @@ Project API:
 
 Для Git-ноды задайте HTTPS URL и необязательную ветку или тег. Репозиторий должен быть явно внесён в `ALLOWED_TARGETS` в корневом `.env`. Сопоставление выполняется по точному адресу owner/repository; URL с логином, паролем, query, fragment и нестандартным портом отклоняются.
 
-Git clone выполняется shallow, без тегов, hooks, LFS smudge и submodules. Используется только HTTPS. Git устанавливается в backend image автоматически. Частные репозитории и credential helper пока не поддерживаются.
+Git clone выполняется shallow, без тегов, hooks, LFS smudge и submodules. В `ref` можно указать ветку/тег либо полный 40-символьный commit SHA; SHA извлекается отдельно и checkout выполняется detached. Опциональный `subdirectory` ограничивает сканирование вложенной папкой checkout (абсолютные пути, `..` и symlinks запрещены). Используется только HTTPS. Git устанавливается в backend image автоматически. Частные репозитории и credential helper пока не поддерживаются.
 
 Пример:
 
