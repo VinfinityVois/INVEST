@@ -142,3 +142,8 @@ ZIP uploads and Git clones are stored in the named Docker volume mounted at
 required: the API receives ZIP files, while the worker scans them later.
 The Compose configuration pins `WORKSPACE_ROOT=/workspace` so the two
 containers cannot accidentally use separate temporary directories.
+
+
+### Safe project asset preview
+
+The project workspace previews PNG, JPEG, WebP, GIF and PDF files through `GET /api/projects/{project_id}/preview?path=...`. Preview is limited to 20 MiB per file. SVG, HTML and other active content are intentionally not rendered.
