@@ -5,7 +5,7 @@
 ## Архитектура
 
 - **backend** — FastAPI, Pydantic, SQLAlchemy 2, PostgreSQL.
-- **worker** — отдельный процесс исполнения графов (постоянная очередь ещё в разработке).
+- **worker** — отдельный процесс, забирающий задания из очереди PostgreSQL с блокировкой `SKIP LOCKED` и heartbeat.
 - **frontend** — React, Vite, TypeScript, React Flow.
 - **rules/** — собственные YAML-правила детекторов.
 - **data/** — локальные справочники advisories и Spring Boot managed versions.
@@ -53,7 +53,7 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 ## Текущий статус
 
-Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, постановка запусков в устойчивую очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач, polling статуса запуска и findings API/UI. Расширение Kotlin SAST до полноценного межпроцедурного AST/taint-анализа, Spring Boot dependency management, расширение транзитивного SCA, постоянная очередь worker, SSE, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
+Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, постановка запусков в устойчивую очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач, polling статуса запуска и findings API/UI. Расширение Kotlin SAST до полноценного межпроцедурного AST/taint-анализа, Spring Boot dependency management, расширение транзитивного SCA, SSE progress streaming, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
 
 ## Принципы безопасности
 
