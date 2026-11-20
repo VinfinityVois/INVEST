@@ -610,13 +610,13 @@ export default function App() {
     if (!selectedNode) return;
     const id = selectedNode.data.nodeType + "-" + Date.now();
     const copy: FlowNode = { ...selectedNode, id, position: { x: selectedNode.position.x + 55, y: selectedNode.position.y + 55 }, selected: false, data: { ...selectedNode.data, config: { ...selectedNode.data.config } } };
-    setNodes(current => [...current, copy]); setSelectedNodeId(id);
+    setNodes(current => [...current, copy]); setWorkflowDirty(true); setSelectedNodeId(id);
   };
   const replaceSelectedNode = (type: string) => {
     if (!selectedNode) return;
     const manifest = manifests.find(item => item.type === type);
     if (!manifest) return;
-    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
+    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
   };
   const saveNodeConfig = () => {
     if (!selectedNode) return;
@@ -628,11 +628,11 @@ export default function App() {
   };
   const deleteSelectedEdge = () => {
     if (!selectedEdgeId) return;
-    setEdges(current => current.filter(edge => edge.id !== selectedEdgeId)); setSelectedEdgeId(null);
+    setEdges(current => current.filter(edge => edge.id !== selectedEdgeId)); setWorkflowDirty(true); setSelectedEdgeId(null);
   };
   const updateEdgeEndpoint = (field: "source" | "target", value: string) => {
     if (!selectedEdgeId) return;
-    setEdges(current => current.map(edge => edge.id === selectedEdgeId ? { ...edge, [field]: value } : edge));
+    setEdges(current => current.map(edge => edge.id === selectedEdgeId ? { ...edge, [field]: value } : edge)); setWorkflowDirty(true);
   };
 
   const graph = useMemo(() => ({
@@ -1411,7 +1411,7 @@ export default function App() {
           <div className="section-caption">РЕДАКТИРОВАНИЕ СВЯЗИ</div>
           <label className="field-label">Откуда (источник)<select value={selectedEdge.source} onChange={event => updateEdgeEndpoint("source", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
           <label className="field-label">Куда (получатель)<select value={selectedEdge.target} onChange={event => updateEdgeEndpoint("target", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
-          <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); }} placeholder="например: success" /></label>
+          <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); setWorkflowDirty(true); }} placeholder="например: success" /></label>
           <div className="edge-flow-diagnostics">
             <div className="section-caption">ДИАГНОСТИКА ПОТОКА</div>
             {(() => {
