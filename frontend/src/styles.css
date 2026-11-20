@@ -296,3 +296,31 @@
 
 .ai-explanation-pending{border-style:dashed;border-color:rgba(177,121,225,.22);background:rgba(65,48,82,.08)}
 .ai-explanation-pending>div span{color:#b99bce}
+
+
+/* 0.7.0 — animated workflow connections and finding navigator */
+.react-flow__edge-path{stroke-linecap:round;stroke-dasharray:3 11;animation:edge-drift 3.8s linear infinite;filter:drop-shadow(0 0 2px rgba(99,164,218,.16))}
+.react-flow__edge.edge-idle .react-flow__edge-path{stroke:#6f91b3;stroke-width:2.25;opacity:.92;animation-duration:4.6s}
+.react-flow__edge.edge-completed .react-flow__edge-path{stroke:#62cba8;stroke-width:2.5;stroke-dasharray:4 9;filter:drop-shadow(0 0 4px rgba(86,205,165,.3));animation-duration:3.1s}
+.react-flow__edge.edge-active .react-flow__edge-path{stroke:#82d5ff;stroke-width:3.2;stroke-dasharray:7 7;filter:drop-shadow(0 0 5px rgba(91,190,255,.62));animation:edge-surge .72s linear infinite}
+.react-flow__edge.selected .react-flow__edge-path{stroke:#c3e6ff;stroke-width:3.4;filter:drop-shadow(0 0 7px rgba(116,193,255,.72))}
+@keyframes edge-drift{to{stroke-dashoffset:-56}}
+@keyframes edge-surge{to{stroke-dashoffset:-42}}
+.finding-browser{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:7px;margin:9px 0 12px;padding:8px;border:1px solid rgba(111,148,184,.2);border-radius:7px;background:rgba(7,15,25,.58)}
+.finding-search{display:flex;align-items:center;gap:7px;min-width:0;color:#7896b4}
+.finding-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#dce9f7;font:9px 'DM Mono'}
+.finding-search input::placeholder{color:#6d8299}
+.finding-browser select{max-width:112px;padding:6px 7px;border:1px solid #30445e;border-radius:5px;background:#101c2b;color:#b9cce0;font:8px 'DM Mono'}
+.finding-browser>span{color:#7f97b0;font:8px 'DM Mono';white-space:nowrap}
+.finding-file-group{margin:10px 0 14px;border:1px solid rgba(103,139,174,.18);border-radius:8px;background:rgba(7,14,23,.28);overflow:hidden}
+.finding-file-heading{display:flex;align-items:center;gap:7px;padding:9px 10px;background:linear-gradient(90deg,rgba(43,91,130,.18),rgba(16,28,43,.45));border-bottom:1px solid rgba(103,139,174,.17);color:#8db9dc}
+.finding-file-heading b{min-width:0;overflow-wrap:anywhere;color:#c0d5e8;font:9px 'DM Mono';font-weight:500}
+.finding-file-heading span{margin-left:auto;flex:0 0 auto;color:#7892ac;font:8px 'DM Mono'}
+.finding-file-group .finding{margin:0;border:0;border-radius:0;border-bottom:1px solid rgba(103,139,174,.12)}
+.finding-file-group .finding:last-child{border-bottom:0}
+.source-code-nav{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.source-code-nav button{width:23px;height:22px;border:1px solid #35516c;border-radius:4px;background:#14263a;color:#b8d8f2;cursor:pointer}
+.source-code-nav button:hover:not(:disabled){border-color:#70b7ed;background:#1b3853}
+.source-code-nav button:disabled{opacity:.3;cursor:not-allowed}
+@media(max-width:560px){.finding-browser{grid-template-columns:minmax(0,1fr) auto}.finding-browser>span{grid-column:1/-1;text-align:right}.finding-file-heading{align-items:flex-start}.finding-file-heading b{font-size:8px}}
+@media(prefers-reduced-motion:reduce){.react-flow__edge-path{animation:none!important;stroke-dasharray:none!important}}
