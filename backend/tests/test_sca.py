@@ -308,3 +308,69 @@ def test_spring_boot_bom_35_snapshot_uses_tagged_managed_versions(tmp_path):
     assert by_artifact["commons-lang3"]["version"] == "3.17.0"
     assert by_artifact["jackson-databind"]["version"] == "2.19.0"
     assert "gson" not in by_artifact
+
+
+def test_gradle_custom_catalog_and_nonstandard_configuration_are_scanned(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "settings.gradle.kts").write_text(
+        'dependencyResolutionManagement {\n'
+        '  versionCatalogs {\n'
+        '    create("quality") { from(files("gradle/quality.versions.toml")) }\n'
+        '  }\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    (project / "gradle" / "quality.versions.toml").write_text(
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies {\n'
+        '  kapt(quality.commons)\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["artifact"] == "commons-lang3"
+    assert findings[0]["version"] == "3.17.0"
+
+
+def test_gradle_add_configuration_accepts_version_catalog_accessor(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies { add("annotationProcessor", libs.commons) }\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["artifact"] == "commons-lang3"
+    assert findings[0]["version"] == "3.17.0"
+
+
+def test_gradle_unknown_custom_catalog_is_not_guessed(tmp_path):
+    project = tmp_path / "project"
+    (project / "gradle").mkdir(parents=True)
+    (project / "gradle" / "quality.versions.toml").write_text(
+        '[libraries]\n'
+        'commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }\n',
+        encoding="utf-8",
+    )
+    (project / "build.gradle.kts").write_text(
+        'dependencies { kapt(quality.commons) }\n',
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
