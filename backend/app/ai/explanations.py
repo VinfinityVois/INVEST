@@ -4,6 +4,7 @@ The gateway never decides whether a finding exists. It receives only scanner
 findings and redacted source context, and returns advisory explanations.
 """
 import json
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -11,6 +12,8 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger("secworkflow.ai")
 
 
 class ExplanationGatewayError(RuntimeError):
@@ -101,6 +104,8 @@ def _provider_error(exc: Exception) -> str:
         return "AI-провайдер не ответил за 25 секунд. Проверьте доступность сервиса и повторите запуск."
     if isinstance(exc, httpx.ConnectError):
         return "Не удалось подключиться к LLM_BASE_URL. Проверьте адрес, DNS, сеть и доступность провайдера из контейнера worker."
+    if isinstance(exc, httpx.NetworkError):
+        return "Сетевая ошибка при обмене с LLM-провайдером. Проверьте proxy, TLS-сертификаты и сетевой доступ из контейнера worker."
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
         if status in {401, 403}:
@@ -243,6 +248,8 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         response.raise_for_status()
         raw_items = _parse_response(response)
     except Exception as exc:
+        # Never log request headers, payloads, provider response bodies, or exception text.
+        logger.warning("AI provider request failed (%s)", type(exc).__name__)
         return {
             "status": "failed",
             "message": _provider_error(exc),
@@ -288,6 +295,10 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         })
         seen.add(fingerprint)
 
+    logger.info(
+        "AI explanations completed: analyzed=%d explained=%d skipped=%d model=%s",
+        len(selected), len(normalized), len(findings) - len(selected), settings.llm_model,
+    )
     return {
         "status": "completed",
         "findings": findings,
