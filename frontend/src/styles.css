@@ -749,3 +749,22 @@
 .workflow-version-row button{cursor:pointer}
 .workflow-version-row button:hover{border-color:rgba(105,190,225,.65);background:rgba(40,85,110,.25)}
 .workflow-version-row em{color:#7cae91;border-color:rgba(110,175,135,.2)}
+
+.workflow-version-compare-control{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0;padding:9px 10px;border:1px solid rgba(100,133,161,.14);border-radius:5px;background:rgba(18,31,44,.42);color:#8199ab;font:9px 'DM Mono'}
+.workflow-version-compare-control label{display:flex;align-items:center;gap:6px}
+.workflow-version-compare-control select{border:1px solid rgba(105,165,200,.25);border-radius:4px;padding:5px 7px;background:#111e2a;color:#c6d8e6;font:10px 'DM Mono'}
+.workflow-version-compare-control button{margin-left:auto;border:1px solid rgba(105,165,200,.3);border-radius:4px;padding:6px 9px;background:rgba(40,85,110,.18);color:#a6cbe0;font:9px 'DM Mono';cursor:pointer}
+.workflow-version-compare-control button:disabled{opacity:.45;cursor:wait}
+.workflow-version-diff{display:grid;gap:5px;margin:8px 0 12px;padding:9px;border:1px solid rgba(100,133,161,.14);border-radius:5px;background:rgba(9,17,26,.38)}
+.workflow-diff-summary{display:flex;flex-wrap:wrap;gap:6px 12px;padding-bottom:7px;border-bottom:1px solid rgba(100,133,161,.12)}
+.workflow-diff-summary span{display:flex;gap:4px;color:#8399aa;font-size:9px}
+.workflow-diff-summary b{color:#d0e0eb;font:10px 'DM Mono'}
+.workflow-diff-name{margin:2px 0;color:#9bb6c8;font-size:10px}
+.workflow-diff-row{display:grid;grid-template-columns:85px minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 7px;border-radius:4px;background:rgba(30,45,59,.3);font-size:9px}
+.workflow-diff-row>b{font:8px 'DM Mono';letter-spacing:.04em}
+.workflow-diff-row>span{overflow-wrap:anywhere;color:#bdcfdd}
+.workflow-diff-row>small{color:#71889b;font-size:8px;overflow-wrap:anywhere}
+.workflow-diff-row.diff-added>b{color:#79c79b}
+.workflow-diff-row.diff-removed>b{color:#db8a8a}
+.workflow-diff-row.diff-changed>b{color:#d9b875}
+@media(max-width:640px){.workflow-diff-row{grid-template-columns:72px minmax(0,1fr)}.workflow-diff-row>small{grid-column:2}.workflow-version-compare-control button{margin-left:0}}
