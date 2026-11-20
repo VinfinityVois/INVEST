@@ -162,8 +162,10 @@ export default function App() {
         : step?.status === "configuration_required" ? "configuration_required"
         : step?.status === "completed" || step?.status === "ready" ? "completed"
         : telemetry.status === "queued" ? "queued" : "idle";
-      let detail = output?.message || "";\n      let notes: string[] = [];
+      let detail = output?.message || "";
+      let notes: string[] = [];
       if (node.data.nodeType === "ai.explain" && output) {
+        notes = (output.explanations || []).map(item => [item.root_cause, item.recommendation].filter(Boolean).join(" · ")).filter(Boolean);
         detail = output.status === "configuration_required" ? "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
           : output.status === "failed" ? "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки."
           : output.status === "completed" ? `Объяснено находок: ${output.explained_count ?? 0} из ${output.total_findings ?? 0}.` : detail;
