@@ -41,7 +41,7 @@ def scan_directory(root: Path) -> list[dict]:
     results = []
     count = 0
     for path in root.rglob("*"):
-        if any(part in SKIP_DIRS for part in path.parts) or not path.is_file():
+        if any(part in SKIP_DIRS for part in path.parts) or path.is_symlink() or not path.is_file():\n            continue\n        try:\n            if not path.resolve().is_relative_to(root):\n                continue\n        except OSError:\n            continue\n        if not path.is_file():
             continue
         count += 1
         if count > MAX_FILES:
