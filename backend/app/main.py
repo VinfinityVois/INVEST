@@ -27,11 +27,12 @@ from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
 from app.security.redaction import redact_text
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion
+from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
+from app.scheduler import next_run_time
 
 class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -57,6 +58,26 @@ class SelectedRunRequest(BaseModel):
         if not normalized or any(len(item) > 120 for item in normalized):
             raise ValueError("Укажите от 1 до 100 корректных идентификаторов блоков.")
         return normalized
+
+
+class WorkflowScheduleRequest(BaseModel):
+    cron_expression: str = Field(min_length=9, max_length=120)
+    timezone: str = Field(default="UTC", min_length=1, max_length=80)
+    enabled: bool = True
+
+    @field_validator("cron_expression")
+    @classmethod
+    def validate_cron(cls, value: str) -> str:
+        value = value.strip()
+        next_run_time(value, "UTC")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        value = value.strip()
+        next_run_time("0 0 * * *", value)
+        return value
 
 
 class FindingStateUpdate(BaseModel):
@@ -908,6 +929,92 @@ def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
             "requested_node_ids": request.node_ids,
             "status": "queued",
         }
+
+
+def _schedule_payload(schedule: WorkflowSchedule) -> dict:
+    return {
+        "id": str(schedule.id),
+        "workflow_id": str(schedule.workflow_id),
+        "cron_expression": schedule.cron_expression,
+        "timezone": schedule.timezone,
+        "enabled": schedule.enabled,
+        "next_run_at": schedule.next_run_at,
+        "last_run_at": schedule.last_run_at,
+        "last_run_id": str(schedule.last_run_id) if schedule.last_run_id else None,
+    }
+
+
+@app.get("/api/workflows/{workflow_id}/schedules")
+def list_workflow_schedules(workflow_id: UUID):
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        rows = session.scalars(
+            select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
+            .order_by(WorkflowSchedule.created_at.desc())
+        ).all()
+        return [_schedule_payload(item) for item in rows]
+
+
+@app.post("/api/workflows/{workflow_id}/schedules", status_code=201)
+def create_workflow_schedule(workflow_id: UUID, request: WorkflowScheduleRequest):
+    next_at = next_run_time(request.cron_expression, request.timezone)
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        version = session.scalar(
+            select(WorkflowVersion).where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc()).limit(1)
+        )
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        schedule = WorkflowSchedule(
+            workflow_id=workflow_id, cron_expression=request.cron_expression,
+            timezone=request.timezone, enabled=request.enabled, next_run_at=next_at,
+        )
+        session.add(schedule)
+        session.flush()
+        session.add(AuditLog(action="workflow.schedule.created", entity="workflow_schedule",
+            entity_id=str(schedule.id), details={"workflow_id": str(workflow_id),
+            "cron": schedule.cron_expression, "timezone": schedule.timezone}))
+        session.commit()
+        session.refresh(schedule)
+        return _schedule_payload(schedule)
+
+
+@app.put("/api/workflows/{workflow_id}/schedules/{schedule_id}")
+def update_workflow_schedule(workflow_id: UUID, schedule_id: UUID, request: WorkflowScheduleRequest):
+    next_at = next_run_time(request.cron_expression, request.timezone)
+    with SessionLocal() as session:
+        schedule = session.scalar(select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id, WorkflowSchedule.workflow_id == workflow_id
+        ))
+        if schedule is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        schedule.cron_expression = request.cron_expression
+        schedule.timezone = request.timezone
+        schedule.enabled = request.enabled
+        schedule.next_run_at = next_at
+        session.add(AuditLog(action="workflow.schedule.updated", entity="workflow_schedule",
+            entity_id=str(schedule.id), details={"workflow_id": str(workflow_id),
+            "enabled": schedule.enabled}))
+        session.commit()
+        session.refresh(schedule)
+        return _schedule_payload(schedule)
+
+
+@app.delete("/api/workflows/{workflow_id}/schedules/{schedule_id}", status_code=204)
+def delete_workflow_schedule(workflow_id: UUID, schedule_id: UUID):
+    with SessionLocal() as session:
+        schedule = session.scalar(select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id, WorkflowSchedule.workflow_id == workflow_id
+        ))
+        if schedule is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        session.delete(schedule)
+        session.add(AuditLog(action="workflow.schedule.deleted", entity="workflow_schedule",
+            entity_id=str(schedule_id), details={"workflow_id": str(workflow_id)}))
+        session.commit()
 
 
 @app.get("/api/workflows/{workflow_id}/versions")
