@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 
 from app.db import SessionLocal
-from app.models import Finding, WorkflowRun
+from app.models import Finding, FindingState, WorkflowRun
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
@@ -94,6 +94,16 @@ def process_run(run_id: str, worker_id: str) -> None:
         if run is None or run.status != "running" or run.locked_by != worker_id:
             return
         graph_snapshot = run.graph_snapshot
+        state_rows = session.scalars(
+            select(FindingState).where(FindingState.workflow_id == run.workflow_id)
+        ).all() if run.workflow_id else []
+        finding_states = {
+            row.fingerprint: {
+                "state": row.state,
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            }
+            for row in state_rows
+        }
 
     stop = threading.Event()
     heartbeat = threading.Thread(
@@ -120,7 +130,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
