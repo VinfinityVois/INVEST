@@ -358,7 +358,11 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось переименовать проект");
       await refreshProjects();
-      if (activeProject?.id === project.id) setActiveProject(data);
+      if (activeProject?.id === project.id) {
+        setActiveProject(data);
+        const sourceNode = nodes.find(node => node.data.category === "Source");
+        if (sourceNode && sourceNode.data.config.path === project.workspace_path) updateNode(sourceNode.id, { label: data.name });
+      }
       setResult("Проект переименован · " + data.name);
     } catch (error) { setResult("Ошибка переименования: " + String(error)); }
   };
@@ -369,6 +373,11 @@ export default function App() {
       if (!response.ok) throw new Error("Не удалось удалить проект");
       await refreshProjects();
       if (activeProject?.id === project.id) {
+        const sourceNode = nodes.find(node => node.data.category === "Source");
+        if (sourceNode && sourceNode.data.config.path === project.workspace_path) updateNode(sourceNode.id, {
+          label: "Project source", description: "Выбери ZIP из библиотеки или настрой Git-источник.", config: {},
+          executionStatus: "idle", executionDetail: "", executionNotes: [], executionSeverity: undefined,
+        });
         setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectWorkspaceOpen(false);
       }
       setResult("Проект удалён · " + project.name);
