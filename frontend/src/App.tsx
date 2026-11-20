@@ -187,11 +187,27 @@ export default function App() {
     try {
       const id = await persistWorkflow();
       const response = await fetch("/api/workflows/" + id + "/runs", { method: "POST" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(JSON.stringify(data));
-      setResult(JSON.stringify(data, null, 2)); setShowResult(true);
-      const findingsResponse = await fetch("/api/runs/" + data.run_id + "/findings");
+      const queued = await response.json();
+      if (!response.ok) throw new Error(JSON.stringify(queued));
+      setShowResult(true);
+      setResult("Задание поставлено в очередь · " + queued.run_id);
+
+      let completed: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+        const statusResponse = await fetch("/api/runs/" + queued.run_id);
+        if (!statusResponse.ok) throw new Error("Не удалось получить статус задания");
+        const status = await statusResponse.json();
+        setResult(JSON.stringify(status, null, 2));
+        if (["completed", "partial", "failed"].includes(status.status)) {
+          completed = status as Record<string, unknown>;
+          break;
+        }
+      }
+      if (!completed) throw new Error("Превышено время ожидания worker. Задание осталось сохранено в очереди.");
+      const findingsResponse = await fetch("/api/runs/" + queued.run_id + "/findings");
       if (findingsResponse.ok) setFindings(await findingsResponse.json());
+      if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.\n" + JSON.stringify(completed, null, 2));
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
