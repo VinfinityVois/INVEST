@@ -85,17 +85,44 @@ def _resolve_variables(build_text: str, properties: dict[str, str]) -> dict[str,
     return values
 
 
-def _load_lockfile(path: Path) -> dict[tuple[str, str], str]:
-    result = {}
+def _load_lockfile_entries(path: Path) -> list[tuple[str, str, str, int]]:
+    """Return every resolved module/version row from a Gradle lockfile."""
+    entries = []
     text = _read_text(path)
     if text is None:
-        return result
-    for line in text.splitlines():
+        return entries
+    for line_number, line in enumerate(text.splitlines(), 1):
         match = LOCK_ENTRY.match(line.strip())
         if match:
             group, artifact, version, _configuration = match.groups()
-            result[(group, artifact)] = version
-    return result
+            entries.append((group, artifact, version, line_number))
+    return entries
+
+
+def _load_lockfile(path: Path) -> dict[tuple[str, str], str]:
+    """Return only unambiguous versions; configurations may resolve differently."""
+    versions: dict[tuple[str, str], set[str]] = {}
+    for group, artifact, version, _line in _load_lockfile_entries(path):
+        versions.setdefault((group, artifact), set()).add(version)
+    return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
+
+
+def _find_project_lockfile(build_dir: Path, project_root: Path) -> Path | None:
+    """Find the nearest Gradle lockfile without traversing outside the project."""
+    current = build_dir
+    while current == project_root or project_root in current.parents:
+        candidate = current / "gradle.lockfile"
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+        if current == project_root:
+            break
+        current = current.parent
+    return None
+
+
+def _load_project_lockfile(build_dir: Path, project_root: Path) -> dict[tuple[str, str], str]:
+    path = _find_project_lockfile(build_dir, project_root)
+    return _load_lockfile(path) if path else {}
 
 
 def _catalog_alias_key(value: str) -> str:
@@ -308,7 +335,9 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
 
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
-        locked = _load_project_lockfile(build_file.parent, project)
+        lockfile_path = _find_project_lockfile(build_file.parent, project)
+        locked = _load_lockfile(lockfile_path) if lockfile_path else {}
+        declared_coordinates: set[tuple[str, str]] = set()
         managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
         catalog_path = project / "gradle" / "libs.versions.toml"
         if not catalog_path.is_file():
@@ -328,6 +357,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 if len(candidates) != 1:
                     continue
                 group, artifact, declared_version = candidates[0]
+                declared_coordinates.add((group, artifact))
                 version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
                 if not version or "$" in version:
                     continue
@@ -350,6 +380,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 if not parsed:
                     continue
                 group, artifact, declared_version = parsed.groups()
+                declared_coordinates.add((group, artifact))
                 version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
                 if not version or "$" in version:
                     continue
@@ -359,6 +390,17 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                     if _affected(version, advisory.get("ranges", [])):
                         finding = _make_finding(group, artifact, version, advisory, relative_path, line)
                         findings.setdefault(finding["fingerprint"], finding)
+        # Lockfiles include resolved transitive dependencies absent from build scripts.
+        if lockfile_path:
+            lockfile_relative = lockfile_path.relative_to(project).as_posix()
+            for group, artifact, version, lock_line in _load_lockfile_entries(lockfile_path):
+                if (group, artifact) in declared_coordinates:
+                    continue
+                for advisory in advisory_index.get((group, artifact), []):
+                    if _affected(version, advisory.get("ranges", [])):
+                        finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line)
+                        findings.setdefault(finding["fingerprint"], finding)
+
         if on_progress:
             try:
                 on_progress({"files_scanned": visited, "total_files": total_files, "current_file": relative_path})
