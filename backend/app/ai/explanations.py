@@ -144,6 +144,11 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "message": "Настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневом .env; пустые значения не принимаются.",
             "findings": findings,
             "explanations": [],
+            "analyzed_count": 0,
+            "skipped_count": len(findings),
+            "explained_count": 0,
+            "unexplained_count": 0,
+            "coverage": 0.0,
         }
     if not provider["endpoint_valid"]:
         return {
@@ -161,7 +166,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         raise ValueError("max_findings must be an integer from 1 to 25")
     selected = findings[:max_findings]
     if not selected:
-        return {"status": "completed", "findings": [], "explanations": [], "explained_count": 0}
+        return {"status": "completed", "findings": [], "explanations": [], "explained_count": 0, "analyzed_count": 0, "skipped_count": 0, "unexplained_count": 0, "coverage": 1.0}
 
     payload = [_safe_finding(item) for item in selected]
     system_prompt = (
@@ -213,6 +218,11 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "message": _provider_error(exc),
             "findings": findings,
             "explanations": [],
+            "analyzed_count": len(selected),
+            "skipped_count": len(findings) - len(selected),
+            "explained_count": 0,
+            "unexplained_count": len(selected),
+            "coverage": 0.0,
         }
 
     allowed_fingerprints = {str(item.get("fingerprint")) for item in selected if item.get("fingerprint")}
@@ -253,6 +263,8 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "findings": findings,
         "explanations": normalized,
         "explained_count": len(normalized),
+        "analyzed_count": len(selected),
+        "skipped_count": len(findings) - len(selected),
         "unexplained_count": len(selected) - len(normalized),
         "coverage": round(len(normalized) / len(selected), 3),
         "provider": "openai-compatible",
