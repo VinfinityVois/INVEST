@@ -44,3 +44,19 @@ def test_requires_source_artifact_from_this_run(tmp_path: Path):
     result["outputs"]["src"]["status"] = "failed"
     with pytest.raises(RunSourceFileError):
         resolve_run_source_file(tmp_path, graph, result, "App.kt")
+
+
+
+def test_resolves_source_file_from_saved_project_workspace(tmp_path: Path):
+    root = tmp_path / "projects" / "project-demo"
+    root.mkdir(parents=True)
+    (root / "README.md").write_text("# Project", encoding="utf-8")
+    graph, result = _run(source_name="projects/project-demo")
+    resolved = resolve_run_source_file(tmp_path, graph, result, "README.md")
+    assert resolved == root / "README.md"
+
+
+def test_rejects_project_artifact_outside_project_namespace(tmp_path: Path):
+    graph, result = _run(source_name="projects/../outside")
+    with pytest.raises(RunSourceFileError):
+        resolve_run_source_file(tmp_path, graph, result, "secret.txt")
