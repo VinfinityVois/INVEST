@@ -248,9 +248,11 @@ def test_interprocedural_sql_taint_does_not_treat_html_escape_as_sql_sanitizer(t
     root = tmp_path / "project"
     root.mkdir()
     (root / "UnsafeEscape.kt").write_text(
-        """class UnsafeEscape(private val jdbc: JdbcTemplate) {
-    fun find(@RequestParam term: String): List<String> {
-        val escaped = HtmlUtils.htmlEscape(term)
+        """class UnsafeEscapeController(private val service: UnsafeEscapeService) {
+    fun find(@RequestParam term: String) = service.find(HtmlUtils.htmlEscape(term))
+}
+class UnsafeEscapeService(private val jdbc: JdbcTemplate) {
+    fun find(escaped: String): List<String> {
         val sql = "SELECT name FROM item WHERE name = '$escaped'"
         return jdbc.queryForList(sql, String::class.java)
     }
