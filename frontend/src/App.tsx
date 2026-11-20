@@ -325,6 +325,18 @@ export default function App() {
     } catch (error) { setResult("Ошибка загрузки истории: " + String(error)); }
   };
 
+  const saveRunReportToProject = async (run: WorkflowRunSummary) => {
+    if (!activeProject) return;
+    try {
+      const response = await fetch("/api/projects/" + activeProject.id + "/reports/" + run.id, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось сохранить отчёт");
+      setResult("Отчёт сохранён в " + activeProject.name + " · " + data.path);
+      await refreshProjectFiles(activeProject.id);
+      await refreshProjectHistory(activeProject.id);
+    } catch (error) { setResult("Ошибка сохранения отчёта: " + String(error)); }
+  };
+
   const cancelWorkflowRun = async (run: WorkflowRunSummary) => {
     try {
       const response = await fetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
@@ -1147,7 +1159,7 @@ export default function App() {
           {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
             <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status === "cancelling" ? "ОТМЕНА" : run.status === "cancelled" ? "ОТМЕНЁН" : run.status}</span></div>
             <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
-            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>{["queued", "running", "cancelling"].includes(run.status) ? <button className="run-action-cancel" onClick={() => void cancelWorkflowRun(run)} disabled={run.status === "cancelling"}>{run.status === "cancelling" ? "ОТМЕНА…" : "ОТМЕНИТЬ"}</button> : ["completed", "partial", "failed", "cancelled"].includes(run.status) ? <button className="run-action-retry" onClick={() => void retryWorkflowRun(run)}>ПОВТОРИТЬ</button> : null}<div className="run-report-links"><a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
+            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>{["queued", "running", "cancelling"].includes(run.status) ? <button className="run-action-cancel" onClick={() => void cancelWorkflowRun(run)} disabled={run.status === "cancelling"}>{run.status === "cancelling" ? "ОТМЕНА…" : "ОТМЕНИТЬ"}</button> : ["completed", "partial", "failed", "cancelled"].includes(run.status) ? <button className="run-action-retry" onClick={() => void retryWorkflowRun(run)}>ПОВТОРИТЬ</button> : null}<div className="run-report-links">{activeProject && <button type="button" onClick={() => void saveRunReportToProject(run)} title="Сохранить JSON-отчёт в активный проект">В ПРОЕКТ</button>}<a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
           </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
         </section>
         <section className="workflow-version-card">
