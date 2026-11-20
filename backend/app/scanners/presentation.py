@@ -72,8 +72,14 @@ def enrich_finding(finding: dict, root: Path) -> dict:
 
     start = max(1, line_number - 2)
     end = min(len(lines), max(int(item.get("endLine", line_number)), line_number) + 2)
+    secret_context = str(item.get("category", "")).upper() == "SECRET"
+    item["code_context_redacted"] = secret_context
     item["code_context"] = [
-        {"line": number, "text": _redact(lines[number - 1])[:500], "is_finding": number == line_number}
+        {
+            "line": number,
+            "text": "[REDACTED: secret-bearing source context]" if secret_context else _redact(lines[number - 1])[:500],
+            "is_finding": number == line_number,
+        }
         for number in range(start, end + 1)
     ]
     item["start_line"] = start
