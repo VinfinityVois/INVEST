@@ -23,6 +23,7 @@ type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
@@ -142,6 +143,8 @@ export default function App() {
   const [findingLifecycleFilter, setFindingLifecycleFilter] = useState("Все");
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([]);
+  const [runHistoryLoading, setRunHistoryLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -231,6 +234,60 @@ export default function App() {
       .catch(() => undefined);
     return () => { active = false; };
   }, [lastRunId]);
+
+  const refreshWorkflowRuns = async (id: string) => {
+    setRunHistoryLoading(true);
+    try {
+      const response = await fetch("/api/workflows/" + id + "/runs");
+      if (!response.ok) throw new Error("Не удалось загрузить историю запусков");
+      const rows = await response.json() as WorkflowRunSummary[];
+      const summaries = await Promise.all(rows.slice(0, 12).map(async run => {
+        try {
+          const telemetryResponse = await fetch("/api/runs/" + run.id + "/telemetry");
+          if (!telemetryResponse.ok) return run;
+          const data = await telemetryResponse.json() as Telemetry;
+          return { ...run, total_findings: data.total_findings, severity: data.severity };
+        } catch { return run; }
+      }));
+      setWorkflowRuns(summaries);
+    } catch { setWorkflowRuns([]); }
+    finally { setRunHistoryLoading(false); }
+  };
+
+  useEffect(() => {
+    if (!workflowId) { setWorkflowRuns([]); return; }
+    void refreshWorkflowRuns(workflowId);
+  }, [workflowId]);
+
+  const openHistoricalRun = async (run: WorkflowRunSummary) => {
+    try {
+      const [findingResponse, telemetryResponse] = await Promise.all([
+        fetch("/api/runs/" + run.id + "/findings"),
+        fetch("/api/runs/" + run.id + "/telemetry"),
+      ]);
+      if (!findingResponse.ok || !telemetryResponse.ok) throw new Error("Не удалось открыть выбранный запуск");
+      const [rows, data] = await Promise.all([findingResponse.json(), telemetryResponse.json()]);
+      setFindings(rows as Finding[]);
+      setTelemetry(data as Telemetry);
+      setSelectedFinding(null);
+      setLastRunId(run.id);
+      window.localStorage.setItem("invest.lastRunId", run.id);
+      setResult("Открыта история запуска · " + run.id);
+    } catch (error) { setResult("Ошибка загрузки истории: " + String(error)); }
+  };
+
+  const runHistoryComparison = useMemo(() => {
+    const completed = workflowRuns.filter(run => ["completed", "partial"].includes(run.status) && run.total_findings !== undefined);
+    if (completed.length < 2) return null;
+    const current = completed[0];
+    const previous = completed[1];
+    const levels = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+    return {
+      current, previous,
+      delta: (current.total_findings || 0) - (previous.total_findings || 0),
+      severity: levels.map(level => ({ level, current: current.severity?.[level] || 0, previous: previous.severity?.[level] || 0 })),
+    };
+  }, [workflowRuns]);
 
   useEffect(() => {
     if (!selectedFinding?.fingerprint || !lastRunId) { setSourcePreview(null); setSourcePreviewError(""); return; }
@@ -712,6 +769,7 @@ export default function App() {
       if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
       setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
       if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.");
+      await refreshWorkflowRuns(id);
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
@@ -962,6 +1020,19 @@ export default function App() {
               {telemetry.status === "running" && telemetry.current_node && <div className="execution-active"><span className="live-pulse" /> Выполняется {telemetry.current_node}…</div>}
             </div>}
           </> : <p className="telemetry-empty">Запусков пока нет. Телеметрия появится после первой проверки.</p>}
+        </section>
+        <section className="run-history-card">
+          <div className="run-history-heading"><div><span className="section-caption">ANALYSIS HISTORY</span><b>История запусков</b></div><button onClick={() => workflowId && void refreshWorkflowRuns(workflowId)} disabled={!workflowId || runHistoryLoading}>{runHistoryLoading ? "ЗАГРУЗКА…" : "ОБНОВИТЬ"}</button></div>
+          {runHistoryComparison && <div className="run-comparison">
+            <div className="run-comparison-total"><span>ИЗМЕНЕНИЕ НАХОДОК</span><strong className={runHistoryComparison.delta < 0 ? "delta-good" : runHistoryComparison.delta > 0 ? "delta-bad" : "delta-neutral"}>{runHistoryComparison.delta > 0 ? "+" : ""}{runHistoryComparison.delta}</strong><small>{runHistoryComparison.delta < 0 ? "меньше, чем в предыдущем запуске" : runHistoryComparison.delta > 0 ? "больше, чем в предыдущем запуске" : "без изменений"}</small></div>
+            <div className="run-comparison-levels">{runHistoryComparison.severity.map(item => <div key={item.level}><span>{item.level}</span><b>{item.previous} → {item.current}</b><i className={item.current < item.previous ? "delta-good" : item.current > item.previous ? "delta-bad" : "delta-neutral"}>{item.current-item.previous > 0 ? "+" : ""}{item.current-item.previous}</i></div>)}</div>
+            <small className="run-comparison-note">Сравнение двух последних завершённых запусков · {formatDate(runHistoryComparison.previous.finished_at || runHistoryComparison.previous.queued_at)} → {formatDate(runHistoryComparison.current.finished_at || runHistoryComparison.current.queued_at)}</small>
+          </div>}
+          {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
+            <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status}</span></div>
+            <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
+            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>
+          </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length > 0 && <div className="finding-browser">
