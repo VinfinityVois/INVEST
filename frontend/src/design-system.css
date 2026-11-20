@@ -375,3 +375,35 @@
 .shell .security-gate-result.gate-pass { border-color:var(--accent-300); }
 .shell .security-gate-result.gate-warn { border-color:var(--warning); }
 .shell .security-gate-result.gate-block { border-color:var(--danger); }
+
+/* Inspector navigation: underline tabs, stable panel geometry */
+.shell .inspector-tabs {
+  display:flex;align-items:center;gap:0;margin:0 0 12px;padding:0;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.shell .inspector-tabs button {
+  position:relative;display:inline-flex;align-items:center;gap:6px;min-height:38px;
+  padding:0 10px;border:0;border-bottom:2px solid transparent;border-radius:0;
+  background:transparent;color:var(--text-secondary);font:500 12px Inter,sans-serif;
+}
+.shell .inspector-tabs button:hover { color:var(--text);background:var(--gray-50); }
+.shell[data-theme="dark"] .inspector-tabs button:hover { background:var(--gray-800); }
+.shell .inspector-tabs button.tab-active { border-bottom-color:var(--accent-600);color:var(--accent-text); }
+.shell .inspector-tabs button span {
+  min-width:18px;padding:2px 5px;border:1px solid var(--border);border-radius:2px;
+  background:var(--gray-50);color:var(--text-secondary);font:500 10px "IBM Plex Mono";
+}
+.shell[data-theme="dark"] .inspector-tabs button span { background:var(--gray-800); }
+.shell .inspector-tab-panel[hidden] { display:none!important; }
+.shell .inspector-tab-panel { min-width:0; }
+.shell .inspector-tab-panel > .telemetry-card { margin-top:0; }
+.shell .inspector-tab-panel > .findings-head { margin-top:0; }
+.shell .inspector-tab-panel .finding-file-heading b { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.shell .inspector-tab-panel .finding { min-width:0; }
+.shell .inspector-tab-panel .finding p { overflow-wrap:anywhere; }
+.shell .inspector-tab-panel .finding-ai-explanation { min-width:0; }
+.shell .inspector-tab-panel .finding-ai-explanation code { overflow-wrap:anywhere; }
+.shell .inspector-tab-panel .source-code-preview pre { max-height:260px;overflow:auto; }
+.shell .inspector-tab-panel .execution-timeline,
+.shell .inspector-tab-panel .run-history-card,
+.shell .inspector-tab-panel .workflow-version-card { margin-top:12px; }
