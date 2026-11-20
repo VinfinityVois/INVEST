@@ -52,3 +52,45 @@ def test_workflow_graph_diff_reports_node_and_edge_changes_without_exposing_secr
     assert "secret-value" not in serialized
     assert "other-secret" not in serialized
     assert diff["nodes"]["changed"][0]["changes"][0]["after"]["api_key"] == "[REDACTED]"
+
+
+
+def test_run_snapshot_diff_tracks_finding_lifecycle_and_node_changes():
+    from app.main import _compare_run_snapshots
+
+    before = {
+        "run": {"status": "completed"},
+        "findings": [
+            {"fingerprint": "same", "rule_id": "R1", "severity": "HIGH", "path": "a.py", "line": 4},
+            {"fingerprint": "gone", "rule_id": "R2", "severity": "LOW", "path": "b.py", "line": 8},
+        ],
+        "telemetry": {"trace": [{"node_id": "scan", "status": "completed", "duration_ms": 10, "findings": 2}]},
+    }
+    after = {
+        "run": {"status": "completed"},
+        "findings": [
+            {"fingerprint": "same", "rule_id": "R1", "severity": "CRITICAL", "path": "a.py", "line": 4},
+            {"fingerprint": "new", "rule_id": "R3", "severity": "MEDIUM", "path": "c.py", "line": 2},
+        ],
+        "telemetry": {"trace": [{"node_id": "scan", "status": "completed", "duration_ms": 15, "findings": 2}]},
+    }
+    diff = _compare_run_snapshots(before, after)
+    assert diff["findings"]["summary"] == {"new": 1, "persisting": 1, "disappeared": 1, "not_observed": 0}
+    assert diff["findings"]["persisting"][0]["severity_changed"] is True
+    assert diff["findings"]["absence_confirmed"] is True
+    assert diff["nodes"][0]["fields"]["duration_ms"] == {"before": 10, "after": 15}
+
+
+def test_partial_run_does_not_mark_missing_findings_as_disappeared():
+    from app.main import _compare_run_snapshots
+
+    before = {
+        "run": {"status": "completed"},
+        "findings": [{"fingerprint": "old", "rule_id": "R1", "severity": "HIGH", "path": "a.py", "line": 1}],
+        "telemetry": {"trace": []},
+    }
+    after = {"run": {"status": "partial"}, "findings": [], "telemetry": {"trace": []}}
+    diff = _compare_run_snapshots(before, after)
+    assert diff["findings"]["disappeared"] == []
+    assert len(diff["findings"]["not_observed"]) == 1
+    assert diff["findings"]["absence_confirmed"] is False
