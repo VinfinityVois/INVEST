@@ -20,6 +20,7 @@ type Telemetry = {
   severity: Record<string, number>;
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
+  security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
 };
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown> };
 type FlowNode = Node<NodeData>;
@@ -40,6 +41,7 @@ const seedNodes: FlowNode[] = [
   { id: "sca", type: "workflow", position: { x: 550, y: 285 }, data: { label: "Dependency scanner", nodeType: "scan.sca", category: "Security", description: "Проверяет Gradle-зависимости по локальному advisory snapshot.", config: {} } },
   { id: "sast", type: "workflow", position: { x: 550, y: 470 }, data: { label: "Kotlin SAST", nodeType: "scan.sast", category: "Security", description: "Статически анализирует Kotlin/Spring-код на поддерживаемые классы проблем.", config: {} } },
   { id: "merge", type: "workflow", position: { x: 850, y: 285 }, data: { label: "Merge findings", nodeType: "findings.merge", category: "Logic", description: "Объединяет результаты сканеров и удаляет дубликаты по fingerprint.", config: {} } },
+  { id: "gate", type: "workflow", position: { x: 1120, y: 285 }, data: { label: "Security Gate", nodeType: "ci.gate", category: "CI", description: "Блокирует workflow при CRITICAL/HIGH находках; пороги настраиваются в конфигурации.", config: { block_on: ["CRITICAL", "HIGH"], warn_on: ["MEDIUM", "LOW", "INFO"] } } },
 ];
 const seedEdges: Edge[] = [
   { id: "e1", source: "trigger", target: "source", animated: true, label: "запуск" },
@@ -49,6 +51,7 @@ const seedEdges: Edge[] = [
   { id: "e5", source: "secrets", target: "merge", animated: true },
   { id: "e6", source: "sca", target: "merge", animated: true },
   { id: "e7", source: "sast", target: "merge", animated: true },
+  { id: "e8", source: "merge", target: "gate", animated: true, label: "policy" },
 ];
 
 function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
@@ -347,7 +350,8 @@ export default function App() {
         <section className="telemetry-card">
           <div className="telemetry-heading"><div><div className="section-caption">RUN TELEMETRY</div><b>Последний запуск</b></div><span className={"telemetry-status status-" + (telemetry?.status || "empty")}>{telemetry?.status === "completed" ? "УСПЕШНО" : telemetry?.status === "partial" ? "ЧАСТИЧНО" : telemetry?.status === "failed" ? "ОШИБКА" : telemetry?.status === "running" ? "В РАБОТЕ" : telemetry?.status === "queued" ? "В ОЧЕРЕДИ" : "НЕТ ДАННЫХ"}</span></div>
           {telemetry && telemetry.status !== "never_run" ? <>
-            <div className="telemetry-metrics">
+            {telemetry.security_gate && <div className={"security-gate-result gate-" + telemetry.security_gate.decision.toLowerCase()}><span>SECURITY GATE</span><strong>{telemetry.security_gate.decision}</strong><small>BLOCK: {telemetry.security_gate.policy.block_on.join(", ")} · WARN: {telemetry.security_gate.policy.warn_on.join(", ")}</small></div>}
+          <div className="telemetry-metrics">
               <div><strong>{formatDuration(telemetry.duration_ms)}</strong><small>ДЛИТЕЛЬНОСТЬ</small></div>
               <div><strong>{telemetry.total_findings}</strong><small>НАХОДКИ</small></div>
               <div><strong>{telemetry.completed_nodes || 0}/{telemetry.total_nodes || 0}</strong><small>ШАГИ</small></div>
