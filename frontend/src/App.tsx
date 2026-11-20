@@ -400,6 +400,10 @@ export default function App() {
       setProjectFiles(data.files || []);
       setProjectFilePreview(null);
       setProjectVisualPreview(null);
+      setProjectEditorTabs([]);
+      setActiveEditorTab(null);
+      setProjectDraft("");
+      setProjectEditing(false);
       setProjectHistoryOpen(false);
       const historyResponse = await fetch(`/api/projects/${project.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
@@ -461,7 +465,7 @@ export default function App() {
           label: "Project source", description: "Выбери ZIP из библиотеки или настрой Git-источник.", config: {},
           executionStatus: "idle", executionDetail: "", executionNotes: [], executionSeverity: undefined,
         });
-        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectVisualPreview(null); setProjectHistory([]); setProjectHistoryOpen(false); setProjectWorkspaceOpen(false);
+        setActiveProject(null); setProjectFiles([]); setProjectFilePreview(null); setProjectVisualPreview(null); setProjectEditorTabs([]); setActiveEditorTab(null); setProjectDraft(""); setProjectEditing(false); setProjectHistory([]); setProjectHistoryOpen(false); setProjectWorkspaceOpen(false);
       }
       setResult("Проект удалён · " + project.name);
     } catch (error) { setResult("Ошибка удаления: " + String(error)); }
