@@ -501,3 +501,7 @@
   .shell .workflow-title-input { font-size:20px;max-width:100%; }
   .shell .workflow-save-state { font-size:9px; }
 }
+
+.shell .workflow-save-state { max-width:190px;overflow:hidden;text-overflow:ellipsis; }
+.shell .workflow-save-state i { flex:0 0 6px; }
+.shell .workflow-title-input { min-width:0; }
