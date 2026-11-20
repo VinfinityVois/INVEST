@@ -1001,10 +1001,28 @@ export default function App() {
     if (!workflowId || !finding.fingerprint) return;
     const reason = window.prompt("Причина изменения статуса уязвимости:", state === "open" ? "Повторная проверка" : "");
     if (reason === null || !reason.trim()) return;
+    let expiresAt: string | null = null;
+    if (state === "accepted_risk") {
+      const defaultExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const expiryInput = window.prompt("Срок принятого риска (ISO 8601 с часовым поясом). Оставьте пустым для бессрочного допуска:", defaultExpiry);
+      if (expiryInput === null) return;
+      if (expiryInput.trim()) {
+        const parsedExpiry = new Date(expiryInput.trim());
+        if (Number.isNaN(parsedExpiry.getTime()) || !/(Z|[+-]\\d{2}:?\\d{2})$/i.test(expiryInput.trim())) {
+          window.alert("Укажите корректную дату ISO 8601 с часовым поясом, например 2027-01-31T23:59:59Z.");
+          return;
+        }
+        if (parsedExpiry.getTime() <= Date.now()) {
+          window.alert("Срок принятия риска должен быть в будущем.");
+          return;
+        }
+        expiresAt = parsedExpiry.toISOString();
+      }
+    }
     try {
       const response = await fetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state, reason: reason.trim() }),
+        body: JSON.stringify({ state, reason: reason.trim(), expires_at: expiresAt }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось изменить статус");
@@ -1476,6 +1494,7 @@ export default function App() {
                   <option value="open">Открыта</option><option value="accepted_risk">Принятый риск</option><option value="fixed">Исправлена</option><option value="false_positive">Ложное срабатывание</option>
                 </select>
               </label>
+              {findingStates[finding.fingerprint]?.state === "accepted_risk" && findingStates[finding.fingerprint]?.expires_at && <small>Допуск до: {formatDate(findingStates[finding.fingerprint]!.expires_at!)}</small>}
               <button className="history-button" onClick={() => void loadFindingHistory(finding.fingerprint!)}>История</button>
               {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
             </div>}
