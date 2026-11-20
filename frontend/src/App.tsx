@@ -1214,6 +1214,7 @@ export default function App() {
          </div>
       </div>
     </header>
+    <div className="desktop-recommendation"><Activity size={14}/><span>Для полноценной работы с графом рекомендуется экран от 1280 px. На узких экранах панели доступны в адаптированном режиме.</span></div>
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
       <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>
         {leftCollapsed ? <button className="collapsed-rail" onClick={() => setLeftCollapsed(false)} title="Развернуть библиотеку блоков" aria-label="Развернуть библиотеку блоков"><PanelLeftOpen size={17} /><span>БЛОКИ</span></button> : <>
