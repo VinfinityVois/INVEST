@@ -463,6 +463,39 @@ def _maven_properties(pom, inherited=None):
     return values
 
 
+
+def _maven_parent_context(pom_path, project, snapshots, visited=None, depth=0):
+    visited = set() if visited is None else visited
+    if depth >= 8:
+        return {}, {}
+    parent = _maven_child(ET.fromstring(_read_text(pom_path) or ""), "parent")
+    if parent is None:
+        return {}, {}
+    relative_path_element = _maven_child(parent, "relativePath")
+    if relative_path_element is not None and not (relative_path_element.text or "").strip():
+        return {}, {}
+    relative_path = (relative_path_element.text or "").strip() if relative_path_element is not None else "../pom.xml"
+    parent_path = (pom_path.parent / relative_path).resolve()
+    if parent_path in visited or not (parent_path == project or project in parent_path.parents):
+        return {}, {}
+    if not parent_path.is_file() or parent_path.is_symlink():
+        return {}, {}
+    parent_source = _read_text(parent_path)
+    if parent_source is None:
+        return {}, {}
+    try:
+        parent_pom = ET.fromstring(parent_source)
+    except ET.ParseError:
+        return {}, {}
+    visited.add(parent_path)
+    inherited_properties, inherited_managed = _maven_parent_context(
+        parent_path, project, snapshots, visited, depth + 1
+    )
+    parent_properties = _maven_properties(parent_pom, inherited_properties)
+    parent_managed = dict(inherited_managed)
+    parent_managed.update(_maven_managed(parent_path, parent_pom, parent_properties, snapshots))
+    return parent_properties, parent_managed
+
 def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
     project = Path(root).resolve()
     advisories = _load_advisories(advisories_path)
@@ -479,21 +512,7 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
             pom = ET.fromstring(source)
         except ET.ParseError:
             continue
-        parent_properties = {}
-        parent_managed = {}
-        parent = _maven_child(pom, "parent")
-        if parent is not None:
-            rel = _maven_text(parent, "relativePath")
-            parent_path = (pom_path.parent / (rel if rel is not None else "../pom.xml")).resolve()
-            parent_is_confined = parent_path == project or project in parent_path.parents
-            parent_source = _read_text(parent_path) if parent_is_confined and parent_path.is_file() and not parent_path.is_symlink() else None
-            if parent_source:
-                try:
-                    parent_pom = ET.fromstring(parent_source)
-                    parent_properties = _maven_properties(parent_pom)
-                    parent_managed = _maven_managed(parent_path, parent_pom, parent_properties, bom_snapshots)
-                except ET.ParseError:
-                    pass
+        parent_properties, parent_managed = _maven_parent_context(pom_path, project, bom_snapshots)
         props = _maven_properties(pom, parent_properties)
         managed = dict(parent_managed)
         managed.update(_maven_managed(pom_path, pom, props, bom_snapshots))
