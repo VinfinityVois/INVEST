@@ -258,6 +258,7 @@ export default function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<"properties" | "findings" | "telemetry">("properties");
+  const [leftTab, setLeftTab] = useState<"nodes" | "projects">("nodes");
   const [projectFolderOpen, setProjectFolderOpen] = useState(true);
   const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
 
@@ -1203,7 +1204,7 @@ export default function App() {
            <button className="icon-button app-menu-trigger" type="button" onClick={() => setAppMenuOpen(value => !value)} aria-label="Открыть меню приложения" aria-expanded={appMenuOpen} title="Меню приложения"><Menu size={16}/></button>
            {appMenuOpen && <div className="app-menu" role="menu">
              <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Навигация</small></div>
-             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Projects library</b><small>Исходные проекты и файлы</small></span></button>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Projects library</b><small>Исходные проекты и файлы</small></span></button>
              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны</b><small>Готовые security-сценарии</small></span></button>
              <button role="menuitem" onClick={() => { setAppMenuOpen(false); const ai = nodes.find(node => node.data.nodeType === "ai.explain"); if (ai) { setSelectedNodeId(ai.id); setSelectedEdgeId(null); setRightCollapsed(false); setInspectorTab("properties"); } else setAiGraphOpen(true); }}><Activity size={15}/><span><b>AI profile</b><small>Провайдер и параметры объяснений</small></span></button>
              <div className="app-menu-divider"/>
@@ -1216,10 +1217,14 @@ export default function App() {
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
       <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>
         {leftCollapsed ? <button className="collapsed-rail" onClick={() => setLeftCollapsed(false)} title="Развернуть библиотеку блоков" aria-label="Развернуть библиотеку блоков"><PanelLeftOpen size={17} /><span>БЛОКИ</span></button> : <>
-        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
-        <p className="panel-intro">Добавляй компоненты на холст. Настройки, замена и удаление доступны в инспекторе выбранного блока.</p>
+        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Рабочая область</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
+        <div className="left-rail-tabs" role="tablist" aria-label="Разделы рабочей области">
+          <button type="button" role="tab" aria-selected={leftTab === "nodes"} className={leftTab === "nodes" ? "active" : ""} onClick={() => setLeftTab("nodes")}><Code2 size={14}/> Nodes</button>
+          <button type="button" role="tab" aria-selected={leftTab === "projects"} className={leftTab === "projects" ? "active" : ""} onClick={() => { setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={14}/> Projects <span>{projects.length}</span></button>
+        </div>
+        <p className="panel-intro">{leftTab === "nodes" ? "Компоненты security workflow. Добавляй блоки на холст и настраивай их справа." : "Проекты, исходные архивы и файлы для анализа."}</p>
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
-        <section className={"palette-folder" + (projectFolderOpen ? " folder-open" : "")}>
+        {leftTab === "projects" && <section className={"palette-folder" + (projectFolderOpen ? " folder-open" : "")}>
           <button className="palette-folder-head project-folder-head" onClick={() => setProjectFolderOpen(value => !value)} aria-expanded={projectFolderOpen}>
             <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><FolderOpen size={15}/><b>ПРОЕКТЫ / PROJECT LIBRARY</b></span>
             <small>{projects.length}</small>
@@ -1256,7 +1261,8 @@ export default function App() {
         </div>
           </div>}
         </section>
-        <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
+        </section>}
+        {leftTab === "nodes" && <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
           <button className="palette-folder-head components-folder-head" onClick={() => setComponentsFolderOpen(value => !value)} aria-expanded={componentsFolderOpen}>
             <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><Code2 size={15}/><b>КОМПОНЕНТЫ API</b></span>
             <small>{manifests.length}</small>
@@ -1271,7 +1277,7 @@ export default function App() {
         {manifests.length > 0 && filtered.length === 0 && <div className="empty-library">Ничего не найдено.</div>}
         <div className="palette-note"><LockKeyhole size={14} /><span>Код репозитория анализируется как данные, без запуска его скриптов.</span></div>
           </div>}
-        </section>
+        </section>}
         </>}
       </aside>
 
