@@ -553,7 +553,7 @@ export default function App() {
   }, [selectedNodeId, nodes.find(n => n.id === selectedNodeId)?.data.config]);
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
-  const isValidConnection = useCallback((connection: Connection) => {
+  const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return false;
     const sourceNode = nodes.find(node => node.id === connection.source);
     const targetNode = nodes.find(node => node.id === connection.target);
