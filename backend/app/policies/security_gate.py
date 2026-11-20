@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 
 SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
@@ -8,6 +9,7 @@ DECISIONS = ("PASS", "WARN", "BLOCK")
 def evaluate_security_gate(
     findings: list[dict[str, Any]],
     config: dict[str, Any] | None = None,
+    finding_states: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate normalized findings against an explicit, deterministic policy.
 
@@ -31,19 +33,39 @@ def evaluate_security_gate(
     counts = Counter()
     blocked = []
     warnings = []
+    suppressed = []
+    states = finding_states or {}
+    now = datetime.now(timezone.utc)
     for finding in findings:
         severity = str(finding.get("severity", "INFO")).upper()
         if severity not in SEVERITIES:
             severity = "INFO"
-        counts[severity] += 1
+        fingerprint = str(finding.get("fingerprint") or "")
+        state_record = states.get(fingerprint, {})
+        lifecycle_state = state_record.get("state")
+        expires_at = state_record.get("expires_at")
+        is_active_exception = lifecycle_state in {"accepted_risk", "false_positive"}
+        if is_active_exception and expires_at:
+            try:
+                expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                is_active_exception = expiry > now
+            except ValueError:
+                is_active_exception = False
         item = {
             "fingerprint": finding.get("fingerprint"),
+            "lifecycle_state": lifecycle_state,
             "rule_id": finding.get("rule_id", "unknown"),
             "severity": severity,
             "path": finding.get("path", ""),
             "line": finding.get("line"),
             "message": finding.get("message", ""),
         }
+        if is_active_exception:
+            suppressed.append({**item, "suppression": lifecycle_state})
+            continue
+        counts[severity] += 1
         if severity in block_set:
             blocked.append(item)
         elif severity in warn_set:
@@ -56,5 +78,6 @@ def evaluate_security_gate(
         "counts": {severity: counts.get(severity, 0) for severity in SEVERITIES},
         "blocking_findings": blocked,
         "warnings": warnings,
+        "suppressed_findings": suppressed,
         "policy": {"block_on": sorted(block_set), "warn_on": sorted(warn_set)},
     }
