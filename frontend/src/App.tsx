@@ -25,6 +25,7 @@ type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: s
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
+type WorkflowSchedule = { id: string; cron_expression: string; timezone: string; enabled: boolean; next_run_at: string; last_run_at?: string | null; last_run_id?: string | null };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
 type SecurityTrend = {
   points: Array<{ run_id: string; status: string; queued_at?: string | null; finished_at?: string | null; duration_ms?: number | null; total_findings: number; severity: Record<string, number>; security_gate?: { decision?: "PASS" | "WARN" | "BLOCK"; blocked?: boolean } | null }>;
@@ -156,6 +157,13 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [workflowSchedules, setWorkflowSchedules] = useState<WorkflowSchedule[]>([]);
+  const [scheduleCron, setScheduleCron] = useState("0 9 * * 1-5");
+  const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
+  const [scheduleEnabled, setScheduleEnabled] = useState(true);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
   const [notice, setNotice] = useState("Подключение к API…");
   const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
   const [result, setResult] = useState("Граф готов к проверке.");
@@ -848,6 +856,74 @@ export default function App() {
     if (!response.ok) throw new Error(JSON.stringify(data));
     setWorkflowId(data.id); return data.id as string;
   };
+  const refreshWorkflowSchedules = async (id: string) => {
+    const response = await fetch("/api/workflows/" + id + "/schedules");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Не удалось загрузить расписания");
+    setWorkflowSchedules(data as WorkflowSchedule[]);
+  };
+  useEffect(() => {
+    if (!workflowId) { setWorkflowSchedules([]); return; }
+    let active = true;
+    fetch("/api/workflows/" + workflowId + "/schedules")
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Не удалось загрузить расписания");
+        if (active) setWorkflowSchedules(data as WorkflowSchedule[]);
+      })
+      .catch(error => { if (active) setScheduleError(String(error)); });
+    return () => { active = false; };
+  }, [workflowId]);
+  const resetScheduleForm = () => {
+    setEditingScheduleId(null); setScheduleCron("0 9 * * 1-5"); setScheduleTimezone("UTC"); setScheduleEnabled(true); setScheduleError("");
+  };
+  const editSchedule = (schedule: WorkflowSchedule) => {
+    setEditingScheduleId(schedule.id); setScheduleCron(schedule.cron_expression);
+    setScheduleTimezone(schedule.timezone); setScheduleEnabled(schedule.enabled); setScheduleError("");
+  };
+  const saveSchedule = async () => {
+    setScheduleBusy(true); setScheduleError("");
+    try {
+      const id = await persistWorkflow();
+      const editingId = editingScheduleId;
+      const response = await fetch("/api/workflows/" + id + "/schedules" + (editingId ? "/" + editingId : ""), {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cron_expression: scheduleCron.trim(), timezone: scheduleTimezone.trim(), enabled: scheduleEnabled }),
+      });
+      const data = response.status === 204 ? null : await response.json();
+      if (!response.ok) throw new Error(data?.detail || "Не удалось сохранить расписание");
+      await refreshWorkflowSchedules(id);
+      resetScheduleForm();
+      setResult(editingId ? "Расписание обновлено." : "Расписание создано.");
+    } catch (error) { setScheduleError(String(error)); }
+    finally { setScheduleBusy(false); }
+  };
+  const toggleSchedule = async (schedule: WorkflowSchedule) => {
+    if (!workflowId) return;
+    setScheduleBusy(true); setScheduleError("");
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/schedules/" + schedule.id, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cron_expression: schedule.cron_expression, timezone: schedule.timezone, enabled: !schedule.enabled }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось изменить расписание");
+      await refreshWorkflowSchedules(workflowId);
+    } catch (error) { setScheduleError(String(error)); }
+    finally { setScheduleBusy(false); }
+  };
+  const deleteSchedule = async (schedule: WorkflowSchedule) => {
+    if (!workflowId || !window.confirm("Удалить это расписание?")) return;
+    setScheduleBusy(true); setScheduleError("");
+    try {
+      const response = await fetch("/api/workflows/" + workflowId + "/schedules/" + schedule.id, { method: "DELETE" });
+      if (!response.ok) { const data = await response.json(); throw new Error(data.detail || "Не удалось удалить расписание"); }
+      await refreshWorkflowSchedules(workflowId);
+      if (editingScheduleId === schedule.id) resetScheduleForm();
+    } catch (error) { setScheduleError(String(error)); }
+    finally { setScheduleBusy(false); }
+  };
   const saveWorkflow = async () => {
     setBusy(true);
     try { const id = await persistWorkflow(); setResult("Сохранено · workflow " + id); }
@@ -1111,6 +1187,34 @@ export default function App() {
       <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>
         {rightCollapsed ? <button className="collapsed-rail" onClick={() => setRightCollapsed(false)} title="Развернуть инспектор" aria-label="Развернуть инспектор"><PanelRightOpen size={17} /><span>ИНСПЕКТОР</span></button> : <>
         <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / EDITOR</div><h3><Activity size={17} /> Свойства элемента</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
+        <section className="schedule-panel">
+          <div className="section-caption">AUTOMATION / CRON SCHEDULES</div>
+          <div className="schedule-panel-heading"><b>Расписание запусков</b><button type="button" onClick={() => workflowId && void refreshWorkflowSchedules(workflowId)} disabled={!workflowId || scheduleBusy}>ОБНОВИТЬ</button></div>
+          {!workflowId && <p className="schedule-hint">Сначала сохрани workflow — после этого можно настроить автоматические запуски.</p>}
+          {workflowSchedules.map(schedule => <article className="schedule-item" key={schedule.id}>
+            <div className="schedule-item-main"><b>{schedule.cron_expression}</b><span className={schedule.enabled ? "schedule-enabled" : "schedule-disabled"}>{schedule.enabled ? "ВКЛЮЧЕНО" : "ОТКЛЮЧЕНО"}</span></div>
+            <small>{schedule.timezone} · следующий запуск: {formatDate(schedule.next_run_at)}</small>
+            {schedule.last_run_at && <small>Последний запуск: {formatDate(schedule.last_run_at)}</small>}
+            <div className="schedule-item-actions">
+              <button type="button" disabled={scheduleBusy} onClick={() => void toggleSchedule(schedule)}>{schedule.enabled ? "ОТКЛЮЧИТЬ" : "ВКЛЮЧИТЬ"}</button>
+              <button type="button" disabled={scheduleBusy} onClick={() => editSchedule(schedule)}>ИЗМЕНИТЬ</button>
+              <button type="button" className="schedule-delete" disabled={scheduleBusy} onClick={() => void deleteSchedule(schedule)}>УДАЛИТЬ</button>
+            </div>
+          </article>)}
+          {workflowId && workflowSchedules.length === 0 && <p className="schedule-hint">Расписаний пока нет. Добавь первое ниже.</p>}
+          <div className="schedule-form">
+            <b>{editingScheduleId ? "Изменить расписание" : "Новое расписание"}</b>
+            <label className="field-label">Cron (5 полей)<input value={scheduleCron} onChange={event => setScheduleCron(event.target.value)} placeholder="0 9 * * 1-5" disabled={!workflowId || scheduleBusy}/></label>
+            <small className="schedule-hint">Минуты · часы · день месяца · месяц · день недели</small>
+            <label className="field-label">Часовой пояс<input value={scheduleTimezone} onChange={event => setScheduleTimezone(event.target.value)} placeholder="Europe/Stockholm" disabled={!workflowId || scheduleBusy}/></label>
+            <label className="schedule-enable"><input type="checkbox" checked={scheduleEnabled} onChange={event => setScheduleEnabled(event.target.checked)} disabled={!workflowId || scheduleBusy}/> Активировать сразу</label>
+            {scheduleError && <p className="schedule-error">{scheduleError}</p>}
+            <div className="schedule-form-actions">
+              <button type="button" disabled={!workflowId || scheduleBusy || !scheduleCron.trim() || !scheduleTimezone.trim()} onClick={() => void saveSchedule()}>{scheduleBusy ? "СОХРАНЕНИЕ…" : editingScheduleId ? "СОХРАНИТЬ ИЗМЕНЕНИЯ" : "ДОБАВИТЬ РАСПИСАНИЕ"}</button>
+              {editingScheduleId && <button type="button" disabled={scheduleBusy} onClick={resetScheduleForm}>ОТМЕНА</button>}
+            </div>
+          </div>
+        </section>
         {selectedNode && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ БЛОКА</div>
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>

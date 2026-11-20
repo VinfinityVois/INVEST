@@ -833,3 +833,26 @@
 .cache-telemetry-strip small{margin-left:auto;color:#78988c;font-size:8px}
 .run-cache-summary{grid-column:1/-1;color:#80bd9e!important;font:7px 'DM Mono';letter-spacing:.1px}
 @media(max-width:760px){.cache-telemetry-strip{align-items:flex-start;flex-direction:column;gap:4px}.cache-telemetry-strip small{margin-left:0}}
+
+
+/* Workflow cron schedule management */
+.schedule-panel{display:grid;gap:9px;margin:12px 0;padding:11px;border:1px solid rgba(91,151,190,.22);border-radius:7px;background:rgba(8,20,33,.55)}
+.schedule-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#cbdce9;font-size:11px}
+.schedule-panel-heading button,.schedule-item-actions button,.schedule-form-actions button{border:1px solid rgba(105,165,200,.25);border-radius:4px;padding:6px 8px;background:rgba(40,85,110,.18);color:#a6cbe0;font:8px 'DM Mono';letter-spacing:.04em;cursor:pointer}
+.schedule-panel button:disabled{opacity:.4;cursor:not-allowed}
+.schedule-hint{margin:0;color:#8299ad;font-size:10px;line-height:1.5}
+.schedule-item{display:grid;gap:5px;padding:9px;border:1px solid rgba(104,145,182,.16);border-radius:5px;background:rgba(4,13,22,.4)}
+.schedule-item-main{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.schedule-item-main>b{color:#d2e3f0;font:11px 'DM Mono'}
+.schedule-item>small{color:#8299ad;font-size:9px;line-height:1.4}
+.schedule-enabled,.schedule-disabled{font:8px 'DM Mono';letter-spacing:.05em}
+.schedule-enabled{color:#7fc9a1}.schedule-disabled{color:#d5ad70}
+.schedule-item-actions,.schedule-form-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px}
+.schedule-item-actions .schedule-delete{color:#df9999}
+.schedule-form{display:grid;gap:7px;padding-top:9px;border-top:1px solid rgba(104,145,182,.16)}
+.schedule-form>b{color:#b9d0df;font-size:10px}
+.schedule-form .field-label{margin:0}
+.schedule-enable{display:flex;align-items:center;gap:7px;color:#9bb0c2;font-size:10px}
+.schedule-enable input{accent-color:#75b5d8}
+.schedule-error{margin:0;padding:7px;border-left:2px solid #d27d7d;background:rgba(130,48,48,.12);color:#e5a0a0;font-size:10px;overflow-wrap:anywhere}
+@media(max-width:760px){.schedule-item-main{align-items:flex-start;flex-direction:column}}
