@@ -646,3 +646,18 @@
 .ai-source-evidence code{overflow-wrap:anywhere;white-space:pre-wrap;color:#b8c9d9;font:8px/1.55 'DM Mono'}
 .ai-no-evidence{display:block;margin:7px 0;color:#d2ad76;font:8px/1.5 'DM Mono'}
 .ai-confidence-note{display:block;margin-top:6px;color:#7f94a8;font:7px/1.5 'DM Mono'}
+
+/* Workflow node details and source-backed execution metrics */
+.node-description-details{margin:5px 0 7px;border:1px solid rgba(112,151,188,.14);border-radius:5px;background:rgba(5,12,21,.28)}
+.node-description-details>summary{display:flex;align-items:center;gap:5px;min-height:22px;padding:3px 6px;list-style:none;color:#8ba5bf;font:6px 'DM Mono';letter-spacing:.8px;cursor:pointer}
+.node-description-details>summary::-webkit-details-marker{display:none}
+.node-description-details>summary svg{margin-left:auto;transition:transform .18s ease;color:#7896b2}
+.node-description-details[open]>summary svg{transform:rotate(180deg)}
+.node-description-details>p{margin:0;padding:2px 7px 8px;color:#aebed0;font-size:8px;line-height:1.5}
+.node-execution-metrics{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0 2px}
+.node-execution-metrics>span{display:grid;gap:3px;min-width:52px;padding:5px 6px;border:1px solid rgba(112,151,188,.14);border-radius:4px;background:rgba(5,13,22,.45)}
+.node-execution-metrics small{color:#718ba5;font:6px 'DM Mono';letter-spacing:.55px}
+.node-execution-metrics b{color:#d0e2f3;font:8px 'DM Mono'}
+.workflow-node.node-running{border-color:rgba(114,202,255,.72)!important;box-shadow:0 0 0 1px rgba(91,190,255,.12),0 10px 30px rgba(30,112,165,.13)}
+.workflow-node.node-completed .node-footer{border-top-color:rgba(86,190,147,.24)}
+@media(prefers-reduced-motion:reduce){.node-description-details>summary svg{transition:none}}
