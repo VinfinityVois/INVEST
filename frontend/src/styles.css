@@ -58,3 +58,37 @@
  .collapsed-rail span{writing-mode:initial;transform:none}
 }
 @media(prefers-reduced-motion:reduce){.layout{transition:none}}
+
+
+/* 0.6.0 — last-run telemetry */
+.telemetry-card{margin:12px 0;padding:11px;background:linear-gradient(155deg,#111f30,#0b1420);border:1px solid #304760;border-radius:8px}
+.telemetry-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.telemetry-heading b{display:block;margin-top:5px;color:#dce9f7;font-size:10px}
+.telemetry-status{padding:4px 6px;border-radius:4px;font:7px 'DM Mono';letter-spacing:.5px;background:#202b39;color:#91a3b9}
+.telemetry-status.status-completed{background:#14372f;color:#86dfbd}
+.telemetry-status.status-partial{background:#392d19;color:#edc77f}
+.telemetry-status.status-failed{background:#3a2028;color:#f2a3ae}
+.telemetry-status.status-running{background:#3a2e19;color:#f0c77c}
+.telemetry-status.status-queued{background:#1c3048;color:#9dcaff}
+.telemetry-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:11px 0 8px}
+.telemetry-metrics>div{min-width:0;padding:8px 6px;background:#0a121d;border:1px solid #26384e;border-radius:5px}
+.telemetry-metrics strong{display:block;color:#e4effb;font:600 12px 'DM Mono';white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.telemetry-metrics small{display:block;margin-top:4px;color:#72869e;font:6px 'DM Mono';letter-spacing:.6px}
+.telemetry-time{display:flex;flex-direction:column;gap:4px;color:#7f93aa;font:7px 'DM Mono'}
+.telemetry-progress{height:4px;margin:9px 0;background:#1d2b3b;border-radius:4px;overflow:hidden}
+.telemetry-progress i{display:block;height:100%;background:linear-gradient(90deg,#3e9b91,#78cdb5);transition:width .25s ease}
+.severity-strip{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}
+.severity-strip span{padding:4px 5px;border-radius:4px;background:#1c2837;color:#a9bbd0;font:6px 'DM Mono'}
+.severity-strip b{margin-left:3px;color:#f0f5fb}
+.severity-strip .severity-critical,.severity-strip .severity-high{background:#3a2028;color:#ffadb7}
+.severity-strip .severity-medium{background:#392d1b;color:#f1c782}
+.severity-strip .severity-low{background:#1c3040;color:#9ecaf0}
+.severity-strip .severity-info{background:#26303c;color:#bac8d7}
+.scanner-telemetry{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:8px;border-top:1px solid #25364a}
+.scanner-telemetry>div{display:grid;grid-template-columns:1fr auto;gap:3px 8px;align-items:center}
+.scanner-telemetry span{color:#c0d1e3;font:7px 'DM Mono'}
+.scanner-telemetry small{color:#7890a8;font:7px 'DM Mono'}
+.scanner-telemetry b{grid-column:1/-1;color:#92b6d9;font:7px 'DM Mono'}
+.telemetry-current{margin-top:8px;color:#e5c17e;font-size:7px;overflow-wrap:anywhere}
+.telemetry-empty{margin:10px 0 0;padding:9px;background:#0b111a;border:1px dashed #2b3b50;border-radius:5px;color:#7e91a9;font-size:8px;line-height:1.5}
+@media(max-width:700px){.telemetry-metrics strong{font-size:10px}.telemetry-card{padding:9px}}
