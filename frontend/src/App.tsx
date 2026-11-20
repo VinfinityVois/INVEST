@@ -370,6 +370,8 @@ export default function App() {
   };
   const categories = ["Все", ...Array.from(new Set(manifests.map(item => item.category)))];
   const filtered = manifests.filter(item => (category === "Все" || item.category === category) && (item.title + " " + item.description + " " + item.type).toLowerCase().includes(search.toLowerCase()));
+  const aiNode = nodes.find(node => node.data.nodeType === "ai.explain");
+  const aiNodeResult = aiNode ? telemetry?.node_results?.[aiNode.id] : undefined;
 
   return <main className="shell">
     <header className="topbar">
@@ -503,6 +505,16 @@ export default function App() {
               <p><b>Влияние:</b> {finding.ai_explanation.impact}</p>
               <p><b>Рекомендация:</b> {finding.ai_explanation.recommendation}</p>
               {finding.ai_explanation.evidence_limits && <small>Ограничения анализа: {finding.ai_explanation.evidence_limits}</small>}
+            </div>}
+            {!finding.ai_explanation && aiNode && <div className="finding-ai-explanation ai-explanation-pending">
+              <div><Bot size={13}/><b>AI EXPLANATION</b><span>{aiNodeResult?.status === "completed" ? "НЕТ ОТВЕТА" : aiNodeResult?.status === "failed" ? "ОШИБКА" : aiNodeResult?.status === "configuration_required" ? "НЕ НАСТРОЕН" : "ОЖИДАЕТ ЗАПУСКА"}</span></div>
+              <p>{aiNodeResult?.status === "configuration_required"
+                ? "Объяснение не создано: настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневом .env и перезапустите api и worker."
+                : aiNodeResult?.status === "failed"
+                  ? "Провайдер AI не вернул корректный результат. Проверьте адрес, модель, API-ключ и доступность провайдера."
+                  : aiNodeResult?.status === "completed"
+                    ? "Для этой находки модель не вернула проверенное объяснение или находка не попала в установленный лимит. Ниже остаются результаты детерминированного анализа."
+                    : "AI-объяснение появится после выполнения соответствующего блока workflow."}</p>
             </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
