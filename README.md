@@ -78,7 +78,7 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 Добавлена телеметрия последнего запуска: статус, время постановки в очередь/начала/завершения, длительность, общее число находок и распределение по severity, длительность каждого сканера и прогресс узлов. API предоставляет `/api/workflows/{workflow_id}/telemetry/latest`, `/api/runs/{run_id}/telemetry` и SSE-поток `/api/runs/{run_id}/events`. Интерфейс получает прогресс через SSE и использует polling как резервный режим.
 
-Остаются в разработке: полноценный межпроцедурный AST/taint-анализ Kotlin SAST, Spring Boot dependency management и расширение транзитивного SCA. AI Explanation Gateway и объяснения по находкам реализованы как необязательная интеграция. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
+Kotlin SAST дополнен ограниченным межпроцедурным taint-анализом в пределах одного файла: отслеживаются HTTP-параметры и request.getParameter/getHeader/getQueryString через локальные присваивания и прямые вызовы функций до SQL API. Параметризованные SQL-запросы с bind-параметрами не отмечаются этим правилом. Это статический анализ без запуска кода; межфайловой call graph, полноценный Kotlin AST/PSI и глубокий анализ потоков остаются следующими задачами. Также остаются в разработке Spring Boot dependency management и расширение транзитивного SCA. AI Explanation Gateway и объяснения по находкам реализованы как необязательная интеграция. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
 
 ## Принципы безопасности
 
