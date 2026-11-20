@@ -21,3 +21,19 @@ jobs:
         with:
           node-version: "22"
       - run: cd frontend && npm install && npm run build
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: TBagirov/training
+          ref: fe1fcbe212669783480666b9b60147c8a8c6eef4
+          path: training
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt
+      - run: python eval/run_secrets_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
+      - run: python eval/run_sca_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
