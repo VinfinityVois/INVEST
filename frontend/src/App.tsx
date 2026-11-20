@@ -298,7 +298,8 @@ export default function App() {
       setResult("Задание поставлено в очередь · " + queued.run_id);
       setLastRunId(queued.run_id); window.localStorage.setItem("invest.lastRunId", queued.run_id);
 
-      setTelemetry({ status: "queued", total_findings: 0, severity: {}, scanners: [], completed_nodes: 0, total_nodes: nodes.length });\n      const completed = await new Promise<Telemetry>((resolve, reject) => {
+      setTelemetry({ status: "queued", total_findings: 0, severity: {}, scanners: [], completed_nodes: 0, total_nodes: nodes.length });
+      const completed = await new Promise<Telemetry>((resolve, reject) => {
         const stream = new EventSource("/api/runs/" + queued.run_id + "/events");
         let settled = false;
         let fallbackStarted = false;
