@@ -259,6 +259,12 @@ def process_run(run_id: str, worker_id: str) -> None:
 
 
 
+
+def _next_schedule_at(expression: str, timezone_name: str, base_time: datetime | None = None) -> datetime:
+    zone = ZoneInfo(timezone_name)
+    base = (base_time or datetime.now(timezone.utc)).astimezone(zone)
+    return croniter(expression, base).get_next(datetime).astimezone(timezone.utc)
+
 def enqueue_due_schedules(limit: int = 10) -> int:
     """Atomically enqueue due cron workflows and advance each schedule."""
     now = datetime.now(timezone.utc)
@@ -277,10 +283,7 @@ def enqueue_due_schedules(limit: int = 10) -> int:
         ).all()
         for schedule in due:
             try:
-                zone = ZoneInfo(schedule.timezone)
-                local_now = now.astimezone(zone)
-                next_local = croniter(schedule.cron_expression, local_now).get_next(datetime)
-                schedule.next_run_at = next_local.astimezone(timezone.utc)
+                schedule.next_run_at = _next_schedule_at(schedule.cron_expression, schedule.timezone, now)
             except (ValueError, KeyError):
                 schedule.enabled = False
                 schedule.next_run_at = None
