@@ -436,7 +436,7 @@ def preview_project_file(
         }
 
 
-@app.get("/api/projects/{project_id}/preview")
+@app.api_route("/api/projects/{project_id}/preview", methods=["GET", "HEAD"])
 def preview_project_asset(
     project_id: UUID,
     path: str = Query(min_length=1, max_length=1000),
