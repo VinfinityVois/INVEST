@@ -256,6 +256,7 @@ export default function App() {
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"properties" | "findings" | "telemetry">("properties");
   const [projectFolderOpen, setProjectFolderOpen] = useState(true);
   const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
 
@@ -1277,7 +1278,13 @@ export default function App() {
 
       <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>
         {rightCollapsed ? <button className="collapsed-rail" onClick={() => setRightCollapsed(false)} title="Развернуть инспектор" aria-label="Развернуть инспектор"><PanelRightOpen size={17} /><span>ИНСПЕКТОР</span></button> : <>
-        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / EDITOR</div><h3><Activity size={17} /> Свойства элемента</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
+        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / CONTEXT</div><h3><Activity size={17} /> Инспектор</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
+        <div className="inspector-tabs" role="tablist" aria-label="Разделы инспектора">
+          <button type="button" role="tab" aria-selected={inspectorTab === "properties"} className={inspectorTab === "properties" ? "tab-active" : ""} onClick={() => setInspectorTab("properties")}>Свойства</button>
+          <button type="button" role="tab" aria-selected={inspectorTab === "findings"} className={inspectorTab === "findings" ? "tab-active" : ""} onClick={() => setInspectorTab("findings")}>Findings <span>{findings.length}</span></button>
+          <button type="button" role="tab" aria-selected={inspectorTab === "telemetry"} className={inspectorTab === "telemetry" ? "tab-active" : ""} onClick={() => setInspectorTab("telemetry")}>Telemetry</button>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "properties"}>
         {selectedNode && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ БЛОКА</div>
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
@@ -1349,7 +1356,8 @@ export default function App() {
           <p className="edit-hint">Также можно создать связь, потянув линию от правого порта одного блока к левому порту другого. Перетащи конец существующей связи, чтобы перенаправить её.</p>
         </section>}
         {!selectedNode && !selectedEdge && <div className="empty-inspector"><Workflow size={26} /><b>Ничего не выбрано</b><p>Выбери блок или линию на холсте. Здесь появятся доступные настройки и действия.</p></div>}
-        <div className="inspector-tabs"><span className="tab-active">Результаты</span><span className="tab-state">{busy ? "RUNNING" : "IDLE"}</span></div>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "telemetry"}>
         <div className="runtime"><div><Bot size={18} /></div><section><b>Workflow runtime</b><small>Исполнитель графа API</small></section><label className={busy ? "running" : ""}>{busy ? "RUNNING" : "READY"}</label></div>
         <section className="telemetry-card">
           <div className="telemetry-heading"><div><div className="section-caption">RUN TELEMETRY</div><b>Последний запуск</b></div><span className={"telemetry-status status-" + (telemetry?.status || "empty")}>{telemetry?.status === "completed" ? "УСПЕШНО" : telemetry?.status === "partial" ? "ЧАСТИЧНО" : telemetry?.status === "failed" ? "ОШИБКА" : telemetry?.status === "running" ? "В РАБОТЕ" : telemetry?.status === "queued" ? "В ОЧЕРЕДИ" : "НЕТ ДАННЫХ"}</span></div>
@@ -1538,6 +1546,8 @@ export default function App() {
             {item.version === workflowVersions[0].version && <em>ТЕКУЩАЯ</em>}
           </div>)}</div> : <p className="run-history-empty">{versionsLoading ? "Загружаем версии…" : "Сохранённые версии появятся здесь."}</p>}
         </section>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "findings"}>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
@@ -1602,6 +1612,7 @@ export default function App() {
             </div>}
           </article>)}
           </section>)}
+        </div>
         {showResult && <section className="result-section"><div className="result-title"><span>Последний ответ API</span><AlertTriangle size={13} /></div><pre>{result}</pre></section>}
         <div className="safe"><Shield size={16} /><div><b>Изолированный анализ</b><p>Проект не запускается. ZIP проверяется, Git ограничен allowlist. Секреты маскируются.</p></div></div>
         </>}
