@@ -44,3 +44,28 @@ return HttpHeaders().apply { setBearerAuth(access) }'''
 
 def test_safe_configuration_reference_is_not_a_secret():
     assert scan_text("token: " + "$" + "{INVENTORY_TOKEN}", "application.yml") == []
+
+
+
+def test_detects_high_entropy_secret_named_literal_and_masks_value():
+    value = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc"
+    findings = scan_text(f'private val jwtSecret = "{value}"', "AuthConfig.kt")
+    item = next(x for x in findings if x["rule_id"] == "high_entropy_secret")
+    assert item["severity"] == "MEDIUM"
+    assert item["confidence"] == 0.76
+    assert value not in str(item)
+    assert item["masked_value"] != value
+
+
+def test_entropy_rule_ignores_low_entropy_secret_named_literal():
+    assert scan_text('private val jwtSecret = "aaaaaaaaaaaaaaaaaaaaaaaa"', "AuthConfig.kt") == []
+
+
+def test_entropy_rule_does_not_scan_unrelated_random_literals():
+    assert scan_text('private val serviceName = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc"', "AuthConfig.kt") == []
+
+
+def test_entropy_rule_does_not_duplicate_existing_secret_assignment_finding():
+    findings = scan_text('private val apiKey = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc"', "AuthConfig.kt")
+    assert len(findings) == 1
+    assert findings[0]["rule_id"] == "named_secret_literal"
