@@ -154,3 +154,34 @@ containers cannot accidentally use separate temporary directories.
 ### Safe project asset preview
 
 The project workspace previews PNG, JPEG, WebP, GIF and PDF files through `GET /api/projects/{project_id}/preview?path=...`. Preview is limited to 20 MiB per file. SVG, HTML and other active content are intentionally not rendered.
+
+
+## Workflow schedules
+
+Saved workflows can be run automatically on a cron schedule. The editor's schedule
+panel supports creating, enabling/disabling, editing, and deleting schedules.
+
+Schedule API:
+- `GET /api/workflows/{workflow_id}/schedules` — list schedules;
+- `POST /api/workflows/{workflow_id}/schedules` — create a schedule;
+- `PUT /api/workflows/{workflow_id}/schedules/{schedule_id}` — replace its cron,
+  timezone, and enabled state;
+- `DELETE /api/workflows/{workflow_id}/schedules/{schedule_id}` — delete it.
+
+Create/update requests use JSON fields `cron_expression` (five-field cron),
+`timezone` (IANA timezone, default `UTC`), and `enabled` (default `true`).
+For example:
+
+```json
+{
+  "cron_expression": "30 9 * * 1-5",
+  "timezone": "Europe/Stockholm",
+  "enabled": true
+}
+```
+
+The API returns `next_run_at`, `last_run_at`, and `last_run_id`. A dedicated
+worker polls due schedules and atomically enqueues runs using PostgreSQL row locks;
+each scheduled run uses the latest saved workflow version. If the worker was down
+for several cron ticks, missed ticks are coalesced into one run rather than replayed
+as a backlog. A schedule whose workflow has no saved version is disabled.
