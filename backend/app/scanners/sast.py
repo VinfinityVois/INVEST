@@ -159,6 +159,32 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
             "body": body, "parameters": parameters,
             "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
         })
+    # Kotlin expression-bodied functions are common in controllers/services and
+    # are not covered by the block-body iterator above.
+    block_starts = {method["start"] for method in methods}
+    expression_pattern = re.compile(
+        r"(?m)^\s*(?:(?:override|private|internal|public|suspend)\s+)*"
+        r"fun\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*"
+        r"(?:\:\s*[^=\n]+)?\s*=\s*([^\n]*)"
+    )
+    for match in expression_pattern.finditer(text):
+        if match.start() in block_starts:
+            continue
+        expression = match.group(3).strip()
+        if not expression:
+            next_line = text[match.end():].splitlines()
+            expression = next_line[0].strip() if next_line else ""
+        if not expression:
+            continue
+        signature = f"fun {match.group(1)}({match.group(2)})"
+        parameters = _method_parameters(signature)
+        methods.append({
+            "name": match.group(1), "start": match.start(),
+            "body_start": match.start(3), "body": expression,
+            "parameters": parameters,
+            "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
+        })
+
     if not methods:
         return []
 
@@ -204,7 +230,11 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                 for target in targets:
                     target_parameters = methods[target]["parameters"]
                     for position, argument in enumerate(args[:len(target_parameters)]):
-                        if any(re.search(rf"\b{re.escape(item)}\b", argument) for item in variables):
+                        argument_is_tainted = bool(re.search(
+                            r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(",
+                            argument,
+                        )) or any(re.search(rf"\b{re.escape(item)}\b", argument) for item in variables)
+                        if argument_is_tainted:
                             if position not in tainted_arguments[target]:
                                 tainted_arguments[target].add(position)
                                 changed = True
