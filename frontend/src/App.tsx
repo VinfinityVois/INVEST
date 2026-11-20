@@ -410,11 +410,11 @@ export default function App() {
       setResult("Проект удалён · " + project.name);
     } catch (error) { setResult("Ошибка удаления: " + String(error)); }
   };
-  const openProjectFile = async (file: ProjectFile) => {
+  const openProjectFile = async (file: ProjectFile, startLine = 1) => {
     if (!activeProject) return;
     setProjectFilesLoading(true);
     try {
-      const params = new URLSearchParams({ path: file.path });
+      const params = new URLSearchParams({ path: file.path, start_line: String(startLine) });
       const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
@@ -837,7 +837,7 @@ export default function App() {
           <aside className="project-file-tree">
             <div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>
             <div className="project-content-search"><div className="section-caption">ПОИСК В ИСХОДНИКАХ</div><div><Search size={12}/><input value={projectContentQuery} onChange={event => setProjectContentQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void searchProjectContent(); }} placeholder="Найти текст в файлах…"/><button disabled={projectContentSearching || projectContentQuery.trim().length < 2} onClick={() => void searchProjectContent()}>{projectContentSearching ? "…" : "Найти"}</button></div></div>
-            {projectContentResults.length > 0 && <div className="project-content-results">{projectContentResults.map((item,index) => <button key={item.path+item.line+index} onClick={() => { const file=projectFiles.find(f=>f.path===item.path); if(file) void openProjectFile(file); }}><b>{item.path}:{item.line}</b><span>{item.text}</span></button>)}</div>}
+            {projectContentResults.length > 0 && <div className="project-content-results">{projectContentResults.map((item,index) => <button key={item.path+item.line+index} onClick={() => { const file=projectFiles.find(f=>f.path===item.path); if(file) void openProjectFile(file, item.line); }}><b>{item.path}:{item.line}</b><span>{item.text}</span></button>)}</div>}
             {projectFilesLoading && <small className="source-loading">Загрузка…</small>}
             {projectFiles.length > 0 && projectTree.length > 0 && <div className="project-tree-list">{renderProjectTree(projectTree)}</div>}
             {projectFiles.length > 0 && projectTree.length === 0 && <p className="telemetry-empty">По запросу ничего не найдено.</p>}
