@@ -99,10 +99,10 @@ def _scan_sql(path: str, text: str) -> list[dict]:
 
 
 _TAINT_SOURCE_ANNOTATIONS = re.compile(
-    r"@(?:RequestParam|PathVariable|RequestBody|RequestHeader|CookieValue)\\b"
+    r"@(?:RequestParam|PathVariable|RequestBody|RequestHeader|CookieValue)\b"
 )
-_SQL_SINK_CALL = re.compile(r"\\b(?:queryForList|queryForObject|query|update|execute)\\s*\\(\\s*([^,\\n]+)", re.I)
-_SQL_CONTEXT = re.compile(r"\\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\\b", re.I)
+_SQL_SINK_CALL = re.compile(r"\b(?:queryForList|queryForObject|query|update|execute)\s*\(\s*([^,\n]+)", re.I)
+_SQL_CONTEXT = re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b", re.I)
 
 
 def _split_call_arguments(value: str) -> list[str]:
@@ -112,7 +112,7 @@ def _split_call_arguments(value: str) -> list[str]:
         if quote:
             if escaped:
                 escaped = False
-            elif char == "\\\\":
+            elif char == "\\":
                 escaped = True
             elif char == quote:
                 quote = None
@@ -132,12 +132,12 @@ def _split_call_arguments(value: str) -> list[str]:
 
 
 def _method_parameters(signature: str) -> list[tuple[str, bool]]:
-    match = re.search(r"\\bfun\\s+[A-Za-z_]\\w*\\s*\\((.*)\\)", signature, re.S)
+    match = re.search(r"\bfun\s+[A-Za-z_]\w*\s*\((.*)\)", signature, re.S)
     if not match:
         return []
     parameters = []
     for part in _split_call_arguments(match.group(1)):
-        name = re.search(r"(?:\\b(?:val|var)\\s+)?([A-Za-z_]\\w*)\\s*:", part)
+        name = re.search(r"(?:\b(?:val|var)\s+)?([A-Za-z_]\w*)\s*:", part)
         if name:
             parameters.append((name.group(1), bool(_TAINT_SOURCE_ANNOTATIONS.search(part))))
     return parameters
@@ -178,17 +178,17 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
             for _pass in range(8):
                 before = len(variables)
                 for assignment in re.finditer(
-                    r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*([^\\n;]+)", body
+                    r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([^\n;]+)", body
                 ):
                     variable, expression = assignment.groups()
-                    if re.search(r"\\brequest\\s*\\.\\s*(?:getParameter|getHeader|getQueryString)\\s*\\(", expression):
+                    if re.search(r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(", expression):
                         variables.add(variable)
-                    elif any(re.search(rf"\\b{re.escape(item)}\\b", expression) for item in variables):
+                    elif any(re.search(rf"\b{re.escape(item)}\b", expression) for item in variables):
                         variables.add(variable)
                     elif "$" in expression and _SQL_CONTEXT.search(expression):
                         # A template is a taint carrier only when an interpolation
                         # references a value already marked as tainted.
-                        if any(re.search(rf"\\$\\{{?{re.escape(item)}\\}}?", expression) for item in variables):
+                        if any(re.search(rf"\$\{{?{re.escape(item)}\}}?", expression) for item in variables):
                             variables.add(variable)
                 if len(variables) == before:
                     break
@@ -196,7 +196,7 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                 tainted_variables[index] = variables
                 changed = True
 
-            for call in re.finditer(r"\\b([A-Za-z_]\\w*)\\s*\\(([^()\\n]*)\\)", body):
+            for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(([^()\n]*)\)", body):
                 targets = by_name.get(call.group(1), [])
                 if not targets:
                     continue
@@ -204,7 +204,7 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                 for target in targets:
                     target_parameters = methods[target]["parameters"]
                     for position, argument in enumerate(args[:len(target_parameters)]):
-                        if any(re.search(rf"\\b{re.escape(item)}\\b", argument) for item in variables):
+                        if any(re.search(rf"\b{re.escape(item)}\b", argument) for item in variables):
                             if position not in tainted_arguments[target]:
                                 tainted_arguments[target].add(position)
                                 changed = True
@@ -218,12 +218,12 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
         for sink in _SQL_SINK_CALL.finditer(body):
             expression = sink.group(1).strip()
             if not _SQL_CONTEXT.search(expression) and not any(
-                re.search(rf"\\b{re.escape(item)}\\b", expression) for item in variables
+                re.search(rf"\b{re.escape(item)}\b", expression) for item in variables
             ):
                 continue
             reaches_sink = any(
-                re.search(rf"\\$\\{{?{re.escape(item)}\\}}?", expression)
-                or re.search(rf"\\b{re.escape(item)}\\b", expression)
+                re.search(rf"\$\{{?{re.escape(item)}\}}?", expression)
+                or re.search(rf"\b{re.escape(item)}\b", expression)
                 for item in variables
             )
             if not reaches_sink:
