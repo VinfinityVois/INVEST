@@ -31,14 +31,15 @@ type RunComparison = {
   to_run: { id: string; status: string; finished_at?: string | null };
   findings: {
     new: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
+    not_observed_before: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
     persisting: Array<{ fingerprint: string; rule_id?: string; severity?: string; previous_severity?: string; severity_changed: boolean; path?: string; line?: number | null }>;
     disappeared: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
     not_observed: Array<{ fingerprint: string; rule_id?: string; severity?: string; path?: string; line?: number | null }>;
     absence_confirmed: boolean;
-    summary: { new: number; persisting: number; disappeared: number; not_observed: number };
+    summary: { new: number; not_observed_before: number; persisting: number; disappeared: number; not_observed: number };
   };
   nodes: Array<{ node_id: string; change: string; fields?: Record<string, { before: unknown; after: unknown }> }>;
-  summary: { new_findings: number; persisting_findings: number; disappeared_findings: number; not_observed_findings: number; changed_nodes: number };
+  summary: { new_findings: number; not_observed_before_findings: number; persisting_findings: number; disappeared_findings: number; not_observed_findings: number; changed_nodes: number };
   limitations: { before_findings_truncated: boolean; after_findings_truncated: boolean; absence_confirmed: boolean; note?: string | null };
 };
 type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
@@ -1218,14 +1219,15 @@ export default function App() {
             <div className="run-diff-stats">
               <div><b className="delta-bad">+{runComparison.findings.summary.new}</b><span>НОВЫЕ</span></div>
               <div><b>{runComparison.findings.summary.persisting}</b><span>СОХРАНИЛИСЬ</span></div>
+              <div><b>{runComparison.findings.summary.not_observed_before}</b><span>НЕ БЫЛИ ПОДТВЕРЖДЕНЫ РАНЬШЕ</span></div>
               <div><b className="delta-good">−{runComparison.findings.summary.disappeared}</b><span>ИСЧЕЗЛИ</span></div>
               <div><b>{runComparison.findings.summary.not_observed}</b><span>НЕ ПРОВЕРЕНЫ</span></div>
               <div><b>{runComparison.summary.changed_nodes}</b><span>ИЗМЕНЕНИЯ БЛОКОВ</span></div>
             </div>
             {!runComparison.limitations.absence_confirmed && <p className="run-diff-warning">{runComparison.limitations.note || "Часть результатов нельзя считать подтверждённо исчезнувшими."}</p>}
             {(runComparison.limitations.before_findings_truncated || runComparison.limitations.after_findings_truncated) && <p className="run-diff-warning">Один из отчётов содержит более 5000 находок: сравнение ограничено сохранённой выборкой.</p>}
-            {(["new", "persisting", "disappeared", "not_observed"] as const).map(kind => runComparison.findings[kind].length > 0 && <div className="run-diff-group" key={kind}>
-              <b>{kind === "new" ? "НОВЫЕ НАХОДКИ" : kind === "persisting" ? "СОХРАНЯЮЩИЕСЯ НАХОДКИ" : kind === "disappeared" ? "ОТСУТСТВУЮТ В ПОЛНОМ СКАНЕ" : "НЕ НАБЛЮДАЛИСЬ В ЧАСТИЧНОМ ЗАПУСКЕ"}</b>
+            {(["new", "not_observed_before", "persisting", "disappeared", "not_observed"] as const).map(kind => runComparison.findings[kind].length > 0 && <div className="run-diff-group" key={kind}>
+              <b>{kind === "new" ? "НОВЫЕ НАХОДКИ" : kind === "not_observed_before" ? "НЕ ПОДТВЕРЖДЕНЫ ПРЕДЫДУЩИМ СКАНОМ" : kind === "persisting" ? "СОХРАНЯЮЩИЕСЯ НАХОДКИ" : kind === "disappeared" ? "ОТСУТСТВУЮТ В ПОЛНОМ СКАНЕ" : "НЕ НАБЛЮДАЛИСЬ В ЧАСТИЧНОМ ЗАПУСКЕ"}</b>
               {runComparison.findings[kind].slice(0, 30).map(item => <div key={item.fingerprint}><span>{item.severity || "—"}</span><code>{item.rule_id || item.fingerprint.slice(0, 12)}</code><small>{item.path}{item.line ? ":" + item.line : ""}</small>{kind === "persisting" && item.severity_changed && <i>{item.previous_severity} → {item.severity}</i>}</div>)}
               {runComparison.findings[kind].length > 30 && <small>Показаны первые 30 из {runComparison.findings[kind].length}.</small>}
             </div>)}
