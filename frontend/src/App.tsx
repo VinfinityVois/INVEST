@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
@@ -463,6 +463,11 @@ export default function App() {
     } catch (error) { setResult("Поиск по содержимому: " + String(error)); }
     finally { setProjectContentSearching(false); }
   };
+  const downloadProject = () => {
+    if (!activeProject) return;
+    window.location.assign(`/api/projects/${activeProject.id}/download`);
+    setResult("Подготовка ZIP-экспорта · секретные файлы и .git исключаются.");
+  };
   const saveProjectFile = async () => {
     if (!activeProject || !projectFilePreview?.editable || !projectEditing) return;
     setProjectSaving(true);
@@ -871,7 +876,7 @@ export default function App() {
     </div>
     {projectWorkspaceOpen && activeProject && <div className="project-workspace-backdrop">
       <section className="project-workspace">
-        <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectHistoryOpen(value => !value)}><RefreshCw size={13}/> История {projectHistory.length ? `· ${projectHistory.length}` : ""}</button><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
+        <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={downloadProject} title="Скачать безопасный ZIP проекта"><Download size={13}/> Скачать ZIP</button><button className="ghost" onClick={() => setProjectHistoryOpen(value => !value)}><RefreshCw size={13}/> История {projectHistory.length ? `· ${projectHistory.length}` : ""}</button><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
         <div className="project-workspace-body">
           <aside className="project-file-tree">
             <div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>
