@@ -28,4 +28,4 @@ add("findings.merge","Merge findings","Logic","Объединение резул
 add("logic.if","Condition","Logic","Условное ветвление.",[("findings","findings")],[("true","findings"),("false","findings")])
 add("ai.explain","AI explanation","AI","Объяснение подтверждённых находок, не детекция.",[("findings","findings")],[("report","report")])
 add("notify.webhook","Webhook","Notify","Уведомление на разрешённый endpoint.",[("report","report")])
-add("ci.gate","CI security gate","CI","Пороговый security gate.",[("findings","findings")],[("result","gate")])
+add("ci.gate","CI security gate","CI","Блокирует workflow при находках выше заданного порога.",[("findings","findings")],[("result","gate")],{"type":"object","properties":{"block_on":{"type":"array","items":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW","INFO"]},"default":["CRITICAL","HIGH"]},"warn_on":{"type":"array","items":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW","INFO"]},"default":["MEDIUM","LOW","INFO"]}}})
