@@ -74,6 +74,8 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, устойчивая очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач.
 
+Сравнение запусков сохраняет ограниченный неизменяемый снимок исходников (относительный путь, размер и SHA-256 без содержимого файлов). В сравнении показываются добавленные, изменённые и удалённые файлы; новые/сохраняющиеся/исчезнувшие находки получают осторожную привязку к пути файла. Совпадение пути — только корреляция, не доказательство причинности. Для старых запусков, неполных снимков и источников за пределами лимитов состояние остаётся неизвестным.
+
 Добавлена телеметрия последнего запуска: статус, время постановки в очередь/начала/завершения, длительность, общее число находок и распределение по severity, длительность каждого сканера и прогресс узлов. API предоставляет `/api/workflows/{workflow_id}/telemetry/latest`, `/api/runs/{run_id}/telemetry` и SSE-поток `/api/runs/{run_id}/events`. Интерфейс получает прогресс через SSE и использует polling как резервный режим.
 
 Остаются в разработке: полноценный межпроцедурный AST/taint-анализ Kotlin SAST, Spring Boot dependency management и расширение транзитивного SCA. AI Explanation Gateway и объяснения по находкам реализованы как необязательная интеграция. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
