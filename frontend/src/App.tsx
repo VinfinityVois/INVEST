@@ -152,6 +152,9 @@ export default function App() {
   const [projectDraft, setProjectDraft] = useState("");
   const [editorFind, setEditorFind] = useState("");
   const [editorReplace, setEditorReplace] = useState("");
+  const [editorJumpLine, setEditorJumpLine] = useState("");
+  const editorFindRef = useRef<HTMLInputElement | null>(null);
+  const editorJumpRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const editorGutterRef = useRef<HTMLDivElement | null>(null);
   const [projectSaving, setProjectSaving] = useState(false);
@@ -444,6 +447,7 @@ export default function App() {
     setProjectFilesLoading(true);
     setEditorFind("");
     setEditorReplace("");
+    setEditorJumpLine("");
     try {
       const suffix = file.path.split(".").pop()?.toLowerCase() || "";
       const imageTypes = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
@@ -506,6 +510,27 @@ export default function App() {
     if (!matches) { setResult("Совпадений для замены не найдено."); return; }
     setProjectDraft(projectDraft.split(editorFind).join(editorReplace));
     setResult(`Заменено совпадений: ${matches}. Не забудь сохранить файл.`);
+  };
+  const jumpToEditorLine = () => {
+    const editor = editorRef.current;
+    const requested = Number.parseInt(editorJumpLine, 10);
+    if (!editor || !Number.isFinite(requested) || requested < 1) return;
+    const lines = projectDraft.split("\\n");
+    const target = Math.min(requested, lines.length);
+    const offset = lines.slice(0, target - 1).reduce((sum, line) => sum + line.length + 1, 0);
+    editor.focus();
+    editor.setSelectionRange(offset, offset);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(editor).lineHeight) || 15.3;
+    editor.scrollTop = Math.max(0, (target - 1) * lineHeight - editor.clientHeight / 2);
+    setEditorJumpLine(String(target));
+    setResult(`Переход к строке ${target} из ${lines.length}.`);
+  };
+  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const key = event.key.toLowerCase();
+    if (key === "s") { event.preventDefault(); if (!projectSaving) void saveProjectFile(); }
+    else if (key === "f" || key === "h") { event.preventDefault(); editorFindRef.current?.focus(); }
+    else if (key === "g") { event.preventDefault(); editorJumpRef.current?.focus(); }
   };
   const downloadProjectFile = () => {
     if (!activeProject) return;
@@ -944,13 +969,13 @@ export default function App() {
             </div>
             {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <>
               <div className="project-editor-findbar">
-                <div><Search size={12}/><input value={editorFind} onChange={event => setEditorFind(event.target.value)} placeholder="Найти в файле…" onKeyDown={event => { if (event.key === "Enter") findNextInEditor(); }}/><button onClick={findNextInEditor} disabled={!editorFind}>Найти далее</button></div>
+                <div><Search size={12}/><input ref={editorFindRef} value={editorFind} onChange={event => setEditorFind(event.target.value)} placeholder="Найти в файле…" onKeyDown={event => { if (event.key === "Enter") findNextInEditor(); }}/><button onClick={findNextInEditor} disabled={!editorFind}>Найти далее</button></div>
                 <div><ArrowLeftRight size={12}/><input value={editorReplace} onChange={event => setEditorReplace(event.target.value)} placeholder="Заменить на…"/><button onClick={replaceAllInEditor} disabled={!editorFind}>Заменить всё</button></div>
-                <small>{editorFind ? `${Math.max(0, projectDraft.split(editorFind).length - 1)} совп.` : "Поиск и замена в текущем файле"}</small>
+                <div className="editor-jump-control"><label><span>СТРОКА</span><input ref={editorJumpRef} inputMode="numeric" value={editorJumpLine} onChange={event => setEditorJumpLine(event.target.value.replace(/[^0-9]/g, ""))} onKeyDown={event => { if (event.key === "Enter") jumpToEditorLine(); }} placeholder="№"/></label><button onClick={jumpToEditorLine} disabled={!editorJumpLine}>Перейти</button></div><small>{editorFind ? `${Math.max(0, projectDraft.split(editorFind).length - 1)} совп.` : "Ctrl+F поиск · Ctrl+H замена · Ctrl+G строка · Ctrl+S сохранить"}</small>
               </div>
               <div className="project-editor-surface">
                 <div className="project-editor-gutter" ref={editorGutterRef}>{projectDraft.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div>
-                <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
+                <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} onKeyDown={handleEditorKeyDown} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
               </div>
             </> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{highlightCodeLine(line.text || " ")}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
