@@ -157,6 +157,10 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       </div>}
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
+    {(data.inputPorts?.length || data.outputPorts?.length) && ((data.inputPorts?.length || 0) > 1 || (data.outputPorts?.length || 0) > 1) && <div className="node-port-list">
+      {(data.inputPorts || []).map(port => <span key={"input-" + port.name}><b>IN</b>{port.name}<i>{port.data_type}</i></span>)}
+      {(data.outputPorts || []).map(port => <span key={"output-" + port.name}><b>OUT</b>{port.name}<i>{port.data_type}</i></span>)}
+    </div>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
     {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
   </div>;
