@@ -204,10 +204,30 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             output = {"status": "adapter_required"}
 
         outputs[node_id] = output
+        node_status = output.get("status", "completed")
+        diagnostic_level = (
+            "error" if node_status == "failed"
+            else "blocked" if node_status == "blocked"
+            else "warning" if node_status in {"configuration_required", "adapter_required", "scanner_pending", "llm_profile_required"}
+            or output.get("decision") == "WARN"
+            else "info"
+        )
+        diagnostic_code = output.get("reason_code")
+        if not diagnostic_code and node_status == "blocked":
+            diagnostic_code = "UPSTREAM_SOURCE_UNAVAILABLE" if node.type.startswith("scan.") else "UPSTREAM_STEP_BLOCKED"
+        elif not diagnostic_code and node_status == "configuration_required":
+            diagnostic_code = "NODE_CONFIGURATION_REQUIRED"
+        elif not diagnostic_code and node_status == "failed":
+            diagnostic_code = "NODE_EXECUTION_FAILED"
+        elif not diagnostic_code and output.get("decision") == "WARN":
+            diagnostic_code = "SECURITY_GATE_WARNING"
         trace.append({
             "node_id": node_id,
             "type": node.type,
-            "status": output.get("status", "completed"),
+            "status": node_status,
+            "diagnostic_level": diagnostic_level,
+            **({"reason_code": diagnostic_code} if diagnostic_code else {}),
+            **({"reason": str(output["message"])[:500]} if output.get("message") else {}),
             "duration_ms": round((perf_counter() - node_started) * 1000, 2),
             **({"findings": output["summary"]["total"]} if "summary" in output else {}),
             **({"message": output["message"]} if output.get("message") else {}),
@@ -241,6 +261,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                         key: {
                             "status": value.get("status"),
                             **({"message": value["message"]} if value.get("message") else {}),
+                            **({"reason_code": value["reason_code"]} if value.get("reason_code") else {}),
                             **({"findings": value["summary"]["total"]} if isinstance(value.get("summary"), dict) else {}),
                             **({"severity": {
                                 severity: sum(1 for finding in value.get("findings", []) if str(finding.get("severity", "UNKNOWN")).upper() == severity)
