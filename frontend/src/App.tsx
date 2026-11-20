@@ -283,6 +283,26 @@ export default function App() {
     } catch (error) { setResult("Ошибка загрузки истории: " + String(error)); }
   };
 
+  const cancelWorkflowRun = async (run: WorkflowRunSummary) => {
+    try {
+      const response = await fetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось отменить запуск");
+      setResult(data.status === "cancelled" ? "Запуск отменён до старта." : "Отмена запрошена. Текущий блок завершится, затем workflow остановится.");
+      if (workflowId) await refreshWorkflowRuns(workflowId);
+    } catch (error) { setResult("Ошибка отмены: " + String(error)); }
+  };
+
+  const retryWorkflowRun = async (run: WorkflowRunSummary) => {
+    try {
+      const response = await fetch("/api/runs/" + run.id + "/retry", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось повторить запуск");
+      setResult("Создан повторный запуск · " + data.run_id);
+      if (workflowId) await refreshWorkflowRuns(workflowId);
+    } catch (error) { setResult("Ошибка повторного запуска: " + String(error)); }
+  };
+
   const runHistoryComparison = useMemo(() => {
     const completed = workflowRuns.filter(run => ["completed", "partial"].includes(run.status) && run.total_findings !== undefined);
     if (completed.length < 2) return null;
@@ -1083,9 +1103,9 @@ export default function App() {
             <small className="run-comparison-note">Сравнение двух последних завершённых запусков · {formatDate(runHistoryComparison.previous.finished_at || runHistoryComparison.previous.queued_at)} → {formatDate(runHistoryComparison.current.finished_at || runHistoryComparison.current.queued_at)}</small>
           </div>}
           {workflowRuns.length > 0 ? <div className="run-history-list">{workflowRuns.map((run, index) => <div className={"run-history-row" + (run.id === lastRunId ? " is-current" : "")} key={run.id}>
-            <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status}</span></div>
+            <div><b>#{workflowRuns.length-index}</b><span className={"run-history-state state-" + run.status}>{run.status === "completed" ? "УСПЕШНО" : run.status === "partial" ? "ЧАСТИЧНО" : run.status === "failed" ? "ОШИБКА" : run.status === "running" ? "В РАБОТЕ" : run.status === "queued" ? "В ОЧЕРЕДИ" : run.status === "cancelling" ? "ОТМЕНА" : run.status === "cancelled" ? "ОТМЕНЁН" : run.status}</span></div>
             <small>{formatDate(run.finished_at || run.queued_at)}</small><strong>{run.total_findings ?? "—"} находок</strong>
-            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button><div className="run-report-links"><a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
+            <button onClick={() => void openHistoricalRun(run)} disabled={run.id === lastRunId}>{run.id === lastRunId ? "ОТКРЫТ" : "ОТКРЫТЬ"}</button>{["queued", "running", "cancelling"].includes(run.status) ? <button className="run-action-cancel" onClick={() => void cancelWorkflowRun(run)} disabled={run.status === "cancelling"}>{run.status === "cancelling" ? "ОТМЕНА…" : "ОТМЕНИТЬ"}</button> : ["completed", "partial", "failed", "cancelled"].includes(run.status) ? <button className="run-action-retry" onClick={() => void retryWorkflowRun(run)}>ПОВТОРИТЬ</button> : null}<div className="run-report-links"><a href={"/api/runs/" + run.id + "/report.html"} target="_blank" rel="noreferrer">HTML</a><a href={"/api/runs/" + run.id + "/report.json"} target="_blank" rel="noreferrer">JSON</a></div>
           </div>)}</div> : <p className="run-history-empty">{runHistoryLoading ? "Загружаем историю…" : "История появится после первого сохранённого запуска workflow."}</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
