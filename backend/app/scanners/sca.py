@@ -6,6 +6,7 @@ import hmac
 import json
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from app.config import settings
@@ -367,6 +368,185 @@ def _make_finding(group: str, artifact: str, version: str, advisory: dict, path:
         "sources": advisory.get("sources", []),
         "fingerprint": fingerprint,
     }
+
+
+
+MAVEN_TREE_COORDINATE = re.compile(
+    r"(?P<group>[A-Za-z0-9_.-]+):(?P<artifact>[A-Za-z0-9_.-]+):(?P<type>[A-Za-z0-9_.-]+):(?:(?:[A-Za-z0-9_.-]+):)?(?P<version>[^:\s]+):(?P<scope>compile|runtime|test|provided|system|import)\b"
+)
+
+
+def _maven_child(element, name):
+    if element is None:
+        return None
+    return next((child for child in list(element) if child.tag.rsplit("}", 1)[-1] == name), None)
+
+
+def _maven_children(element, name):
+    if element is None:
+        return []
+    return [child for child in list(element) if child.tag.rsplit("}", 1)[-1] == name]
+
+
+def _maven_text(element, name):
+    child = _maven_child(element, name)
+    value = (child.text or "").strip() if child is not None else ""
+    return value or None
+
+
+def _maven_resolve(value, properties):
+    if not value:
+        return None
+    result = value.strip()
+    for _ in range(8):
+        updated = re.sub(r"\$" + r"\{([^}]+)\}", lambda m: properties.get(m.group(1), m.group(0)), result)
+        if updated == result:
+            break
+        result = updated
+    return result if "$" + "{" not in result else None
+
+
+def _maven_profile_sections(pom_path, pom):
+    yield pom
+    active = set()
+    profiles = _maven_child(pom, "profiles")
+    for profile in _maven_children(profiles, "profile"):
+        activation = _maven_child(profile, "activation")
+        if _maven_text(activation, "activeByDefault") == "true":
+            profile_id = _maven_text(profile, "id")
+            if profile_id:
+                active.add(profile_id)
+    config = _read_text(pom_path.parent / ".mvn" / "maven.config") or ""
+    for match in re.finditer(r"(?:^|\s)-P(?:\s+|=)([A-Za-z0-9_,.-]+)", config):
+        active.update(match.group(1).split(","))
+    for profile in _maven_children(profiles, "profile"):
+        if _maven_text(profile, "id") in active:
+            yield profile
+
+
+def _maven_managed(pom_path, pom, properties, visited=None, depth=0):
+    visited = set() if visited is None else visited
+    path = pom_path.resolve()
+    if path in visited or depth > 5:
+        return {}
+    visited.add(path)
+    result = {}
+    for section in _maven_profile_sections(pom_path, pom):
+        management = _maven_child(section, "dependencyManagement")
+        dependencies = _maven_child(management, "dependencies")
+        for dep in _maven_children(dependencies, "dependency"):
+            group = _maven_resolve(_maven_text(dep, "groupId"), properties)
+            artifact = _maven_resolve(_maven_text(dep, "artifactId"), properties)
+            version = _maven_resolve(_maven_text(dep, "version"), properties)
+            if not group or not artifact:
+                continue
+            if (_maven_text(dep, "type") or "jar") == "pom" and _maven_text(dep, "scope") == "import":
+                rel = _maven_text(dep, "relativePath")
+                rel = "../pom.xml" if rel is None else rel
+                bom_path = (pom_path.parent / rel).resolve() if rel else None
+                bom_text = _read_text(bom_path) if bom_path and bom_path.is_file() and not bom_path.is_symlink() else None
+                if bom_text:
+                    try:
+                        bom = ET.fromstring(bom_text)
+                    except ET.ParseError:
+                        continue
+                    bom_props = dict(properties)
+                    bom_props.update(_maven_properties(bom))
+                    imported = _maven_managed(bom_path, bom, bom_props, visited, depth + 1)
+                    for coordinate, imported_version in imported.items():
+                        result.setdefault(coordinate, set()).add(imported_version)
+            elif version:
+                result.setdefault((group, artifact), set()).add(version)
+    return {key: next(iter(values)) for key, values in result.items() if len(values) == 1}
+
+
+def _maven_properties(pom, inherited=None):
+    values = dict(inherited or {})
+    props = _maven_child(pom, "properties")
+    for child in list(props) if props is not None else []:
+        value = (child.text or "").strip()
+        if value:
+            values[child.tag.rsplit("}", 1)[-1]] = value
+    for key, name in (("groupId", "project.groupId"), ("artifactId", "project.artifactId"), ("version", "project.version")):
+        value = _maven_text(pom, key)
+        if value:
+            values.setdefault(name, value)
+            values.setdefault("pom." + key, value)
+    return values
+
+
+def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+    project = Path(root).resolve()
+    advisories = _load_advisories(advisories_path)
+    findings = {}
+    pom_files = [p for p in project.rglob("pom.xml") if not p.is_symlink() and not any(x in SKIP_DIRS for x in p.parts)][:MAX_FILES]
+    tree_files = [p for p in project.rglob("*dependency-tree*.txt") if p.is_file() and not p.is_symlink() and not any(x in SKIP_DIRS for x in p.parts)][:max(0, MAX_FILES-len(pom_files))]
+    total = len(pom_files) + len(tree_files)
+    for index, pom_path in enumerate(pom_files, 1):
+        source = _read_text(pom_path)
+        if source is None:
+            continue
+        try:
+            pom = ET.fromstring(source)
+        except ET.ParseError:
+            continue
+        props = _maven_properties(pom)
+        parent = _maven_child(pom, "parent")
+        if parent is not None:
+            rel = _maven_text(parent, "relativePath")
+            parent_path = (pom_path.parent / (rel if rel is not None else "../pom.xml")).resolve()
+            parent_source = _read_text(parent_path) if parent_path.is_file() and not parent_path.is_symlink() else None
+            if parent_source:
+                try:
+                    props = _maven_properties(ET.fromstring(parent_source), props)
+                except ET.ParseError:
+                    pass
+        managed = _maven_managed(pom_path, pom, props)
+        relative = pom_path.relative_to(project).as_posix()
+        for section in _maven_profile_sections(pom_path, pom):
+            deps = _maven_child(section, "dependencies")
+            for dep in _maven_children(deps, "dependency"):
+                group = _maven_resolve(_maven_text(dep, "groupId"), props)
+                artifact = _maven_resolve(_maven_text(dep, "artifactId"), props)
+                version = _maven_resolve(_maven_text(dep, "version"), props)
+                version = version or managed.get((group, artifact))
+                if not group or not artifact or not version:
+                    continue
+                line_match = re.search(rf"<(?:[\w.-]+:)?groupId>\s*{re.escape(group)}\s*</(?:[\w.-]+:)?groupId>\s*<(?:[\w.-]+:)?artifactId>\s*{re.escape(artifact)}\s*</", source)
+                line = source.count("\n", 0, line_match.start()) + 1 if line_match else 1
+                for advisory in advisories.get((group, artifact), []):
+                    if _affected(version, advisory.get("ranges", [])):
+                        finding = _make_finding(group, artifact, version, advisory, relative, line)
+                        findings.setdefault(finding["fingerprint"], finding)
+        if on_progress:
+            try:
+                on_progress({"files_scanned": index, "total_files": total, "current_file": relative})
+            except Exception:
+                pass
+    for index, tree_path in enumerate(tree_files, len(pom_files) + 1):
+        source = _read_text(tree_path)
+        if source is None:
+            continue
+        relative = tree_path.relative_to(project).as_posix()
+        for line_no, line in enumerate(source.splitlines(), 1):
+            for match in MAVEN_TREE_COORDINATE.finditer(line):
+                group, artifact, version = match.group("group", "artifact", "version")
+                for advisory in advisories.get((group, artifact), []):
+                    if _affected(version, advisory.get("ranges", [])):
+                        finding = _make_finding(group, artifact, version, advisory, relative, line_no)
+                        findings.setdefault(finding["fingerprint"], finding)
+        if on_progress:
+            try:
+                on_progress({"files_scanned": index, "total_files": total, "current_file": relative})
+            except Exception:
+                pass
+    return sorted(findings.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
+
+
+def scan_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+    combined = scan_gradle_project(root, advisories_path=advisories_path, on_progress=on_progress)
+    combined.extend(scan_maven_project(root, advisories_path=advisories_path, on_progress=on_progress))
+    return sorted({x["fingerprint"]: x for x in combined}.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
 def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
