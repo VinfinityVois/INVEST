@@ -1,7 +1,9 @@
 """Небольшой собственный детектор секретов. Не запускает и не импортирует файлы проекта."""
 import hashlib
+import hmac
 import re
 from pathlib import Path
+from app.config import settings
 
 MAX_FILE_BYTES = 1_000_000
 MAX_FILES = 20_000
@@ -31,7 +33,7 @@ def scan_text(text: str, path: str) -> list[dict]:
             masked = value[:4] + "*" * max(4, len(value) - 8) + value[-4:] if len(value) > 8 else "[REDACTED]"
             findings.append({"rule_id":rule_id,"path":path,"line":line_no,"severity":severity,
                 "confidence":confidence,"message":f"Возможный секрет ({rule_id}); значение замаскировано.",
-                "masked_value":masked,"value_hash":hashlib.sha256(value.encode("utf-8")).hexdigest()})
+                "masked_value":masked,"value_hash":hmac.new(settings.app_secret_key.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()})
     return findings
 
 def scan_directory(root: Path) -> list[dict]:
