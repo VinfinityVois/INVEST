@@ -143,7 +143,7 @@ def _project_root(project: Project) -> Path:
 
 
 def _project_has_active_run(session, project: Project) -> bool:
-    runs = session.scalars(select(WorkflowRun).where(WorkflowRun.status.in_(["queued", "running"]))).all()
+    runs = session.scalars(select(WorkflowRun).where(WorkflowRun.status.in_(["queued", "running", "cancelling"]))).all()
     for run in runs:
         graph = run.graph_snapshot if isinstance(run.graph_snapshot, dict) else {}
         for node in graph.get("nodes", []):
@@ -1325,7 +1325,7 @@ def stream_run_events(run_id: UUID):
                     return
                 payload = _run_telemetry(session, run)
             yield "data: " + json.dumps(payload, default=str) + "\n\n"
-            if payload["status"] in {"completed", "partial", "failed"}:
+            if payload["status"] in {"completed", "partial", "failed", "cancelled"}:
                 return
             time.sleep(1)
 
