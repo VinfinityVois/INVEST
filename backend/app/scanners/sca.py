@@ -377,7 +377,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
             )
             for alias_match in alias_pattern.finditer(block):
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
-                accessor = alias_match.group(2) or alias_match.group(3)
+                accessor = alias_match.group(2) or alias_match.group(4)
                 normalized = _catalog_alias_key(accessor.lstrip("."))
                 catalog = catalogs.get(catalog_name, {})
                 candidates = [entry for key, entry in catalog.items() if key == normalized]
