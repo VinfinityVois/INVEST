@@ -923,7 +923,15 @@ def _run_telemetry(session, run: WorkflowRun):
                     "status": output.get("status"),
                     **({"message": output["message"]} if output.get("message") else {}),
                     **({"findings": output["summary"]["total"]} if isinstance(output.get("summary"), dict) else {}),
-                    **({"explained_count": output.get("explained_count", len(output.get("explanations", [])))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
+                    **({
+                        "explained_count": output.get("explained_count", len(output.get("explanations", []))),
+                        "analyzed_count": output.get("analyzed_count", 0),
+                        "skipped_count": output.get("skipped_count", 0),
+                        "unexplained_count": output.get("unexplained_count", 0),
+                        "coverage": output.get("coverage", 0),
+                        "provider": output.get("provider"),
+                        "model": output.get("model"),
+                    } if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
                     **({"total_findings": len(output.get("findings", []))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
                     **({"explanations": [
                         {
