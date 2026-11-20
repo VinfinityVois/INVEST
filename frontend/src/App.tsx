@@ -466,9 +466,9 @@ export default function App() {
       setResult("Проект удалён · " + project.name);
     } catch (error) { setResult("Ошибка удаления: " + String(error)); }
   };
-  const openProjectFile = async (file: ProjectFile, startLine = 1) => {
+  const openProjectFile = async (file: ProjectFile, startLine = 1, forceReload = false) => {
     if (!activeProject) return;
-    const cachedTab = projectEditorTabs.find(tab => tab.path === file.path);
+    const cachedTab = forceReload ? undefined : projectEditorTabs.find(tab => tab.path === file.path);
     setProjectFilesLoading(true);
     setEditorFind("");
     setEditorReplace("");
@@ -506,7 +506,7 @@ export default function App() {
       setProjectDraft(restoredDraft);
       setActiveEditorTab(file.path);
       setProjectEditorTabs(tabs => tabs.some(tab => tab.path === file.path)
-        ? tabs.map(tab => tab.path === file.path ? { ...tab, kind: "text", draft: restoredDraft, baseline: tab.baseline || loadedContent } : tab)
+        ? tabs.map(tab => tab.path === file.path ? { ...tab, kind: "text", draft: restoredDraft, baseline: forceReload ? loadedContent : (tab.baseline || loadedContent) } : tab)
         : [...tabs, { path: file.path, name: file.path.split("/").pop() || file.path, kind: "text", draft: restoredDraft, baseline: loadedContent, editing: false }]);
     } catch (error) { setResult("Просмотр файла: " + String(error)); }
     finally { setProjectFilesLoading(false); }
@@ -610,7 +610,7 @@ export default function App() {
       const savedPath = projectFilePreview.path;
       setActiveEditorEditing(false);
       setProjectEditorTabs(tabs => tabs.map(tab => tab.path === savedPath ? { ...tab, baseline: projectDraft, draft: projectDraft, editing: false } : tab));
-      await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size });
+      await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size }, 1, true);
       setResult("Файл сохранён · " + data.path);
       const historyResponse = await fetch(`/api/projects/${activeProject.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
