@@ -19,6 +19,7 @@ type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file";
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
 type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
+type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
@@ -149,6 +150,8 @@ export default function App() {
   const [expandedProjectDirs, setExpandedProjectDirs] = useState<Set<string>>(new Set());
   const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
   const [projectVisualPreview, setProjectVisualPreview] = useState<ProjectVisualPreview | null>(null);
+  const [projectEditorTabs, setProjectEditorTabs] = useState<ProjectEditorTab[]>([]);
+  const [activeEditorTab, setActiveEditorTab] = useState<string | null>(null);
   const [projectEditing, setProjectEditing] = useState(false);
   const [projectDraft, setProjectDraft] = useState("");
   const [editorFind, setEditorFind] = useState("");
@@ -465,6 +468,7 @@ export default function App() {
   };
   const openProjectFile = async (file: ProjectFile, startLine = 1) => {
     if (!activeProject) return;
+    const cachedTab = projectEditorTabs.find(tab => tab.path === file.path);
     setProjectFilesLoading(true);
     setEditorFind("");
     setEditorReplace("");
@@ -486,6 +490,8 @@ export default function App() {
         setProjectFilePreview(null);
         setProjectEditing(false);
         setProjectDraft("");
+        setActiveEditorTab(file.path);
+        setProjectEditorTabs(tabs => tabs.some(tab => tab.path === file.path) ? tabs : [...tabs, { path: file.path, name: file.path.split("/").pop() || file.path, kind: isPdf ? "pdf" : "image", draft: "", baseline: "", editing: false }]);
         return;
       }
       const params = new URLSearchParams({ path: file.path, start_line: String(startLine) });
@@ -494,8 +500,14 @@ export default function App() {
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
       setProjectVisualPreview(null);
       setProjectFilePreview(data);
-      setProjectEditing(false);
-      setProjectDraft(data.editable && typeof data.content === "string" ? data.content : "");
+      const loadedContent = data.editable && typeof data.content === "string" ? data.content : "";
+      const restoredDraft = cachedTab?.draft ?? loadedContent;
+      setProjectEditing(cachedTab?.editing ?? false);
+      setProjectDraft(restoredDraft);
+      setActiveEditorTab(file.path);
+      setProjectEditorTabs(tabs => tabs.some(tab => tab.path === file.path)
+        ? tabs.map(tab => tab.path === file.path ? { ...tab, kind: "text", draft: restoredDraft, baseline: tab.baseline || loadedContent } : tab)
+        : [...tabs, { path: file.path, name: file.path.split("/").pop() || file.path, kind: "text", draft: restoredDraft, baseline: loadedContent, editing: false }]);
     } catch (error) { setResult("Просмотр файла: " + String(error)); }
     finally { setProjectFilesLoading(false); }
   };
@@ -512,6 +524,26 @@ export default function App() {
       setResult(`Поиск завершён · ${(data.results || []).length} совпадений · проверено ${data.scanned_files} файлов`);
     } catch (error) { setResult("Поиск по содержимому: " + String(error)); }
     finally { setProjectContentSearching(false); }
+  };
+  const updateActiveEditorDraft = (value: string) => {
+    setProjectDraft(value);
+    if (activeEditorTab) setProjectEditorTabs(tabs => tabs.map(tab => tab.path === activeEditorTab ? { ...tab, draft: value } : tab));
+  };
+  const setActiveEditorEditing = (editing: boolean) => {
+    setProjectEditing(editing);
+    if (activeEditorTab) setProjectEditorTabs(tabs => tabs.map(tab => tab.path === activeEditorTab ? { ...tab, editing } : tab));
+  };
+  const closeEditorTab = (path: string) => {
+    const tab = projectEditorTabs.find(item => item.path === path);
+    if (tab && tab.draft !== tab.baseline && !window.confirm(`Вкладка «${tab.name}» содержит несохранённые изменения. Закрыть её без сохранения?`)) return;
+    const remaining = projectEditorTabs.filter(item => item.path !== path);
+    setProjectEditorTabs(remaining);
+    if (activeEditorTab === path) {
+      const next = remaining[remaining.length - 1];
+      setActiveEditorTab(next?.path || null);
+      if (next) { const file = projectFiles.find(item => item.path === next.path); if (file) void openProjectFile(file); }
+      else { setProjectFilePreview(null); setProjectVisualPreview(null); setProjectDraft(""); setProjectEditing(false); }
+    }
   };
   const findNextInEditor = () => {
     const needle = editorFind;
@@ -576,7 +608,8 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сохранить файл");
       const savedPath = projectFilePreview.path;
-      setProjectEditing(false);
+      setActiveEditorEditing(false);
+      setProjectEditorTabs(tabs => tabs.map(tab => tab.path === savedPath ? { ...tab, baseline: projectDraft, draft: projectDraft, editing: false } : tab));
       await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size });
       setResult("Файл сохранён · " + data.path);
       const historyResponse = await fetch(`/api/projects/${activeProject.id}/history`);
@@ -985,8 +1018,9 @@ export default function App() {
             {projectFiles.length === 0 && <p className="telemetry-empty">В архиве не найдено файлов для отображения.</p>}
           </aside>
           <section className="project-file-view">
+            {projectEditorTabs.length > 0 && <div className="project-editor-tabs" role="tablist" aria-label="Открытые файлы">{projectEditorTabs.map(tab => <div key={tab.path} className={"project-editor-tab" + (activeEditorTab === tab.path ? " active" : "")} role="tab" aria-selected={activeEditorTab === tab.path}><button className="project-editor-tab-open" title={tab.path} onClick={() => { const file = projectFiles.find(item => item.path === tab.path); if (file) void openProjectFile(file); }}><FileText size={11}/><span>{tab.name}</span>{tab.draft !== tab.baseline && <i title="Несохранённые изменения" />}</button><button className="project-editor-tab-close" title="Закрыть вкладку" onClick={() => closeEditorTab(tab.path)}><X size={11}/></button></div>)}</div>}
             <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || projectVisualPreview?.path || "Выбери файл в дереве проекта"}</span>
-              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
+              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setActiveEditorEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { const baseline = projectEditorTabs.find(tab => tab.path === activeEditorTab)?.baseline ?? projectFilePreview.content ?? ""; updateActiveEditorDraft(baseline); setActiveEditorEditing(false); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
             </div>
             {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <>
               <div className="project-editor-findbar">
@@ -996,7 +1030,7 @@ export default function App() {
               </div>
               <div className="project-editor-surface">
                 <div className="project-editor-gutter" ref={editorGutterRef}>{projectDraft.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div>
-                <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} onKeyDown={handleEditorKeyDown} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
+                <textarea ref={editorRef} className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => updateActiveEditorDraft(event.target.value)} onKeyDown={handleEditorKeyDown} onScroll={event => { if (editorGutterRef.current) editorGutterRef.current.scrollTop = event.currentTarget.scrollTop; }} />
               </div>
             </> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{highlightCodeLine(line.text || " ")}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
