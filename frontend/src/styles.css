@@ -434,3 +434,26 @@
 .project-file-empty p{max-width:420px;margin:0;font-size:9px;line-height:1.7}
 .project-workspace-footer{display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-top:1px solid #26394f;background:#0d1724;color:#71869e;font:7px 'DM Mono';letter-spacing:.45px}
 @media(max-width:760px){.project-workspace-backdrop{padding:8px}.project-workspace{width:100%;height:96vh}.project-workspace-header{align-items:flex-start;padding:12px;flex-direction:column}.project-workspace-actions{width:100%;justify-content:space-between}.project-workspace-body{grid-template-columns:minmax(135px,38%) minmax(0,1fr)}.project-file-tree{padding:7px}.project-file-row{padding:5px 3px}.project-file-row small{display:none}.project-workspace-footer{font-size:6px}.project-library-actions{gap:3px}.project-library-actions button,.project-library-actions label{padding:0 4px}}
+
+
+/* Project explorer: searchable hierarchical tree */
+.project-tree-toolbar{position:sticky;top:0;z-index:2;padding:0 0 9px;background:rgba(5,12,21,.96)}
+.project-tree-search{height:30px;display:flex;align-items:center;gap:7px;margin-top:8px;padding:0 8px;border:1px solid #2c435b;border-radius:5px;background:#0b1725;color:#7896b4}
+.project-tree-search:focus-within{border-color:#5d9bc8;box-shadow:0 0 0 2px rgba(93,155,200,.1)}
+.project-tree-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#d6e5f4;font:8px 'DM Mono'}
+.project-tree-search input::placeholder{color:#657e98}
+.project-tree-search button{display:grid;place-items:center;width:19px;height:19px;border:0;border-radius:3px;background:transparent;color:#91a9c1;cursor:pointer}
+.project-tree-search button:hover{background:#20354a;color:#fff}
+.project-tree-list{padding-bottom:12px}
+.project-tree-entry{min-width:0}
+.project-tree-children{border-left:1px solid rgba(89,130,166,.2);margin-left:13px}
+.project-file-row.project-folder-row{min-height:28px;color:#b4c8dc}
+.project-file-row.project-folder-row>svg:nth-child(2){color:#83bba9}
+.project-tree-chevron{flex-shrink:0;color:#6f8da9;transition:transform .15s ease}
+.project-tree-chevron.expanded{transform:rotate(90deg)}
+.project-file-row.project-leaf-row{min-height:27px}
+.project-file-row.project-leaf-row>svg{color:#79a9d2}
+.project-file-row.project-leaf-row span{font-size:8px}
+.project-file-row.project-folder-row span{font-size:8px}
+.project-file-row.project-folder-row small{color:#6f8aa4;font-size:7px}
+@media(prefers-reduced-motion:reduce){.project-tree-chevron{transition:none}}
