@@ -30,11 +30,12 @@ from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
 from app.security.redaction import redact_text
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule
+from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule, WorkflowTemplate
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
+from app.workflows.templates import sanitize_graph, clone_graph
 
 class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -2102,3 +2103,99 @@ def finding_state_history(workflow_id: UUID, fingerprint: str):
             }
             for row in rows
         ]
+
+
+class TemplatePublishRequest(BaseModel):
+    workflow_id: UUID
+    name: str = Field(min_length=3, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    category: str = Field(default="general", min_length=2, max_length=60)
+
+
+class TemplateCloneRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+
+
+def _require_template_publish_token(provided_token: str) -> None:
+    configured_token = settings.template_publish_token
+    if not configured_token:
+        raise HTTPException(status_code=503, detail="Template publishing is not configured")
+    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
+        raise HTTPException(status_code=401, detail="Invalid template publishing token")
+
+
+@app.get("/api/templates")
+def list_workflow_templates(category: str | None = Query(default=None, max_length=60), q: str | None = Query(default=None, max_length=100)):
+    with SessionLocal() as session:
+        query = select(WorkflowTemplate).where(WorkflowTemplate.published.is_(True))
+        if category:
+            query = query.where(WorkflowTemplate.category == category)
+        if q:
+            query = query.where(WorkflowTemplate.name.ilike(f"%{q.strip()}%"))
+        rows = session.scalars(query.order_by(WorkflowTemplate.category, WorkflowTemplate.name).limit(100)).all()
+        return [{
+            "id": str(row.id), "name": row.name, "description": row.description,
+            "category": row.category, "node_count": len(row.graph.get("nodes", [])),
+            "created_at": row.created_at,
+        } for row in rows]
+
+
+@app.get("/api/templates/{template_id}")
+def get_workflow_template(template_id: UUID):
+    with SessionLocal() as session:
+        row = session.get(WorkflowTemplate, template_id)
+        if row is None or not row.published:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return {"id": str(row.id), "name": row.name, "description": row.description,
+                "category": row.category, "graph": sanitize_graph(row.graph)}
+
+
+@app.post("/api/templates/publish", status_code=201)
+def publish_workflow_template(payload: TemplatePublishRequest, x_template_publish_token: str = Header(default="", alias="X-Template-Publish-Token")):
+    _require_template_publish_token(x_template_publish_token)
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, payload.workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        version = session.scalar(select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == payload.workflow_id
+        ).order_by(WorkflowVersion.version.desc()).limit(1))
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        safe_graph = sanitize_graph(graph.model_dump(mode="json"))
+        row = WorkflowTemplate(name=payload.name.strip(), description=payload.description.strip(),
+                               category=payload.category.strip().lower(), graph=safe_graph, published=True)
+        session.add(row)
+        session.flush()
+        session.add(AuditLog(action="workflow_template.published", entity="workflow_template",
+                             entity_id=str(row.id), details={"source_workflow_id": str(workflow.id), "version": version.version}))
+        session.commit()
+        return {"id": str(row.id), "name": row.name, "published": True, "sanitized": True}
+
+
+@app.post("/api/templates/{template_id}/clone", status_code=201)
+def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest):
+    with SessionLocal() as session:
+        template = session.get(WorkflowTemplate, template_id)
+        if template is None or not template.published:
+            raise HTTPException(status_code=404, detail="Template not found")
+        base_name = payload.name.strip() if payload.name else f"{template.name} (copy)"
+        if not base_name:
+            raise HTTPException(status_code=422, detail="Workflow name cannot be empty")
+        graph_data = clone_graph(sanitize_graph(template.graph), base_name[:200])
+        graph = WorkflowGraph.model_validate(graph_data)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        workflow = Workflow(name=base_name[:200], description=f"Cloned from template: {template.name}")
+        session.add(workflow)
+        session.flush()
+        session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
+        session.add(AuditLog(action="workflow_template.cloned", entity="workflow", entity_id=str(workflow.id),
+                             details={"template_id": str(template.id)}))
+        session.commit()
+        return {"id": str(workflow.id), "name": workflow.name, "version": 1, "executed": False}
