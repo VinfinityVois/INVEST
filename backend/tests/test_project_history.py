@@ -94,3 +94,38 @@ def test_cache_telemetry_summary_handles_empty_or_missing_trace():
 
     assert _cache_telemetry_summary([])["hit_rate"] == 0.0
     assert _cache_telemetry_summary([{"type": "scan.secrets"}])["fresh_scans"] == 1
+
+
+def test_scanner_run_comparison_reports_cache_and_finding_deltas():
+    from app.main import _compare_scanner_runs
+
+    before = {
+        "trace": [{"node_id": "secrets", "type": "scan.secrets", "cached": True, "cache_age_seconds": 120}, {"node_id": "sca", "type": "scan.sca", "cached": False}],
+        "outputs": {"secrets": {"findings": [{"fingerprint": "same"}, {"fingerprint": "old"}]}, "sca": {"findings": [{"fingerprint": "dep-a"}]}},
+        "cache_metadata": {"secrets": {"source_hash": "source-a"}},
+    }
+    after = {
+        "trace": [{"node_id": "secrets", "type": "scan.secrets", "cached": False}, {"node_id": "sca", "type": "scan.sca", "cached": True, "cache_age_seconds": 30}, {"node_id": "sast", "type": "scan.sast", "cached": False}],
+        "outputs": {"secrets": {"findings": [{"fingerprint": "same"}, {"fingerprint": "new"}]}, "sca": {"findings": [{"fingerprint": "dep-a"}]}, "sast": {"findings": []}},
+        "cache_metadata": {"secrets": {"source_hash": "source-b"}},
+    }
+    comparison = _compare_scanner_runs(before, after)
+    assert comparison["cache_comparison"] == {"before_hits": 1, "after_hits": 1, "delta_hits": 0, "before_scanners": 2, "after_scanners": 3}
+    by_node = {item["node_id"]: item for item in comparison["scanner_comparison"]}
+    assert by_node["secrets"]["added_findings"] == 1
+    assert by_node["secrets"]["removed_findings"] == 1
+    assert by_node["secrets"]["source_changed"] is True
+    assert by_node["secrets"]["before_cache_age_seconds"] == 120
+    assert by_node["sca"]["after_cached"] is True
+    assert by_node["sast"]["before_present"] is False
+
+
+def test_scanner_run_comparison_handles_missing_metadata():
+    from app.main import _compare_scanner_runs
+    comparison = _compare_scanner_runs(
+        {"trace": [{"node_id": "sca", "type": "scan.sca", "cached": False}]},
+        {"trace": [{"node_id": "sca", "type": "scan.sca", "cached": True}]},
+    )
+    assert comparison["cache_comparison"]["delta_hits"] == 1
+    assert comparison["scanner_comparison"][0]["source_changed"] is None
+    assert comparison["scanner_comparison"][0]["added_findings"] == 0
