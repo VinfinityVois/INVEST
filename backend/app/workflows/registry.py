@@ -26,6 +26,6 @@ add("scan.sca","Dependency scanner","Security","Проверка Gradle зави
 add("scan.sast","Kotlin SAST","Security","Статический анализ Kotlin/Spring.",[("source","source")],[("findings","findings")])
 add("findings.merge","Merge findings","Logic","Объединение результатов.",[("findings","findings")],[("findings","findings")])
 add("logic.if","Condition","Logic","Условное ветвление.",[("findings","findings")],[("true","findings"),("false","findings")])
-add("ai.explain","AI explanation","AI","Объяснение подтверждённых находок, не детекция.",[("findings","findings")],[("report","report")])
+add("ai.explain","AI explanation","AI","Контекстное объяснение подтверждённых находок; AI не меняет результаты сканеров.",[("findings","findings")],[("report","report")],{"type":"object","properties":{"language":{"type":"string","enum":["ru","en"],"default":"ru"},"max_findings":{"type":"integer","minimum":1,"maximum":25,"default":20}}})
 add("notify.webhook","Webhook","Notify","Уведомление на разрешённый endpoint.",[("report","report")])
 add("ci.gate","CI security gate","CI","Блокирует workflow при находках выше заданного порога.",[("findings","findings")],[("result","gate")],{"type":"object","properties":{"block_on":{"type":"array","items":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW","INFO"]},"default":["CRITICAL","HIGH"]},"warn_on":{"type":"array","items":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW","INFO"]},"default":["MEDIUM","LOW","INFO"]}}})
