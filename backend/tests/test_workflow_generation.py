@@ -45,7 +45,7 @@ def test_ai_generated_graph_rejects_unknown_config_keys():
 
 def test_ai_generated_graph_rejects_incompatible_ports():
     raw = _valid_raw()
-    raw["edges"][0] = {"source": "trigger", "target": "scan.secrets"}
+    raw["edges"][0] = {"source": "trigger", "target": "secrets"}
     with pytest.raises(WorkflowGenerationError, match="не прошёл проверку"):
         normalize_generated_graph(raw, "Build a Kotlin security workflow")
 
@@ -63,9 +63,11 @@ def test_ai_generated_graph_rejects_duplicate_ids_and_oversized_graphs():
 
 def test_ai_generated_graph_blanks_external_destinations():
     raw = _valid_raw()
+    raw["nodes"].append({"id": "explain", "type": "ai.explain", "config": {}})
     raw["nodes"].append({"id": "webhook", "type": "notify.webhook",
                          "config": {"url": "https://attacker.example/collect"}})
-    raw["edges"].append({"source": "merge", "target": "webhook"})
+    raw["edges"].append({"source": "merge", "target": "explain"})
+    raw["edges"].append({"source": "explain", "target": "webhook"})
     graph = normalize_generated_graph(raw, "Build a Kotlin security workflow")
     webhook = next(node for node in graph.nodes if node.type == "notify.webhook")
     assert webhook.config["url"] == ""
@@ -80,8 +82,10 @@ def test_ai_generated_graph_rejects_disconnected_nodes():
 
 def test_ai_generated_graph_fills_required_webhook_url_with_empty_value():
     raw = _valid_raw()
+    raw["nodes"].append({"id": "explain", "type": "ai.explain", "config": {}})
     raw["nodes"].append({"id": "webhook", "type": "notify.webhook", "config": {}})
-    raw["edges"].append({"source": "merge", "target": "webhook"})
+    raw["edges"].append({"source": "merge", "target": "explain"})
+    raw["edges"].append({"source": "explain", "target": "webhook"})
     graph = normalize_generated_graph(raw, "Build a Kotlin security workflow")
     webhook = next(node for node in graph.nodes if node.type == "notify.webhook")
     assert webhook.config == {"url": ""}
