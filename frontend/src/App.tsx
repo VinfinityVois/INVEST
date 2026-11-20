@@ -158,7 +158,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedFinding?.fingerprint || !lastRunId) { setSourcePreview(null); setSourcePreviewError(""); return; }
     const controller = new AbortController();
-    setSourcePreviewLoading(true); setSourcePreviewError("");
+    setSourcePreview(null); setSourcePreviewLoading(true); setSourcePreviewError("");
     const params = new URLSearchParams({ start_line: String(sourceWindowStart), end_line: String(sourceWindowStart + 99) });
     fetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
       .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Не удалось открыть исходник"); return data as SourcePreview; })
