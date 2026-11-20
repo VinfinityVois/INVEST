@@ -48,3 +48,64 @@ def test_cron_schedule_computes_next_occurrence_in_timezone():
 def test_cron_schedule_rejects_unknown_timezone():
     with pytest.raises(Exception):
         _next_schedule_at("*/5 * * * *", "Mars/Olympus", datetime.now(timezone.utc))
+
+
+
+def test_due_schedule_enqueues_one_regular_workflow_run(monkeypatch):
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    import app.queue as queue
+    from app.models import WorkflowRun
+
+    now = datetime.now(timezone.utc)
+    schedule = SimpleNamespace(
+        id="schedule-id",
+        workflow_id="workflow-id",
+        cron_expression="*/5 * * * *",
+        timezone="UTC",
+        enabled=True,
+        next_run_at=now - timedelta(seconds=1),
+        last_run_at=None,
+    )
+    version = SimpleNamespace(graph={"name": "scheduled", "nodes": [], "edges": []})
+
+    class Rows:
+        def all(self):
+            return [schedule]
+
+    class FakeSession:
+        def __init__(self):
+            self.added = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def scalars(self, _query):
+            return Rows()
+
+        def scalar(self, _query):
+            return version
+
+        def add(self, item):
+            self.added.append(item)
+
+        def commit(self):
+            pass
+
+    fake = FakeSession()
+    monkeypatch.setattr(queue, "SessionLocal", lambda: fake)
+
+    count = queue.enqueue_due_schedules()
+
+    assert count == 1
+    runs = [item for item in fake.added if isinstance(item, WorkflowRun)]
+    assert len(runs) == 1
+    assert runs[0].source == "schedule"
+    assert runs[0].status == "queued"
+    assert runs[0].graph_snapshot == version.graph
+    assert schedule.next_run_at > now
+    assert schedule.last_run_at is not None
