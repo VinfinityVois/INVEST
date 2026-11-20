@@ -673,3 +673,79 @@ def test_logic_compare_routes_matching_and_nonmatching_findings(tmp_path, monkey
     assert [item["fingerprint"] for item in result["outputs"]["true"]["findings"]] == ["high"]
     assert [item["fingerprint"] for item in result["outputs"]["false"]["findings"]] == ["low"]
     assert result["outputs"]["compare"]["summary"] == {"total": 2, "matched": 1, "unmatched": 1}
+
+
+def test_logic_compare_partitions_findings_and_routes_true_false_handles(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "App.kt").write_text("class App {}", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [
+        {"fingerprint": "high", "rule_id": "demo.high", "severity": "HIGH", "path": "App.kt"},
+        {"fingerprint": "low", "rule_id": "demo.low", "severity": "LOW", "path": "App.kt"},
+    ])
+
+    graph = WorkflowGraph(
+        name="Compare findings",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "compare", "type": "logic.compare", "config": {
+                "field": "severity", "operator": "greater_or_equal", "value": "HIGH"
+            }},
+            {"id": "true-output", "type": "findings.merge"},
+            {"id": "false-output", "type": "findings.merge"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "compare"},
+            {"id": "e4", "source": "compare", "source_handle": "true", "target": "true-output"},
+            {"id": "e5", "source": "compare", "source_handle": "false", "target": "false-output"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["outputs"]["compare"]["summary"] == {"total": 2, "matched": 1, "unmatched": 1}
+    assert [item["fingerprint"] for item in result["outputs"]["true-output"]["findings"]] == ["high"]
+    assert [item["fingerprint"] for item in result["outputs"]["false-output"]["findings"]] == ["low"]
+
+
+def test_logic_compare_count_operator_uses_total_finding_count(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "App.kt").write_text("class App {}", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [
+        {"fingerprint": "one", "severity": "HIGH"},
+        {"fingerprint": "two", "severity": "LOW"},
+    ])
+
+    graph = WorkflowGraph(
+        name="Compare finding count",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "compare", "type": "logic.compare", "config": {
+                "field": "count", "operator": "greater_than", "value": "1"
+            }},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "compare"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["outputs"]["compare"]["branch"] == "true"
+    assert len(result["outputs"]["compare"]["matched_findings"]) == 2
+    assert result["outputs"]["compare"]["unmatched_findings"] == []
