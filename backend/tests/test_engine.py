@@ -129,3 +129,33 @@ def test_git_source_is_passed_to_secrets_scanner(tmp_path, monkeypatch):
     assert result["status"] == "completed"
     assert result["outputs"]["source"]["status"] == "ready"
     assert result["outputs"]["scan"]["summary"]["total"] == 1
+
+
+def test_sca_node_runs_against_workspace_source(tmp_path, monkeypatch):
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation("org.apache.commons:commons-text:1.9") }\\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "sca", "type": "scan.sca"},
+            {"id": "merge", "type": "findings.merge"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "sca"},
+            {"id": "e3", "source": "sca", "target": "merge"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["sca"]["summary"]["total"] == 1
+    assert result["outputs"]["merge"]["findings"][0]["advisory_id"] == "GHSA-599f-7c49-w659"
