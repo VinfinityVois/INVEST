@@ -266,6 +266,13 @@ def _run_telemetry(session, run: WorkflowRun):
                     **({"findings": output["summary"]["total"]} if isinstance(output.get("summary"), dict) else {}),
                     **({"explained_count": output.get("explained_count", len(output.get("explanations", [])))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
                     **({"total_findings": len(output.get("findings", []))} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
+                    **({"explanations": [
+                        {
+                            "root_cause": str(item.get("root_cause", ""))[:240],
+                            "impact": str(item.get("impact", ""))[:180],
+                            "recommendation": str(item.get("recommendation", ""))[:240],
+                        } for item in output.get("explanations", [])[:3]
+                    ]} if node_id in {item.get("node_id") for item in trace if item.get("type") == "ai.explain"} else {}),
                 } for node_id, output in (result.get("outputs", {}) if isinstance(result, dict) else {}).items()
             }
         ),
