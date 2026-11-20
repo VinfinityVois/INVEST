@@ -1,7 +1,7 @@
 import re
 
 _SECRET_PATTERNS = [
-    re.compile(r"(?i)(api[_-]?key|token|secret|password)(\\s*[:=]\\s*)([^\\s,;]+)"),
+    re.compile(r"(?i)(api[_-]?key|token|secret|password)(\s*[:=]\s*)([^\s,;]+)"),
     re.compile(r"(?i)(AKIA[0-9A-Z]{16})"),
     re.compile(r"(?i)(gh[pousr]_[A-Za-z0-9]{20,})"),
 ]
