@@ -180,6 +180,7 @@ export default function App() {
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [sourcePreviewOpen, setSourcePreviewOpen] = useState(false);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
   const [sourcePreviewError, setSourcePreviewError] = useState("");
@@ -1646,7 +1647,7 @@ export default function App() {
           findingGroups.map(group => <section className="finding-file-group" key={group.path}>
             <div className="finding-file-heading"><Code2 size={13}/><b>{group.path}</b><span>{group.items.length} · находок</span></div>
             {group.items.map((finding, index) => <article className="finding finding-table-item" key={finding.id || finding.rule_id + index}>
-            <button type="button" className={"finding-table-row" + (selectedFinding?.fingerprint === finding.fingerprint ? " is-selected" : "")} onClick={() => { setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding); setSourceWindowStart(Math.max(1, (finding.line || 1) - 40)); }} aria-expanded={selectedFinding?.fingerprint === finding.fingerprint}>
+            <button type="button" className={"finding-table-row" + (selectedFinding?.fingerprint === finding.fingerprint ? " is-selected" : "")} onClick={() => { setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding); setSourcePreviewOpen(false); setSourceWindowStart(Math.max(1, (finding.line || 1) - 40)); }} aria-expanded={selectedFinding?.fingerprint === finding.fingerprint}>
               <span className={"finding-table-severity severity-" + finding.severity.toLowerCase()}>{finding.severity}</span>
               <b>{finding.rule_id}</b>
               <small>{finding.path}{finding.line ? ":" + finding.line : ""}</small>
@@ -1678,10 +1679,10 @@ export default function App() {
             </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
-            <button className="source-preview-toggle" onClick={() => setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding)}>
-              <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть исходник" : "Открыть исходник"}
+            <button className="source-preview-toggle" onClick={() => setSourcePreviewOpen(value => !value)}>
+              <Code2 size={13} /> {sourcePreviewOpen ? "Скрыть исходник" : "Открыть исходник"}
             </button>
-            {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
+            {sourcePreviewOpen && selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
               <div className="source-code-head"><span>{finding.path}</span><div className="source-code-nav"><button disabled={selectedFindingIndex <= 0} onClick={() => selectAdjacentFinding(-1)} title="Предыдущая находка">←</button><b>{selectedFindingIndex >= 0 ? `${selectedFindingIndex + 1} / ${orderedVisibleFindings.length}` : `СТРОКА ${finding.line || "—"}`}</b><button disabled={selectedFindingIndex < 0 || selectedFindingIndex >= orderedVisibleFindings.length - 1} onClick={() => selectAdjacentFinding(1)} title="Следующая находка">→</button></div></div>
               {sourcePreviewLoading && <p className="source-loading">Загружаю проверенный фрагмент файла…</p>}
               {sourcePreviewError && <p className="source-preview-error">{sourcePreviewError}</p>}
