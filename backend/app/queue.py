@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, update
 
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, WorkflowRun
+from app.models import AuditLog, Finding, FindingState, Workflow, WorkflowRun
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
@@ -196,6 +196,14 @@ def process_run(run_id: str, worker_id: str) -> None:
         if run is None or run.status not in {"running", "cancelling"} or run.locked_by != worker_id:
             logger.warning("Run %s ownership changed before completion", run_id)
             return
+        # Match API lifecycle updates' workflow-row lock so a scan finishing
+        # concurrently cannot overwrite a newly accepted/fixed finding state.
+        if run.workflow_id:
+            session.scalar(
+                select(Workflow)
+                .where(Workflow.id == run.workflow_id)
+                .with_for_update()
+            )
         run.status = "cancelled" if run.status == "cancelling" or final_status == "cancelled" else final_status
         run.result = result
         run.error = error
