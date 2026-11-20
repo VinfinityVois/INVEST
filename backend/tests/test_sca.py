@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.scanners.sca import _affected, scan_gradle_project
+from app.scanners.sca import _affected, scan_gradle_project, scan_maven_project, scan_project
 
 
 def test_scans_gradle_kotlin_literals_constants_and_gradle_properties(tmp_path):
@@ -458,3 +458,118 @@ def test_gradle_version_catalog_bundle_with_unknown_alias_is_ignored(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_maven_pom_resolves_properties_and_dependency_management(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pom.xml").write_text(
+        "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">"
+        "<modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId><version>1</version>"
+        "<properties><jackson.version>2.9.10.3</jackson.version></properties>"
+        "<dependencyManagement><dependencies>"
+        "<dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.8.8</version></dependency>"
+        "</dependencies></dependencyManagement>"
+        "<dependencies>"
+        "<dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>$" "{jackson.version}</version></dependency>"
+        "<dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId></dependency>"
+        "</dependencies></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project)
+
+    assert {item["artifact"] for item in findings} == {"jackson-databind", "gson"}
+    assert {item["version"] for item in findings} >= {"2.9.10.3", "2.8.8"}
+    assert all(item["path"] == "pom.xml" for item in findings)
+
+
+def test_maven_spring_boot_bom_supplies_managed_versions(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId>"
+        "<dependencyManagement><dependencies><dependency>"
+        "<groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId>"
+        "<version>3.5.0</version><type>pom</type><scope>import</scope>"
+        "</dependency></dependencies></dependencyManagement>"
+        "<dependencies><dependency><groupId>com.fasterxml.jackson.core</groupId>"
+        "<artifactId>jackson-databind</artifactId></dependency></dependencies></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project)
+
+    assert any(item["artifact"] == "jackson-databind" and item["version"] == "2.19.0" for item in findings)
+
+
+def test_maven_profiles_only_scan_active_by_default_or_explicit_profiles(tmp_path):
+    project = tmp_path / "project"
+    (project / ".mvn").mkdir(parents=True)
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId>"
+        "<profiles>"
+        "<profile><id>default-vulnerable</id><activation><activeByDefault>true</activeByDefault></activation>"
+        "<dependencies><dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.8.8</version></dependency></dependencies></profile>"
+        "<profile><id>prod-vulnerable</id><dependencies><dependency><groupId>com.fasterxml.jackson.core</groupId>"
+        "<artifactId>jackson-databind</artifactId><version>2.9.10.3</version></dependency></dependencies></profile>"
+        "</profiles></project>",
+        encoding="utf-8",
+    )
+    assert {item["artifact"] for item in scan_maven_project(project)} == {"gson"}
+    (project / ".mvn" / "maven.config").write_text("-P prod-vulnerable\n", encoding="utf-8")
+
+    findings = scan_maven_project(project)
+
+    assert {item["artifact"] for item in findings} == {"gson", "jackson-databind"}
+
+
+def test_maven_dependency_tree_finds_transitive_dependencies(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "dependency-tree.txt").write_text(
+        "demo:app:jar:1.0:compile\n"
+        "+- org.apache.commons:commons-text:jar:1.9:compile\n"
+        "\\- org.apache.commons:commons-lang3:jar:3.17.0:runtime\n",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project)
+
+    assert any(item["artifact"] == "commons-text" and item["version"] == "1.9" for item in findings)
+    assert all(item["path"] == "dependency-tree.txt" for item in findings)
+
+
+def test_maven_unresolved_versions_and_inactive_profiles_are_not_guessed(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId>"
+        "<dependencies><dependency><groupId>com.fasterxml.jackson.core</groupId>"
+        "<artifactId>jackson-databind</artifactId><version>$" "{missing.version}</version></dependency></dependencies>"
+        "<profiles><profile><id>inactive</id><dependencies><dependency>"
+        "<groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.8.8</version>"
+        "</dependency></dependencies></profile></profiles></project>",
+        encoding="utf-8",
+    )
+
+    assert scan_maven_project(project) == []
+
+
+def test_combined_sca_scans_gradle_and_maven_projects(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle").write_text(
+        'dependencies { implementation("org.apache.commons:commons-text:1.9") }\n',
+        encoding="utf-8",
+    )
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>app</artifactId>"
+        "<dependencies><dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId>"
+        "<version>2.8.8</version></dependency></dependencies></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_project(project)
+
+    assert {item["artifact"] for item in findings} == {"commons-text", "gson"}
