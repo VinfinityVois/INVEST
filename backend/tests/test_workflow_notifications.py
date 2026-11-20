@@ -10,7 +10,7 @@ def test_webhook_rejects_non_https_and_unlisted_host(monkeypatch):
     monkeypatch.setattr(settings, "webhook_allowed_hosts", "hooks.example.com")
     with pytest.raises(ValueError, match="HTTPS"):
         notifications._validate_webhook_url("http://hooks.example.com/notify")
-    with pytest.raises(ValueError, match="allowlist"):
+    with pytest.raises(ValueError, match="WEBHOOK_ALLOWED_HOSTS"):
         notifications._validate_webhook_url("https://evil.example/notify")
 
 

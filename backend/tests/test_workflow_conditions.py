@@ -45,7 +45,7 @@ def test_condition_rejects_non_numeric_comparison():
         [{"findings": []}],
     )
     assert matched is False
-    assert "числовые" in error
+    assert "числовых" in error.lower()
 
 
 def test_condition_supports_exists():
