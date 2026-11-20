@@ -267,3 +267,25 @@
 .ai-node-guide li{padding-left:2px}
 .workflow-node.tone-pink{border-color:rgba(181,125,220,.46)}
 .workflow-node.tone-pink .node-symbol{color:#d4a6f0;background:rgba(164,104,205,.13)}
+
+
+/* Workflow graph: visible links, live data flow and explicit node states */
+.react-flow__edge-path{stroke:#6686a5;stroke-width:2.1;transition:stroke .2s ease,stroke-width .2s ease,opacity .2s ease}
+.react-flow__edge.edge-idle .react-flow__edge-path{stroke:#58738e;opacity:.82}
+.react-flow__edge.edge-completed .react-flow__edge-path{stroke:#56b99a;stroke-width:2.4;opacity:1}
+.react-flow__edge.edge-active .react-flow__edge-path{stroke:#72caff;stroke-width:3;stroke-dasharray:8 6;filter:drop-shadow(0 0 4px rgba(91,190,255,.45));animation:edge-flow 0.8s linear infinite}
+@keyframes edge-flow{to{stroke-dashoffset:-28}}
+.node-live-dot{display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#70caff;box-shadow:0 0 0 3px rgba(112,202,255,.13);animation:live-pulse 1s ease-in-out infinite}
+.node-execution-detail{margin:7px 0 0;padding:6px 7px;border-radius:5px;background:rgba(5,12,21,.62);color:#9fc0dc;font-size:8px;line-height:1.45;overflow-wrap:anywhere}
+.node-blocked .node-execution-detail,.node-failed .node-execution-detail{color:#f0a6a9;background:rgba(116,38,48,.16)}
+.node-configuration_required .node-execution-detail{color:#e5c17e;background:rgba(130,89,34,.14)}
+.node-completed .node-execution-detail{color:#91d8b9}
+.source-divider{display:flex;align-items:center;gap:8px;margin:12px 0 8px;color:#7289a1;font:7px 'DM Mono';letter-spacing:.08em}
+.source-divider:before,.source-divider:after{content:"";height:1px;flex:1;background:#2a3d52}
+.source-field{display:block;margin:7px 0;color:#9bb0c6;font-size:9px}
+.source-field input{display:block;width:100%;margin-top:5px;padding:8px;background:#080f19;border:1px solid #30445e;border-radius:5px;color:#dce9f7;font:9px 'DM Mono'}
+.source-field input:focus{outline:none;border-color:#69a9e8}
+.git-source-button{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:31px;margin:8px 0;padding:7px;border:1px solid #3b688d;border-radius:5px;background:#142d43;color:#b9dcf8;font-size:9px;font-weight:700;cursor:pointer}
+.git-source-button:hover:not(:disabled){background:#1b3d59;border-color:#69a9e8}
+.git-source-button:disabled{opacity:.45;cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){.react-flow__edge.edge-active .react-flow__edge-path,.node-live-dot{animation:none}.workflow-node.node-running{animation:none}}
