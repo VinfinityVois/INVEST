@@ -327,7 +327,15 @@ export default function App() {
       if (activeProject?.id === data.id) {
         setActiveProject(data);
         const filesResponse = await fetch(`/api/projects/${data.id}/files`);
-        if (filesResponse.ok) setProjectFiles((await filesResponse.json()).files || []);
+        if (filesResponse.ok) {
+          const updatedFiles = ((await filesResponse.json()).files || []) as ProjectFile[];
+          setProjectFiles(updatedFiles);
+          setProjectFileQuery("");
+          setExpandedProjectDirs(new Set(updatedFiles.flatMap(file => {
+            const parts = file.path.split("/");
+            return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/"));
+          })));
+        }
         setProjectFilePreview(null);
       }
       setResult((projectId ? "Проект обновлён" : "Проект добавлен") + " · " + data.name + " · " + data.file_count + " файлов");
