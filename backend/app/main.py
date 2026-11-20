@@ -1809,7 +1809,10 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
         raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
 
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        # Serialize concurrent lifecycle updates for this workflow. This prevents
+        # two first-time updates from racing on the unique (workflow, fingerprint)
+        # constraint and keeps the audit trail's previous_state consistent.
+        if _lock_workflow_for_version_write(session, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         finding = session.scalar(
             select(Finding)
