@@ -430,7 +430,7 @@ def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_
     assert first["cache_summary"]["misses"] == 1
     assert first["cache_entries"]
 
-    second = execute_graph(graph, registry, cache_entries=first["cache_entries"])
+    second = execute_graph(graph, registry, cache_entries=first["cache_entries"], cache_metadata=first["cache_metadata"])
     assert calls["count"] == 1
     assert second["trace"][-1]["cached"] is True
     assert second["trace"][-1]["cache_age_seconds"] >= 0
@@ -438,7 +438,7 @@ def test_scanner_cache_reuses_only_matching_source_and_force_full_scan_bypasses_
     assert second["cache_summary"]["hits"] == 1
 
     source_file.write_text("class App { fun changed() {} }", encoding="utf-8")
-    changed = execute_graph(graph, registry, cache_entries=first["cache_entries"])
+    changed = execute_graph(graph, registry, cache_entries=first["cache_entries"], cache_metadata=first["cache_metadata"])
     assert calls["count"] == 2
     assert changed["trace"][-1]["cached"] is False
 
