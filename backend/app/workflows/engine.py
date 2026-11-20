@@ -370,7 +370,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "type": node.type,
             "status": node_status,
             "cached": cache_hit,
-            **({"cache_bypass_reason": "Кэш блока сброшен пользователем"} if node.type in CACHEABLE_NODE_TYPES and node_id in forced_nodes and not cache_hit else {}),
+            **({"cache_bypass_reason": cache_bypass_reason} if node.type in CACHEABLE_NODE_TYPES and not cache_hit and cache_bypass_reason else {}),
             "diagnostic_level": diagnostic_level,
             **({"reason_code": diagnostic_code} if diagnostic_code else {}),
             **({"reason": str(output["message"])[:500]} if output.get("message") else {}),
