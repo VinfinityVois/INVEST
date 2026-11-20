@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 import copy
 import hashlib
 import json
@@ -26,6 +27,7 @@ CACHE_SCHEMA_VERSION = "node-cache-v1"
 SCANNER_CACHE_VERSION = "2026-11-21.1"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
+CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 def _source_fingerprint(root: Path) -> str:
@@ -75,12 +77,30 @@ def _bounded_cache_entries(entries: dict | None) -> dict:
     return bounded
 
 
+def _node_cache_components(node, source_root: Path) -> dict:
+    config_encoded = json.dumps(node.config, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return {
+        "schema_version": CACHE_SCHEMA_VERSION,
+        "scanner_version": SCANNER_CACHE_VERSION,
+        "node_type": node.type,
+        "config_hash": hashlib.sha256(config_encoded).hexdigest(),
+        "source_hash": _source_fingerprint(source_root),
+    }
+
+
 def _node_cache_key(node, source_root: Path) -> str:
-    payload = {"schema": CACHE_SCHEMA_VERSION, "scanner": SCANNER_CACHE_VERSION,
-               "type": node.type, "config": node.config,
-               "source": _source_fingerprint(source_root)}
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    encoded = json.dumps(_node_cache_components(node, source_root), sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _cache_age_seconds(cached_at: str) -> float | None:
+    try:
+        timestamp = datetime.fromisoformat(cached_at.replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - timestamp).total_seconds())
+    except (TypeError, ValueError):
+        return None
 
 
 def _workspace_source(relative_path: str) -> Path:
@@ -139,7 +159,7 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -185,6 +205,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     artifacts = {}
     reusable_cache = {} if force_full_scan else _bounded_cache_entries(cache_entries)
     next_cache_entries = dict(reusable_cache)
+    reusable_metadata = {} if force_full_scan else dict(cache_metadata or {})
+    next_cache_metadata = dict(reusable_metadata)
     forced_nodes = set(force_node_ids or [])
     cancelled = False
     for node_id in order:
@@ -264,15 +286,40 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
                 source_root = artifacts[source_node]
+                components = _node_cache_components(node, source_root)
                 cache_key = _node_cache_key(node, source_root)
                 cached_output = reusable_cache.get(cache_key)
+                metadata = reusable_metadata.get(node_id)
+                cache_age_seconds = None
                 if node_id in forced_nodes:
                     cache_bypass_reason = "Кэш блока сброшен пользователем"
                 elif force_full_scan:
                     cache_bypass_reason = "Запрошен полный анализ"
                 elif not (isinstance(cached_output, dict) and cached_output.get("status") == "completed"):
-                    cache_bypass_reason = "Нет совпадающего результата: изменились входные данные, настройки или версия сканера"
-                if node_id not in forced_nodes and not force_full_scan and isinstance(cached_output, dict) and cached_output.get("status") == "completed":
+                    cache_bypass_reason = "Нет сохранённого результата"
+                elif not isinstance(metadata, dict) or metadata.get("cache_key") != cache_key:
+                    if isinstance(metadata, dict):
+                        if metadata.get("scanner_version") != components["scanner_version"] or metadata.get("schema_version") != components["schema_version"]:
+                            cache_bypass_reason = "Обновилась версия сканера или формат кэша"
+                        elif metadata.get("config_hash") != components["config_hash"]:
+                            cache_bypass_reason = "Изменилась конфигурация блока"
+                        elif metadata.get("source_hash") != components["source_hash"]:
+                            cache_bypass_reason = "Изменилось содержимое исходного проекта"
+                    cache_bypass_reason = cache_bypass_reason or "Нет метаданных актуальности кэша"
+                else:
+                    cache_age_seconds = _cache_age_seconds(metadata.get("cached_at"))
+                    if cache_age_seconds is None:
+                        cache_bypass_reason = "Не удалось определить возраст кэша"
+                    elif cache_age_seconds >= CACHE_TTL_SECONDS:
+                        cache_bypass_reason = "Срок действия кэша истёк"
+                cache_is_usable = (
+                    node_id not in forced_nodes
+                    and not force_full_scan
+                    and isinstance(cached_output, dict)
+                    and cached_output.get("status") == "completed"
+                    and cache_bypass_reason is None
+                )
+                if cache_is_usable:
                     output = copy.deepcopy(cached_output)
                     cache_hit = True
                 else:
@@ -287,6 +334,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     try:
                         if len(json.dumps(output, ensure_ascii=False).encode("utf-8")) <= MAX_CACHE_ENTRY_BYTES:
                             next_cache_entries[cache_key] = copy.deepcopy(output)
+                            next_cache_metadata[node_id] = {
+                                **components,
+                                "cache_key": cache_key,
+                                "cached_at": datetime.now(timezone.utc).isoformat(),
+                            }
                     except (TypeError, ValueError):
                         pass
         elif node.type == "scan.sca":
@@ -377,6 +429,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "type": node.type,
             "status": node_status,
             "cached": cache_hit,
+            **({"cache_age_seconds": round(cache_age_seconds, 2)} if cache_hit and cache_age_seconds is not None else {}),
             **({"cache_bypass_reason": cache_bypass_reason} if node.type in CACHEABLE_NODE_TYPES and not cache_hit and cache_bypass_reason else {}),
             "diagnostic_level": diagnostic_level,
             **({"reason_code": diagnostic_code} if diagnostic_code else {}),
@@ -463,4 +516,4 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
-    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate, "cache_entries": next_cache_entries, "cache_summary": {"enabled": not force_full_scan, "force_full_scan": bool(force_full_scan), "hits": sum(1 for item in trace if item.get("cached")), "misses": sum(1 for item in trace if item.get("type") in CACHEABLE_NODE_TYPES and not item.get("cached"))}}
+    return {"status": status, "order": order, "execution_scope": {"requested_node_ids": requested_node_ids, "included_node_ids": order}, "trace": trace, "outputs": outputs, "security_gate": security_gate, "cache_entries": next_cache_entries, "cache_metadata": next_cache_metadata, "cache_summary": {"enabled": not force_full_scan, "force_full_scan": bool(force_full_scan), "hits": sum(1 for item in trace if item.get("cached")), "misses": sum(1 for item in trace if item.get("type") in CACHEABLE_NODE_TYPES and not item.get("cached"))}}
