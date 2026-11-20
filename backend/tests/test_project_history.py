@@ -129,3 +129,72 @@ def test_scanner_run_comparison_handles_missing_metadata():
     assert comparison["cache_comparison"]["delta_hits"] == 1
     assert comparison["scanner_comparison"][0]["source_changed"] is None
     assert comparison["scanner_comparison"][0]["added_findings"] == 0
+
+
+
+def test_run_source_manifest_diff_and_finding_correlation():
+    from app.main import _compare_source_manifests, _annotate_finding_source_relation
+
+    before = {"source_manifests": {"source": {
+        "complete": True,
+        "files": {
+            "src/Main.kt": {"size": 10, "sha256": "old"},
+            "README.md": {"size": 4, "sha256": "same"},
+            "obsolete.kt": {"size": 2, "sha256": "gone"},
+        },
+    }}}
+    after = {"source_manifests": {"source": {
+        "complete": True,
+        "files": {
+            "src/Main.kt": {"size": 11, "sha256": "new"},
+            "README.md": {"size": 4, "sha256": "same"},
+            "new.kt": {"size": 3, "sha256": "added"},
+        },
+    }}}
+
+    comparison = _compare_source_manifests(before, after)
+    assert comparison["status"] == "complete"
+    assert comparison["added_count"] == 1
+    assert comparison["removed_count"] == 1
+    assert comparison["modified_count"] == 1
+    assert comparison["added_files"] == ["new.kt"]
+    assert comparison["removed_files"] == ["obsolete.kt"]
+    assert comparison["modified_files"] == ["src/Main.kt"]
+
+    findings = _annotate_finding_source_relation([
+        {"path": "new.kt"}, {"path": "src/Main.kt"},
+        {"path": "obsolete.kt"}, {"path": "README.md"},
+    ], comparison)
+    assert [item["source_relation"] for item in findings] == [
+        "added_file", "modified_file", "removed_file", "unchanged_file"
+    ]
+
+
+def test_run_source_manifest_missing_or_incomplete_stays_unknown():
+    from app.main import _compare_source_manifests, _annotate_finding_source_relation
+
+    missing = _compare_source_manifests({}, {})
+    assert missing["status"] == "unavailable"
+    assert _annotate_finding_source_relation([{"path": "src/Main.kt"}], missing)[0]["source_relation"] == "unknown"
+
+    incomplete = _compare_source_manifests(
+        {"source_manifests": {"source": {"complete": False, "reason": "limit", "files": {}}}},
+        {"source_manifests": {"source": {"complete": True, "files": {"src/Main.kt": {"sha256": "x", "size": 1}}}}},
+    )
+    assert incomplete["status"] == "unavailable"
+    assert _annotate_finding_source_relation([{"path": "src/Main.kt"}], incomplete)[0]["source_relation"] == "unknown"
+
+
+def test_source_file_manifest_hashes_files_and_excludes_generated_dirs(tmp_path):
+    from app.workflows.engine import _source_file_manifest
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "src" / "Main.kt").write_text("fun main() = Unit", encoding="utf-8")
+    (tmp_path / ".git" / "config").write_text("ignored", encoding="utf-8")
+
+    manifest = _source_file_manifest(tmp_path)
+    assert manifest["complete"] is True
+    assert set(manifest["files"]) == {"src/Main.kt"}
+    assert manifest["files"]["src/Main.kt"]["size"] == len("fun main() = Unit")
+    assert len(manifest["files"]["src/Main.kt"]["sha256"]) == 64
