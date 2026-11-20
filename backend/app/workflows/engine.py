@@ -501,8 +501,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 }
         elif node.type == "notify.webhook":
             try:
-                # Include findings from all executed upstream steps, not only the direct parent.
-                executed_outputs = [value for value in outputs.values() if value.get("status") != "skipped"]
+                # Collect only executed ancestors, including scanner nodes before AI/report nodes.
+                upstream_ids = set()
+                pending = list(incoming[node_id])
+                while pending:
+                    parent_id = pending.pop()
+                    if parent_id in upstream_ids:
+                        continue
+                    upstream_ids.add(parent_id)
+                    pending.extend(incoming[parent_id])
+                executed_outputs = [outputs[parent_id] for parent_id in upstream_ids if parent_id in outputs and outputs[parent_id].get("status") != "skipped"]
                 output = send_webhook_notification(node.config, executed_outputs, node_id=node_id, workflow_name=graph.name)
             except ValueError as exc:
                 output = {"status": "configuration_required", "message": str(exc)}

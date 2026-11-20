@@ -48,6 +48,8 @@ def _validate_webhook_url(value: str) -> str:
 def _safe_report(parents: list[dict]) -> dict:
     findings = []
     for parent in parents:
+        if parent.get("status") == "skipped":
+            continue
         for item in parent.get("findings", []):
             if not isinstance(item, dict):
                 continue
