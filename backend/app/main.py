@@ -45,6 +45,18 @@ class ProjectRename(BaseModel):
         return value
 
 
+class SelectedRunRequest(BaseModel):
+    node_ids: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("node_ids")
+    @classmethod
+    def validate_node_ids(cls, value: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(item.strip() for item in value if isinstance(item, str) and item.strip()))
+        if not normalized or any(len(item) > 120 for item in normalized):
+            raise ValueError("Укажите от 1 до 100 корректных идентификаторов блоков.")
+        return normalized
+
+
 class FindingStateUpdate(BaseModel):
     state: Literal["open", "accepted_risk", "fixed", "false_positive"]
     reason: str = Field(min_length=3, max_length=2000)
@@ -848,6 +860,105 @@ def execute_saved_workflow(workflow_id: UUID):
             "status": "queued",
             "findings_count": 0,
         }
+
+
+@app.post("/api/workflows/{workflow_id}/runs/selected", status_code=202)
+def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        version = session.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        known_ids = {node.id for node in graph.nodes}
+        unknown = sorted(set(request.node_ids) - known_ids)
+        if unknown:
+            raise HTTPException(status_code=422, detail={"message": "Выбраны отсутствующие блоки.", "unknown_node_ids": unknown})
+        snapshot = graph.model_dump(mode="json")
+        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids}
+        run = WorkflowRun(
+            workflow_id=workflow_id,
+            status="queued",
+            source="selected",
+            graph_snapshot=snapshot,
+        )
+        session.add(run)
+        session.commit()
+        return {
+            "run_id": str(run.id),
+            "workflow_id": str(workflow_id),
+            "workflow_version": version.version,
+            "requested_node_ids": request.node_ids,
+            "status": "queued",
+        }
+
+
+@app.get("/api/workflows/{workflow_id}/versions")
+def list_workflow_versions(workflow_id: UUID):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        versions = session.scalars(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+        ).all()
+        return [
+            {
+                "version": item.version,
+                "created_at": item.created_at,
+                "name": item.graph.get("name", workflow.name) if isinstance(item.graph, dict) else workflow.name,
+                "node_count": len(item.graph.get("nodes", [])) if isinstance(item.graph, dict) else 0,
+                "edge_count": len(item.graph.get("edges", [])) if isinstance(item.graph, dict) else 0,
+            }
+            for item in versions
+        ]
+
+
+@app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
+def restore_workflow_version(workflow_id: UUID, version: int):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        source_version = session.scalar(
+            select(WorkflowVersion).where(
+                WorkflowVersion.workflow_id == workflow_id,
+                WorkflowVersion.version == version,
+            )
+        )
+        if source_version is None:
+            raise HTTPException(status_code=404, detail="Workflow version not found")
+        graph = WorkflowGraph.model_validate(source_version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        latest = session.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        next_version = (latest.version if latest else 0) + 1
+        workflow.name = graph.name
+        session.add(WorkflowVersion(
+            workflow_id=workflow_id,
+            version=next_version,
+            graph=graph.model_dump(mode="json"),
+        ))
+        session.commit()
+        return {"id": str(workflow.id), "restored_from": version, "version": next_version, "name": workflow.name}
 
 
 @app.post("/api/runs/{run_id}/cancel")
