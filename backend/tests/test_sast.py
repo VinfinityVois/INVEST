@@ -221,3 +221,45 @@ def test_interprocedural_sql_taint_cross_file_bound_query_is_safe(tmp_path):
         item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
         for item in findings
     )
+
+
+def test_interprocedural_sql_taint_stops_at_numeric_conversion(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "NumericController.kt").write_text(
+        """class NumericController(private val service: NumericService) {
+    fun lookup(@RequestParam rawId: String) = service.find(rawId.toLong())
+}
+class NumericService(private val jdbc: JdbcTemplate) {
+    fun find(id: Long): List<String> =
+        jdbc.queryForList("SELECT name FROM item WHERE id = $id", String::class.java)
+}
+""", encoding="utf-8"
+    )
+
+    findings = scan_kotlin_project(root)
+    assert not any(
+        item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
+        for item in findings
+    )
+
+
+def test_interprocedural_sql_taint_does_not_treat_html_escape_as_sql_sanitizer(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "UnsafeEscape.kt").write_text(
+        """class UnsafeEscape(private val jdbc: JdbcTemplate) {
+    fun find(@RequestParam term: String): List<String> {
+        val escaped = HtmlUtils.htmlEscape(term)
+        val sql = "SELECT name FROM item WHERE name = '$escaped'"
+        return jdbc.queryForList(sql, String::class.java)
+    }
+}
+""", encoding="utf-8"
+    )
+
+    findings = scan_kotlin_project(root)
+    assert any(
+        item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
+        for item in findings
+    )
