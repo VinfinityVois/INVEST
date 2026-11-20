@@ -825,13 +825,20 @@ def get_workflow(workflow_id: UUID):
         }
 
 
+def _lock_workflow_for_version_write(session, workflow_id: UUID):
+    """Serialize version-number allocation across concurrent writers."""
+    return session.scalar(
+        select(Workflow).where(Workflow.id == workflow_id).with_for_update()
+    )
+
+
 @app.put("/api/workflows/{workflow_id}")
 def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         latest = session.scalar(
@@ -1065,7 +1072,7 @@ def compare_workflow_versions(
 @app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
 def restore_workflow_version(workflow_id: UUID, version: int):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         source_version = session.scalar(
