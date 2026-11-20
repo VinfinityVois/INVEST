@@ -18,6 +18,7 @@ type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
 type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
+type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
@@ -127,6 +128,7 @@ export default function App() {
   const [projectFileQuery, setProjectFileQuery] = useState("");
   const [expandedProjectDirs, setExpandedProjectDirs] = useState<Set<string>>(new Set());
   const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [projectVisualPreview, setProjectVisualPreview] = useState<ProjectVisualPreview | null>(null);
   const [projectEditing, setProjectEditing] = useState(false);
   const [projectDraft, setProjectDraft] = useState("");
   const [projectSaving, setProjectSaving] = useState(false);
@@ -416,10 +418,29 @@ export default function App() {
     if (!activeProject) return;
     setProjectFilesLoading(true);
     try {
+      const suffix = file.path.split(".").pop()?.toLowerCase() || "";
+      const imageTypes = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
+      const isPdf = suffix === "pdf";
+      if (imageTypes.has(suffix) || isPdf) {
+        const params = new URLSearchParams({ path: file.path });
+        const url = `/api/projects/${activeProject.id}/preview?${params}`;
+        const response = await fetch(url, { method: "HEAD" });
+        if (!response.ok) {
+          const message = response.headers.get("content-type")?.includes("application/json")
+            ? (await response.json()).detail : "Не удалось открыть файл";
+          throw new Error(message || "Не удалось открыть файл");
+        }
+        setProjectVisualPreview({ path: file.path, url, kind: isPdf ? "pdf" : "image" });
+        setProjectFilePreview(null);
+        setProjectEditing(false);
+        setProjectDraft("");
+        return;
+      }
       const params = new URLSearchParams({ path: file.path, start_line: String(startLine) });
       const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
+      setProjectVisualPreview(null);
       setProjectFilePreview(data);
       setProjectEditing(false);
       setProjectDraft(data.editable && typeof data.content === "string" ? data.content : "");
@@ -860,10 +881,10 @@ export default function App() {
             {projectFiles.length === 0 && <p className="telemetry-empty">В архиве не найдено файлов для отображения.</p>}
           </aside>
           <section className="project-file-view">
-            <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || "Выбери файл в дереве проекта"}</span>
+            <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || projectVisualPreview?.path || "Выбери файл в дереве проекта"}</span>
               {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}
             </div>
-            {projectFilePreview ? projectEditing ? <textarea className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} /> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
+            {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <textarea className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} /> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
         </div>
         {projectHistoryOpen && <aside className="project-history-drawer">
