@@ -12,7 +12,8 @@ import {
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle,
 } from "lucide-react";
 
-type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
+type PortManifest = { name: string; data_type: string };
+type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: Record<string, unknown> };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
@@ -70,7 +71,7 @@ type Telemetry = {
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -137,7 +138,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "completed" ? "success"
     : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
-    <Handle type="target" position={Position.Left} />
+    {(data.inputPorts?.length ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: \`\${((index + 1) / (ports.length + 1)) * 100}%\`, background: "var(--accent-600)" }} />)}
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
@@ -157,7 +158,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
-    <Handle type="source" position={Position.Right} />
+    {(data.outputPorts?.length ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: \`\${((index + 1) / (ports.length + 1)) * 100}%\`, background: "var(--accent-600)" }} />)}
   </div>;
 }
 const nodeTypes = { workflow: memo(WorkflowNode) };
@@ -283,7 +284,14 @@ export default function App() {
   useEffect(() => {
     fetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
     fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
+      .then((data: Manifest[]) => {
+        setManifests(data);
+        setNodes(current => current.map(node => {
+          const manifest = data.find(item => item.type === node.data.nodeType);
+          return manifest ? { ...node, data: { ...node.data, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } } : node;
+        }));
+        setNotice("API подключён · реестр компонентов синхронизирован");
+      })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
   }, []);
 
@@ -544,10 +552,28 @@ export default function App() {
   }, [selectedNodeId, nodes.find(n => n.id === selectedNodeId)?.data.config]);
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
+  const isValidConnection = useCallback((connection: Connection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return false;
+    const sourceNode = nodes.find(node => node.id === connection.source);
+    const targetNode = nodes.find(node => node.id === connection.target);
+    if (!sourceNode || !targetNode) return false;
+    const sourceManifest = manifests.find(item => item.type === sourceNode.data.nodeType);
+    const targetManifest = manifests.find(item => item.type === targetNode.data.nodeType);
+    if (!sourceManifest || !targetManifest) return false;
+    const sourcePorts = sourceManifest.outputs || [];
+    const targetPorts = targetManifest.inputs || [];
+    const sourcePort = sourcePorts.length === 1 ? sourcePorts[0] : sourcePorts.find(port => port.name === connection.sourceHandle);
+    const targetPort = targetPorts.length === 1 ? targetPorts[0] : targetPorts.find(port => port.name === connection.targetHandle);
+    return Boolean(sourcePort && targetPort && sourcePort.data_type === targetPort.data_type);
+  }, [nodes, manifests]);
   const onConnect = useCallback((connection: Connection) => {
-    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current)); setWorkflowDirty(true);
-    setSelectedNodeId(null); setSelectedEdgeId(null);
-  }, [setEdges]);
+    if (!isValidConnection(connection)) {
+      setResult("Связь отклонена: выбери совместимые выходной и входной порты одного типа данных.");
+      return;
+    }
+    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current));
+    setWorkflowDirty(true); setSelectedNodeId(null); setSelectedEdgeId(null);
+  }, [setEdges, isValidConnection]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
     setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false })); setWorkflowDirty(true);
   }, [setEdges]);
@@ -564,7 +590,7 @@ export default function App() {
     const id = manifest.type + "-" + Date.now();
     const position = { x: 180 + (nodes.length % 3) * 245, y: 90 + Math.floor(nodes.length / 3) * 145 };
     const initialConfig = manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {};
-    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig } };
+    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } };
     setNodes(current => [...current, node]); setWorkflowDirty(true); setSelectedNodeId(id); setSelectedEdgeId(null);
   };
   const updateNode = (id: string, patch: Partial<NodeData>) => { setWorkflowDirty(true); setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)); };
@@ -1294,7 +1320,7 @@ export default function App() {
         <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
         <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect}
+          onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
