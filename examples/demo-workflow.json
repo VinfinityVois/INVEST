@@ -2,7 +2,7 @@
   "name": "INVEST · Kotlin training demo",
   "nodes": [
     {"id":"trigger","type":"trigger.manual","position":{"x":80,"y":300},"config":{}},
-    {"id":"source","type":"source.git","position":{"x":320,"y":300},"config":{"url":"https://github.com/TBagirov/training","ref":"fe1fcbe212669783480666b9b60147c8a8c6eef4"}},
+    {"id":"source","type":"source.git","position":{"x":320,"y":300},"config":{"url":"https://github.com/TBagirov/training","ref":"fe1fcbe212669783480666b9b60147c8a8c6eef4","subdirectory":"training-project"}},
     {"id":"secrets","type":"scan.secrets","position":{"x":600,"y":80},"config":{}},
     {"id":"sca","type":"scan.sca","position":{"x":600,"y":230},"config":{}},
     {"id":"sast","type":"scan.sast","position":{"x":600,"y":380},"config":{}},
