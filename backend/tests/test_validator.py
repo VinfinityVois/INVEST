@@ -28,3 +28,29 @@ def test_cycles_rejected():
     )
     result=validate_graph(graph,registry)
     assert not result.valid and any(x.code=="cycle_detected" for x in result.issues)
+
+
+from app.workflows.engine import resolve_execution_scope
+
+
+def test_selected_node_scope_includes_all_upstream_dependencies_only():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.git"},
+            {"id": "secrets", "type": "scan.secrets"},
+            {"id": "sca", "type": "scan.sca"},
+            {"id": "merge", "type": "findings.merge"},
+            {"id": "gate", "type": "ci.gate"},
+        ],
+        edges=[
+            {"id": "a", "source": "trigger", "target": "source"},
+            {"id": "b", "source": "source", "target": "secrets"},
+            {"id": "c", "source": "source", "target": "sca"},
+            {"id": "d", "source": "secrets", "target": "merge"},
+            {"id": "e", "source": "sca", "target": "merge"},
+            {"id": "f", "source": "merge", "target": "gate"},
+        ],
+    )
+    assert resolve_execution_scope(graph, ["secrets"]) == ["trigger", "source", "secrets"]
+    assert resolve_execution_scope(graph, ["gate"]) == ["trigger", "source", "secrets", "sca", "merge", "gate"]
