@@ -409,6 +409,25 @@ export default function App() {
     } catch (error) { setResult("Не удалось открыть проект: " + String(error)); }
     finally { setProjectFilesLoading(false); }
   };
+  const applyProject = (project: Project) => {
+    const sourceNode = nodes.find(node => node.data.category === "Source");
+    if (!sourceNode) {
+      setResult("Невозможно применить проект: добавь на граф блок-источник.");
+      return;
+    }
+    updateNode(sourceNode.id, {
+      nodeType: "source.upload",
+      label: project.name,
+      description: "Постоянный проект из библиотеки. Источник доступен всем связанным сканерам.",
+      config: { path: project.workspace_path },
+      executionStatus: "idle",
+      executionDetail: "",
+      executionNotes: [],
+      executionSeverity: undefined,
+    });
+    setActiveProject(project);
+    setResult("Проект применён к workflow · " + project.name + ". Открывать рабочую область не требуется.");
+  };
   const renameProject = async (project: Project) => {
     const name = window.prompt("Новое название проекта:", project.name);
     if (name === null || !name.trim()) return;
@@ -772,7 +791,7 @@ export default function App() {
             {projects.map(project => <article className={"project-library-item" + (activeProject?.id === project.id ? " project-active" : "")} key={project.id}>
               <div className="project-library-main"><div className="project-folder-icon"><FolderOpen size={15}/></div><div className="project-library-copy"><b title={project.name}>{project.name}</b><small>{project.file_count} файлов · {(project.expanded_bytes / 1048576).toFixed(1)} MiB</small></div></div>
               <div className="project-library-actions">
-                <button title="Открыть проект в площадке" onClick={() => void openProject(project)}><FolderOpen size={12}/>Открыть</button>
+                <button title="Открыть файлы и историю проекта" onClick={() => void openProject(project)}><FolderOpen size={12}/>Открыть</button><button className="project-apply-button" title="Подключить проект как источник текущего workflow" onClick={() => applyProject(project)}><Check size={12}/>Применить</button>
                 <label title="Обновить содержимое ZIP"><RefreshCw size={12}/><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0], project.id); event.currentTarget.value = ""; }}/></label>
                 <button title="Переименовать" onClick={() => void renameProject(project)}><Pencil size={12}/></button>
                 <button title="Удалить проект" className="project-delete" onClick={() => void deleteProject(project)}><Trash2 size={12}/></button>
