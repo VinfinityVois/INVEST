@@ -12,6 +12,7 @@ from app.config import settings
 from app.scanners.secrets import MAX_FILE_BYTES, MAX_FILES, SKIP_DIRS
 
 DATA_FILE = Path(__file__).resolve().parents[3] / "data" / "maven-advisories.json"
+SPRING_BOOT_BOM_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-managed-versions.json"
 DEPENDENCY_CALL = re.compile(
     r"(?P<call>\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly|runtimeClasspath|compileClasspath)\s*\(\s*"
     r"(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
@@ -216,6 +217,50 @@ def _load_advisories(path: Path | None = None) -> dict[tuple[str, str], list[dic
     return index
 
 
+def _load_spring_boot_boms(path: Path | None = None) -> dict[str, dict[tuple[str, str], str]]:
+    """Load the curated, version-pinned Spring Boot managed-version snapshot."""
+    source = path or SPRING_BOOT_BOM_FILE
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if payload.get("formatVersion") != 1 or payload.get("ecosystem") != "Maven":
+        return {}
+    result: dict[str, dict[tuple[str, str], str]] = {}
+    for bom_version, entry in payload.get("boms", {}).items():
+        if not isinstance(bom_version, str) or not isinstance(entry, dict):
+            continue
+        managed = entry.get("managed", {})
+        if not isinstance(managed, dict):
+            continue
+        versions: dict[tuple[str, str], str] = {}
+        for coordinate, version in managed.items():
+            parsed = COORDINATE.match(coordinate) if isinstance(coordinate, str) else None
+            if parsed and parsed.group(3) is None and isinstance(version, str) and _numeric_version(version):
+                versions[(parsed.group(1), parsed.group(2))] = version
+        if versions:
+            result[bom_version] = versions
+    return result
+
+
+def _spring_boot_bom_versions(build_text: str, constants: dict[str, str], snapshots: dict[str, dict[tuple[str, str], str]]) -> dict[tuple[str, str], str]:
+    """Resolve only explicit Spring Boot BOM imports covered by the local snapshot."""
+    pattern = re.compile(
+        r"\b(?:platform|enforcedPlatform|mavenBom)\s*\(\s*['\"]org\.springframework\.boot:spring-boot-dependencies:([^'\"]+)['\"]\s*\)"
+    )
+    versions: dict[tuple[str, str], set[str]] = {}
+    for match in pattern.finditer(build_text):
+        bom_version = re.sub(
+            r"\$\{?([A-Za-z_]\w*)\}?",
+            lambda item: constants.get(item.group(1), item.group(0)),
+            match.group(1),
+        )
+        for coordinate, managed_version in snapshots.get(bom_version, {}).items():
+            versions.setdefault(coordinate, set()).add(managed_version)
+    # Conflicting imported BOMs are ambiguous; don't guess which one wins.
+    return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
+
+
 def _make_finding(group: str, artifact: str, version: str, advisory: dict, path: str, line: int) -> dict:
     rule_id = f"sca.maven.{group}.{artifact}.{advisory['id']}"
     identity = f"{rule_id}:{path}:{line}:{version}"
@@ -248,6 +293,7 @@ def _make_finding(group: str, artifact: str, version: str, advisory: dict, path:
 def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
     project = Path(root).resolve()
     advisory_index = _load_advisories(advisories_path)
+    bom_snapshots = _load_spring_boot_boms()
     findings: dict[str, dict] = {}
     candidates = [
         path for path in project.rglob("build.gradle*")
@@ -263,6 +309,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
         locked = _load_project_lockfile(build_file.parent, project)
+        managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
         catalog_path = project / "gradle" / "libs.versions.toml"
         if not catalog_path.is_file():
             catalog_path = build_file.parent / "gradle" / "libs.versions.toml"
@@ -281,7 +328,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 if len(candidates) != 1:
                     continue
                 group, artifact, declared_version = candidates[0]
-                version = locked.get((group, artifact), declared_version)
+                version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
                 if not version or "$" in version:
                     continue
                 line = build_text.count("\n", 0, block_start + alias_match.start()) + 1
@@ -303,7 +350,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 if not parsed:
                     continue
                 group, artifact, declared_version = parsed.groups()
-                version = locked.get((group, artifact), declared_version)
+                version = locked.get((group, artifact), declared_version or managed_versions.get((group, artifact)))
                 if not version or "$" in version:
                     continue
                 coordinate_start = match.start("coordinate") if match.group("coordinate") is not None else match.start("add_coordinate")
