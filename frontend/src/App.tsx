@@ -41,7 +41,7 @@ const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? 
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
 
 const highlightCodeLine = (source: string): React.ReactNode[] => {
-  const pattern = /(\/\/.*$|#.*$|\/\*.*?\*\/|"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|import|export|from|async|await|try|catch|throw|new|public|private|protected|static|fun|val|var|package|object|when|true|false|null|None|True|False|def|self)\\b|\\b\\d+(?:\\.\\d+)?\\b)/g;
+  const pattern = /(\/\/.*$|#.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|import|export|from|async|await|try|catch|throw|new|public|private|protected|static|fun|val|var|package|object|when|true|false|null|None|True|False|def|self)\b|\b\d+(?:\.\d+)?\b)/g;
   const output: React.ReactNode[] = [];
   let cursor = 0;
   let match: RegExpExecArray | null;
@@ -49,8 +49,8 @@ const highlightCodeLine = (source: string): React.ReactNode[] => {
     if (match.index > cursor) output.push(source.slice(cursor, match.index));
     const token = match[0];
     const tone = /^(\/\/|#|\/\*)/.test(token) ? "comment"
-      : /^(["'])/.test(token) ? "string"
-      : /^\\d/.test(token) ? "number" : "keyword";
+      : /^["']/.test(token) ? "string"
+      : /^\d/.test(token) ? "number" : "keyword";
     output.push(<span className={"syntax-" + tone} key={match.index}>{token}</span>);
     cursor = match.index + token.length;
   }
