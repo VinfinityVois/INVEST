@@ -511,7 +511,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             **({"reason_code": diagnostic_code} if diagnostic_code else {}),
             **({"reason": str(output["message"])[:500]} if output.get("message") else {}),
             "duration_ms": round((perf_counter() - node_started) * 1000, 2),
-            **({"findings": output["summary"]["total"]} if "summary" in output else {}),
+            **({"findings": output.get("summary", {}).get("total", len(output.get("findings", [])))} if "summary" in output or "findings" in output else {}),
             **({"message": output["message"]} if output.get("message") else {}),
             **({
                 "explained_count": output.get("explained_count", len(output.get("explanations", []))),
