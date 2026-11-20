@@ -140,6 +140,9 @@ def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch)
     assert result["status"] == "failed"
     assert "401" in result["message"]
     assert "very-secret-key" not in result["message"]
+    assert result["analyzed_count"] == 1
+    assert result["skipped_count"] == 0
+    assert result["unexplained_count"] == 1
 
 
 def test_provider_configuration_never_returns_api_key(monkeypatch):
@@ -203,3 +206,42 @@ def test_gateway_does_not_accept_model_explanation_without_fingerprint(monkeypat
 
     assert result["explained_count"] == 0
     assert result["explanations"] == []
+
+
+
+def test_gateway_reports_max_findings_coverage_and_skipped_count(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    def fake_post(url, **kwargs):
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "first", "root_cause": "Cause",
+                "impact": "Impact", "recommendation": "Fix", "confidence": 0.8,
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    findings = [{"fingerprint": f"finding-{index}"} for index in range(4)]
+    result = explanations.explain_findings(findings, {"max_findings": 2})
+
+    assert result["status"] == "completed"
+    assert result["analyzed_count"] == 2
+    assert result["skipped_count"] == 2
+    assert result["explained_count"] == 0
+    assert result["unexplained_count"] == 2
+    assert result["coverage"] == 0.0
+
+
+def test_gateway_configuration_required_reports_not_attempted(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", None)
+    monkeypatch.setattr(settings, "llm_model", None)
+    monkeypatch.setattr(settings, "llm_api_key", None)
+
+    result = explanations.explain_findings([{"fingerprint": "one"}, {"fingerprint": "two"}])
+
+    assert result["status"] == "configuration_required"
+    assert result["analyzed_count"] == 0
+    assert result["skipped_count"] == 2
+    assert result["coverage"] == 0.0
