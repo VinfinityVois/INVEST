@@ -661,3 +661,12 @@
 .workflow-node.node-running{border-color:rgba(114,202,255,.72)!important;box-shadow:0 0 0 1px rgba(91,190,255,.12),0 10px 30px rgba(30,112,165,.13)}
 .workflow-node.node-completed .node-footer{border-top-color:rgba(86,190,147,.24)}
 @media(prefers-reduced-motion:reduce){.node-description-details>summary svg{transition:none}}
+
+/* Execution-aware graph footer and labelled data-flow links */
+.flow-foot{gap:12px;min-width:0}
+.flow-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.react-flow__edge-text{font:8px 'DM Mono';fill:#c3d8ed}
+.react-flow__edge-textbg{fill:#14263a;stroke:rgba(105,151,192,.2);stroke-width:1}
+.react-flow__edge.edge-active .react-flow__edge-text{fill:#a8e1ff}
+.react-flow__edge.edge-completed .react-flow__edge-text{fill:#8cddbb}
+@media(max-width:700px){.flow-foot{align-items:flex-start;flex-direction:column;height:auto;min-height:34px;padding:6px 0;gap:4px}.flow-foot>span{max-width:100%}}
