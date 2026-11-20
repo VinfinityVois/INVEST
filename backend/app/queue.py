@@ -144,9 +144,9 @@ def process_run(run_id: str, worker_id: str) -> None:
                 for previous in previous_runs:
                     previous_result = previous.result if isinstance(previous.result, dict) else {}
                     previous_cache = previous_result.get("cache_entries", {})
-                    if isinstance(previous_cache, dict):
-                        for key, value in previous_cache.items():
-                            cache_entries.setdefault(key, value)
+                    if isinstance(previous_cache, dict) and previous_cache:
+                        cache_entries = previous_cache
+                        break
         graph_data = {key: value for key, value in graph_snapshot.items() if key != "__execution_scope"} if isinstance(graph_snapshot, dict) else graph_snapshot
         graph = WorkflowGraph.model_validate(graph_data)
 
