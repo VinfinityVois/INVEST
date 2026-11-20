@@ -72,6 +72,37 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         node = nodes[node_id]
         parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
 
+        def report_scanner_progress(progress):
+            if on_progress is None:
+                return
+            observed = {}
+            for node_output in outputs.values():
+                for finding in node_output.get("findings", []):
+                    fingerprint = finding.get("fingerprint") or repr(sorted(finding.items()))
+                    observed.setdefault(str(fingerprint), finding)
+            current_trace = list(trace) + [{
+                "node_id": node_id,
+                "type": node.type,
+                "status": "running",
+                "duration_ms": round((perf_counter() - node_started) * 1000, 2),
+            }]
+            try:
+                on_progress({
+                    "status": "running",
+                    "completed_nodes": len(trace),
+                    "total_nodes": len(order),
+                    "current_node": node_id,
+                    "scanner_progress": progress,
+                    "total_findings": len(observed),
+                    "severity": {
+                        level: sum(1 for item in observed.values() if str(item.get("severity", "UNKNOWN")).upper() == level)
+                        for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
+                    },
+                    "trace": current_trace,
+                })
+            except Exception:
+                pass
+
         if node.type == "trigger.manual":
             output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":
@@ -104,7 +135,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_directory(artifacts[source_node])]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_directory(artifacts[source_node], on_progress=report_scanner_progress)]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sca":
             source_node = next(
@@ -113,7 +144,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_gradle_project(artifacts[source_node])]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_gradle_project(artifacts[source_node], on_progress=report_scanner_progress)]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
             source_node = next(
@@ -122,7 +153,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_kotlin_project(artifacts[source_node])]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_kotlin_project(artifacts[source_node], on_progress=report_scanner_progress)]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "findings.merge":
             merged = []
