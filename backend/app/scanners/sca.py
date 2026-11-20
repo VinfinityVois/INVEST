@@ -407,18 +407,20 @@ def _maven_resolve(value, properties):
 
 
 def _maven_profile_sections(pom_path, pom):
-    yield pom
-    active = set()
     profiles = _maven_child(pom, "profiles")
-    for profile in _maven_children(profiles, "profile"):
-        activation = _maven_child(profile, "activation")
-        if _maven_text(activation, "activeByDefault") == "true":
-            profile_id = _maven_text(profile, "id")
-            if profile_id:
-                active.add(profile_id)
     config = _read_text(pom_path.parent / ".mvn" / "maven.config") or ""
-    for match in re.finditer(r"(?:^|\s)-P(?:\s+|=)([A-Za-z0-9_,.-]+)", config):
-        active.update(match.group(1).split(","))
+    explicit = set()
+    for match in re.finditer(r"(?:^|\s)-P(?:=|\s+)?([A-Za-z0-9_,.-]+)", config):
+        explicit.update(value for value in match.group(1).split(",") if value)
+    active = set(explicit)
+    if not explicit:
+        for profile in _maven_children(profiles, "profile"):
+            activation = _maven_child(profile, "activation")
+            if _maven_text(activation, "activeByDefault") == "true":
+                profile_id = _maven_text(profile, "id")
+                if profile_id:
+                    active.add(profile_id)
+    yield pom
     for profile in _maven_children(profiles, "profile"):
         if _maven_text(profile, "id") in active:
             yield profile
