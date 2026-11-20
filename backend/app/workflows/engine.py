@@ -159,6 +159,73 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
+
+def _condition_context(parents: list[dict]) -> dict:
+    findings = []
+    for parent in parents:
+        findings.extend(item for item in parent.get("findings", []) if isinstance(item, dict))
+    severities = {}
+    for finding in findings:
+        level = str(finding.get("severity", "UNKNOWN")).upper()
+        severities[level] = severities.get(level, 0) + 1
+    return {
+        "findings": findings,
+        "finding_count": len(findings),
+        "critical_count": severities.get("CRITICAL", 0),
+        "high_count": severities.get("HIGH", 0),
+        "medium_count": severities.get("MEDIUM", 0),
+        "low_count": severities.get("LOW", 0),
+        "info_count": severities.get("INFO", 0),
+        "severity_counts": severities,
+    }
+
+
+def _condition_value(context: dict, field: str):
+    value = context
+    for part in field.split("."):
+        if isinstance(value, dict):
+            value = value.get(part)
+        else:
+            return None
+    return value
+
+
+def _evaluate_condition(config: dict, parents: list[dict]) -> tuple[bool, str | None]:
+    """Evaluate a small deterministic condition DSL over upstream findings."""
+    field = config.get("field", "finding_count")
+    operator = config.get("operator", "gt")
+    expected = config.get("value", 0)
+    if not isinstance(field, str) or not field or len(field) > 160:
+        return False, "Поле условия должно быть непустой строкой длиной до 160 символов."
+    actual = _condition_value(_condition_context(parents), field)
+    if operator == "exists":
+        return actual is not None, None
+    if operator in {"eq", "ne"}:
+        result = actual == expected
+        return (result if operator == "eq" else not result), None
+    if operator in {"contains", "not_contains"}:
+        try:
+            result = expected in actual
+        except (TypeError, ValueError):
+            return False, "Операция contains применима только к строкам, спискам и словарям."
+        return (result if operator == "contains" else not result), None
+    if operator == "regex":
+        import re
+        if not isinstance(actual, str) or not isinstance(expected, str) or len(expected) > 256:
+            return False, "Для regex нужны строковое поле и шаблон длиной до 256 символов."
+        try:
+            return re.search(expected, actual) is not None, None
+        except re.error as exc:
+            return False, "Некорректное регулярное выражение: " + str(exc)
+    if operator in {"gt", "gte", "lt", "lte"}:
+        try:
+            left, right = float(actual), float(expected)
+        except (TypeError, ValueError):
+            return False, "Числовое сравнение требует числовых значений."
+        return {"gt": left > right, "gte": left >= right, "lt": left < right, "lte": left <= right}[operator], None
+    return False, "Неподдерживаемый оператор условия: " + str(operator)
+
+
 def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
@@ -169,10 +236,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     nodes = {node.id: node for node in graph.nodes}
     outgoing = defaultdict(list)
     incoming = defaultdict(list)
+    incoming_edges = defaultdict(list)
     indegree = {node.id: 0 for node in graph.nodes}
     for edge in graph.edges:
         outgoing[edge.source].append(edge.target)
         incoming[edge.target].append(edge.source)
+        incoming_edges[edge.target].append(edge)
         indegree[edge.target] += 1
 
     queue = deque(node_id for node_id, degree in indegree.items() if degree == 0)
@@ -222,7 +291,21 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         node = nodes[node_id]
         cache_hit = False
         cache_bypass_reason = None
-        parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
+        active_parent_ids = []
+        for edge in incoming_edges[node_id]:
+            parent_output = outputs.get(edge.source)
+            if parent_output is None or parent_output.get("status") == "skipped":
+                continue
+            selected_branch = parent_output.get("branch")
+            if selected_branch and edge.source_handle and edge.source_handle != selected_branch:
+                continue
+            active_parent_ids.append(edge.source)
+        parents = [outputs[parent] for parent in dict.fromkeys(active_parent_ids) if parent in outputs]
+        if incoming_edges[node_id] and not parents:
+            output = {"status": "skipped", "message": "Ветка workflow не выбрана предыдущим условным блоком."}
+            outputs[node_id] = output
+            trace.append({"node_id": node_id, "type": node.type, "status": "skipped", "diagnostic_level": "info", "duration_ms": 0})
+            continue
 
         def report_scanner_progress(progress):
             if on_progress is None:
@@ -393,7 +476,19 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             except ValueError as exc:
                 output = {"status": "failed", "decision": "INVALID_POLICY", "message": str(exc), "findings": []}
         elif node.type == "logic.if":
-            output = {"status": "completed", "branch": "false"}
+            matched, error = _evaluate_condition(node.config, parents)
+            if error:
+                output = {"status": "failed", "reason_code": "INVALID_CONDITION", "message": error, "branch": "false"}
+            else:
+                output = {
+                    "status": "completed",
+                    "branch": "true" if matched else "false",
+                    "condition": {
+                        "field": node.config.get("field", "finding_count"),
+                        "operator": node.config.get("operator", "gt"),
+                        "matched": matched,
+                    },
+                }
         elif node.type == "ai.explain":
             merged = []
             for parent in parents:
