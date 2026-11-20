@@ -152,6 +152,16 @@ def _safe_project_name(filename: str | None) -> str:
 
 
 
+
+def _project_path_is_sensitive(relative: PurePosixPath) -> bool:
+    blocked = ("secret", "credential", "password", "token", "private", ".env")
+    return any(token in part.lower() for part in relative.parts for token in blocked)
+
+
+def _project_content_is_safe(content: str) -> bool:
+    return all(_redact(line) == line for line in content.splitlines())
+
+
 def _project_file_snapshot(root: Path) -> dict[str, dict[str, int | str]]:
     """Build a bounded, content-addressed manifest for safe project files."""
     manifest: dict[str, dict[str, int | str]] = {}
@@ -407,9 +417,9 @@ def preview_project_file(
         except (OSError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=404, detail="Файл недоступен для текстового просмотра (лимит 1 MiB).") from exc
         lines = content.splitlines()
-        safe_name = not any(token in part.lower() for part in relative.parts for token in ("secret", "credential", "password", "token", "private", ".env"))
+        safe_name = not _project_path_is_sensitive(relative)
         editable_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
-        editable = safe_name and relative.suffix.lower() in editable_suffixes and all(_redact(line) == line for line in lines)
+        editable = safe_name and relative.suffix.lower() in editable_suffixes and _project_content_is_safe(content)
         first = min(start_line, max(1, len(lines)))
         last = min(len(lines), first + 299)
         return {
@@ -430,9 +440,9 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
         raise HTTPException(status_code=400, detail="Invalid project file path")
     if relative.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}:
         raise HTTPException(status_code=415, detail="Этот тип файла нельзя редактировать в браузере.")
-    if any(token in part.lower() for part in relative.parts for token in ("secret", "credential", "password", "token", "private", ".env")):
+    if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами доступны только для чтения.")
-    if any(_redact(line) != line for line in payload.content.splitlines()):
+    if not _project_content_is_safe(payload.content):
         raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
     with SessionLocal() as session:
         project = session.get(Project, project_id)
@@ -452,7 +462,7 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
             if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
                 raise OSError("File is unavailable or too large")
             original = resolved.read_text(encoding="utf-8")
-            if any(_redact(line) != line for line in original.splitlines()):
+            if not _project_content_is_safe(original):
                 raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
             temp_name = None
             try:
@@ -493,7 +503,7 @@ def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_l
                 if scanned >= 3000 or len(results) >= 100:
                     break
                 item = Path(current) / filename
-                if item.is_symlink() or item.suffix.lower() not in text_suffixes or any(token in part.lower() for part in item.relative_to(root).parts for token in ("secret", "credential", "password", "token", "private", ".env")):
+                if item.is_symlink() or item.suffix.lower() not in text_suffixes or _project_path_is_sensitive(PurePosixPath(item.relative_to(root).as_posix())):
                     continue
                 try:
                     if item.stat().st_size > 512_000:
