@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from typing import Any
+from time import perf_counter
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -166,6 +167,23 @@ def _source_evidence(finding: dict[str, Any]) -> list[dict[str, Any]]:
     return evidence
 
 
+
+def _provider_error_code(exc: Exception) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "PROVIDER_TIMEOUT"
+    if isinstance(exc, httpx.ConnectError):
+        return "PROVIDER_CONNECTION_FAILED"
+    if isinstance(exc, httpx.NetworkError):
+        return "PROVIDER_NETWORK_ERROR"
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"PROVIDER_HTTP_{exc.response.status_code}"
+    if isinstance(exc, (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError)):
+        return "PROVIDER_INVALID_RESPONSE"
+    if isinstance(exc, ExplanationGatewayError):
+        return "PROVIDER_CONFIGURATION_INVALID"
+    return "PROVIDER_REQUEST_FAILED"
+
+
 def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
     provider = provider_configuration()
     if not provider["configured"]:
@@ -228,23 +246,30 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             {"role": "user", "content": user_prompt},
         ],
     }
+    request_started = perf_counter()
+    request_attempts = 0
+    http_status = None
     try:
         endpoint = _endpoint(settings.llm_base_url or "")
         headers = {
             "Authorization": f"Bearer {(settings.llm_api_key or '').strip()}",
             "Content-Type": "application/json",
         }
+        request_attempts += 1
         response = httpx.post(
             endpoint, headers=headers, json=request_payload,
             timeout=httpx.Timeout(25.0, connect=5.0),
         )
         # Some OpenAI-compatible servers do not implement response_format.
+        http_status = response.status_code
         if response.status_code in {400, 422}:
             fallback_payload = {key: value for key, value in request_payload.items() if key != "response_format"}
+            request_attempts += 1
             response = httpx.post(
                 endpoint, headers=headers, json=fallback_payload,
                 timeout=httpx.Timeout(25.0, connect=5.0),
             )
+            http_status = response.status_code
         response.raise_for_status()
         raw_items = _parse_response(response)
     except Exception as exc:
@@ -260,6 +285,12 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "explained_count": 0,
             "unexplained_count": len(selected),
             "coverage": 0.0,
+            "provider": "openai-compatible",
+            "model": settings.llm_model,
+            "provider_request_ms": round((perf_counter() - request_started) * 1000, 2),
+            "provider_attempts": request_attempts,
+            "provider_http_status": http_status or (exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None),
+            "provider_error_code": _provider_error_code(exc),
         }
 
     allowed_fingerprints = {str(item.get("fingerprint")) for item in selected if item.get("fingerprint")}
@@ -310,6 +341,10 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "coverage": round(len(normalized) / len(selected), 3),
         "provider": "openai-compatible",
         "model": settings.llm_model,
+        "provider_request_ms": round((perf_counter() - request_started) * 1000, 2),
+        "provider_attempts": request_attempts,
+        "provider_http_status": http_status,
+        "provider_error_code": None,
         "message": (
             None if len(normalized) == len(selected)
             else f"Модель дала проверенные объяснения для {len(normalized)} из {len(selected)} находок. Остальные оставлены без AI-вывода."
