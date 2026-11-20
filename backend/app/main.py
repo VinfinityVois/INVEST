@@ -2,6 +2,8 @@ import json
 import time
 import shutil
 import re
+import os
+import hashlib
 from pathlib import Path, PurePosixPath
 from datetime import datetime, timezone
 from typing import Literal
@@ -148,6 +150,54 @@ def _safe_project_name(filename: str | None) -> str:
     return (cleaned or "Новый проект")[:200]
 
 
+
+def _project_file_snapshot(root: Path) -> dict[str, dict[str, int | str]]:
+    """Build a bounded, content-addressed manifest for safe project files."""
+    manifest: dict[str, dict[str, int | str]] = {}
+    for current, directories, filenames in os.walk(root, followlinks=False):
+        directories[:] = sorted(
+            name for name in directories
+            if name != ".git" and not (Path(current) / name).is_symlink()
+        )
+        for filename in sorted(filenames):
+            item = Path(current) / filename
+            if item.is_symlink():
+                continue
+            try:
+                relative = item.relative_to(root).as_posix()
+                stat = item.stat()
+                if not item.is_file():
+                    continue
+                digest = hashlib.sha256()
+                with item.open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                manifest[relative] = {"size": stat.st_size, "sha256": digest.hexdigest()}
+            except OSError:
+                continue
+    return manifest
+
+
+def _project_snapshot_diff(before: dict, after: dict) -> dict:
+    old_paths, new_paths = set(before), set(after)
+    added = sorted(new_paths - old_paths)
+    removed = sorted(old_paths - new_paths)
+    changed = sorted(
+        path for path in old_paths & new_paths
+        if before[path] != after[path]
+    )
+    return {
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "changed_count": len(changed),
+        "compared_files": len(old_paths | new_paths),
+        "added_files": added[:50],
+        "removed_files": removed[:50],
+        "changed_files": changed[:50],
+        "sample_truncated": any(len(items) > 50 for items in (added, removed, changed)),
+    }
+
+
 @app.get("/api/projects")
 def list_projects():
     with SessionLocal() as session:
@@ -210,7 +260,10 @@ def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
         staging = root.joinpath(*PurePosixPath(staging_path).parts)
         backup = root / "projects" / f".previous-{project_id}-{uuid4().hex}"
         try:
+            before_snapshot = _project_file_snapshot(destination)
             result = extract_project_archive(file.file, root, staging_path)
+            after_snapshot = _project_file_snapshot(staging)
+            changes = _project_snapshot_diff(before_snapshot, after_snapshot)
             destination.rename(backup)
             try:
                 staging.rename(destination)
@@ -222,7 +275,8 @@ def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
             project.expanded_bytes = result["expanded_bytes"]
             project.original_filename = Path(file.filename).name[:255]
             session.add(AuditLog(action="project.updated", entity="project", entity_id=str(project_id), details={
-                "file_count": result["files"], "expanded_bytes": result["expanded_bytes"]
+                "file_count": result["files"], "expanded_bytes": result["expanded_bytes"],
+                "changes": changes,
             }))
             session.commit()
             session.refresh(project)
@@ -268,6 +322,29 @@ def delete_project(project_id: UUID):
         session.delete(project)
         session.commit()
     return None
+
+
+
+@app.get("/api/projects/{project_id}/history")
+def project_history(project_id: UUID):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        rows = session.scalars(
+            select(AuditLog)
+            .where(AuditLog.entity == "project", AuditLog.entity_id == str(project_id))
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(30)
+        ).all()
+        return [
+            {
+                "action": row.action,
+                "created_at": row.created_at,
+                "details": row.details or {},
+            }
+            for row in rows
+        ]
 
 
 @app.get("/api/projects/{project_id}/files")
