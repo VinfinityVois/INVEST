@@ -720,3 +720,8 @@
 
 .trace-meta .trace-provider-error{color:#efa19a;font-weight:700;letter-spacing:.2px}
 .trace-meta small{white-space:nowrap}
+
+.run-report-links{display:flex;align-items:center;gap:5px}
+.run-report-links a{padding:5px 7px;border:1px solid rgba(103,137,168,.22);border-radius:4px;color:#91b7d4;font:7px 'DM Mono';text-decoration:none;transition:border-color .18s ease,background .18s ease}
+.run-report-links a:hover{border-color:rgba(106,174,220,.58);background:rgba(35,68,94,.48);color:#d2e5f5}
+@media(max-width:620px){.run-report-links{grid-column:1/-1;justify-content:flex-end}}
