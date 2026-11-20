@@ -442,6 +442,8 @@ export default function App() {
   const openProjectFile = async (file: ProjectFile, startLine = 1) => {
     if (!activeProject) return;
     setProjectFilesLoading(true);
+    setEditorFind("");
+    setEditorReplace("");
     try {
       const suffix = file.path.split(".").pop()?.toLowerCase() || "";
       const imageTypes = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
@@ -944,7 +946,7 @@ export default function App() {
               <div className="project-editor-findbar">
                 <div><Search size={12}/><input value={editorFind} onChange={event => setEditorFind(event.target.value)} placeholder="Найти в файле…" onKeyDown={event => { if (event.key === "Enter") findNextInEditor(); }}/><button onClick={findNextInEditor} disabled={!editorFind}>Найти далее</button></div>
                 <div><ArrowLeftRight size={12}/><input value={editorReplace} onChange={event => setEditorReplace(event.target.value)} placeholder="Заменить на…"/><button onClick={replaceAllInEditor} disabled={!editorFind}>Заменить всё</button></div>
-                <small>{editorFind ? `${Math.max(0, projectDraft.split(editorFind).length - 1)} совп.` : "Поиск и замена · Ctrl+F в поле поиска"}</small>
+                <small>{editorFind ? `${Math.max(0, projectDraft.split(editorFind).length - 1)} совп.` : "Поиск и замена в текущем файле"}</small>
               </div>
               <div className="project-editor-surface">
                 <div className="project-editor-gutter" ref={editorGutterRef}>{projectDraft.split("\n").map((_, index) => <span key={index}>{index + 1}</span>)}</div>
