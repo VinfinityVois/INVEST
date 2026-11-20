@@ -737,3 +737,15 @@
 .actions .run-selected{display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border:1px solid rgba(104,174,208,.28);border-radius:5px;background:rgba(36,76,98,.22);color:#9bc8df;font-size:10px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .18s ease}
 .actions .run-selected:hover:not(:disabled){border-color:rgba(104,190,226,.7);background:rgba(40,92,120,.34);color:#d7effb}
 .actions .run-selected:disabled{opacity:.35;cursor:not-allowed}
+
+.workflow-version-card{margin:0 0 18px;padding:14px 16px;border:1px solid rgba(100,133,161,.16);border-radius:7px;background:rgba(12,22,32,.48)}
+.workflow-version-list{display:grid;gap:6px;margin-top:10px}
+.workflow-version-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid rgba(100,133,161,.12);border-radius:5px;background:rgba(20,33,46,.42)}
+.workflow-version-row>div{display:grid;grid-template-columns:auto 1fr;gap:2px 9px;min-width:0;align-items:center}
+.workflow-version-row>div>b{grid-row:span 2;color:#8fc2dd;font:10px 'DM Mono'}
+.workflow-version-row>div>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c7d7e3;font-size:11px}
+.workflow-version-row small{grid-column:2;color:#748b9d;font-size:9px}
+.workflow-version-row button,.workflow-version-row em{flex:none;border:1px solid rgba(105,165,200,.24);border-radius:4px;padding:6px 8px;background:transparent;color:#9fc5dc;font:8px 'DM Mono';font-style:normal}
+.workflow-version-row button{cursor:pointer}
+.workflow-version-row button:hover{border-color:rgba(105,190,225,.65);background:rgba(40,85,110,.25)}
+.workflow-version-row em{color:#7cae91;border-color:rgba(110,175,135,.2)}
