@@ -1231,6 +1231,95 @@ def _compare_run_snapshots(before: dict, after: dict) -> dict:
     }
 
 
+
+def _compare_source_manifests(before_result: dict, after_result: dict) -> dict:
+    """Compare immutable per-run file manifests; missing/incomplete data stays unknown."""
+    old_sources = before_result.get("source_manifests", {}) if isinstance(before_result.get("source_manifests"), dict) else {}
+    new_sources = after_result.get("source_manifests", {}) if isinstance(after_result.get("source_manifests"), dict) else {}
+    source_ids = sorted(set(old_sources) | set(new_sources))
+    per_source = []
+    added_all, removed_all, modified_all = set(), set(), set()
+    comparable = 0
+    incomplete = False
+    for node_id in source_ids:
+        old = old_sources.get(node_id)
+        new = new_sources.get(node_id)
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            per_source.append({"node_id": node_id, "status": "source_added" if old is None else "source_removed",
+                               "added_count": 0, "removed_count": 0, "modified_count": 0,
+                               "added_files": [], "removed_files": [], "modified_files": []})
+            incomplete = True
+            continue
+        if old.get("complete") is not True or new.get("complete") is not True:
+            per_source.append({"node_id": node_id, "status": "manifest_incomplete",
+                               "reason": new.get("reason") or old.get("reason"),
+                               "added_count": None, "removed_count": None, "modified_count": None,
+                               "added_files": [], "removed_files": [], "modified_files": []})
+            incomplete = True
+            continue
+        old_files = old.get("files") if isinstance(old.get("files"), dict) else {}
+        new_files = new.get("files") if isinstance(new.get("files"), dict) else {}
+        old_paths, new_paths = set(old_files), set(new_files)
+        added = new_paths - old_paths
+        removed = old_paths - new_paths
+        modified = {path for path in old_paths & new_paths if old_files[path] != new_files[path]}
+        added_all.update(added)
+        removed_all.update(removed)
+        modified_all.update(modified)
+        comparable += 1
+        per_source.append({
+            "node_id": node_id, "status": "compared",
+            "added_count": len(added), "removed_count": len(removed), "modified_count": len(modified),
+            "compared_files": len(old_paths | new_paths),
+            "added_files": sorted(added)[:50], "removed_files": sorted(removed)[:50],
+            "modified_files": sorted(modified)[:50],
+            "sample_truncated": any(len(items) > 50 for items in (added, removed, modified)),
+        })
+    available = comparable > 0
+    status = "unavailable" if not source_ids or not available else ("partial" if incomplete else "complete")
+    return {
+        "status": status, "comparable_sources": comparable,
+        "added_count": len(added_all) if available else None,
+        "removed_count": len(removed_all) if available else None,
+        "modified_count": len(modified_all) if available else None,
+        "added_files": sorted(added_all)[:100] if available else [],
+        "removed_files": sorted(removed_all)[:100] if available else [],
+        "modified_files": sorted(modified_all)[:100] if available else [],
+        "sample_truncated": any(len(items) > 100 for items in (added_all, removed_all, modified_all)),
+        "sources": per_source,
+        "correlation_note": "Совпадение пути находки с изменённым файлом показывает корреляцию, а не доказывает причинную связь.",
+    }
+
+
+def _annotate_finding_source_relation(findings: list, source_comparison: dict) -> list:
+    if not isinstance(findings, list):
+        return []
+    if source_comparison.get("status") not in {"complete", "partial"}:
+        return [{**item, "source_relation": "unknown"} for item in findings if isinstance(item, dict)]
+    added = set(source_comparison.get("added_files", []))
+    removed = set(source_comparison.get("removed_files", []))
+    modified = set(source_comparison.get("modified_files", []))
+    fully_compared = source_comparison.get("status") == "complete"
+    output = []
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        relation = "unknown"
+        if isinstance(path, str) and path:
+            if path in added:
+                relation = "added_file"
+            elif path in modified:
+                relation = "modified_file"
+            elif path in removed:
+                relation = "removed_file"
+            elif fully_compared:
+                relation = "unchanged_file"
+        output.append({**item, "source_relation": relation})
+    return output
+
+
+
 @app.get("/api/workflows/{workflow_id}/runs/compare")
 def compare_workflow_runs(
     workflow_id: UUID,
@@ -1257,9 +1346,13 @@ def compare_workflow_runs(
         before_result = before.result if isinstance(before.result, dict) else {}
         after_result = after.result if isinstance(after.result, dict) else {}
         scanner_diff = _compare_scanner_runs(before_result, after_result)
+        source_comparison = _compare_source_manifests(before_result, after_result)
+        for kind in ("new", "not_observed_before", "persisting", "disappeared", "not_observed"):
+            diff["findings"][kind] = _annotate_finding_source_relation(diff["findings"][kind], source_comparison)
         return {
             "workflow_id": str(workflow_id),
             **scanner_diff,
+            "source_comparison": source_comparison,
             "from_run": before_report["run"],
             "to_run": after_report["run"],
             **diff,
