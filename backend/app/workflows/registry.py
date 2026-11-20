@@ -20,7 +20,7 @@ def add(t, title, category, description, ins=(), outs=(), config=None):
 
 add("trigger.manual","Manual trigger","Trigger","Запуск вручную.",outs=[("event","event")])
 add("source.git","Git repository","Source","Источник из allowlist Git.",[("event","event")],[("source","source")],{"type":"object","properties":{"url":{"type":"string"},"ref":{"type":"string"}}})
-add("source.upload","Upload archive","Source","Загруженный архив.",[("event","event")],[("source","source")])
+add("source.upload","Workspace source","Source","Каталог проекта внутри WORKSPACE_ROOT.",[("event","event")],[("source","source")],{"type":"object","required":["path"],"properties":{"path":{"type":"string","description":"Относительный путь внутри WORKSPACE_ROOT"}}})
 add("scan.secrets","Secrets scanner","Security","Собственный поиск секретов.",[("source","source")],[("findings","findings")])
 add("scan.sca","Dependency scanner","Security","Проверка Gradle зависимостей по advisories.",[("source","source")],[("findings","findings")])
 add("scan.sast","Kotlin SAST","Security","Статический анализ Kotlin/Spring.",[("source","source")],[("findings","findings")])
