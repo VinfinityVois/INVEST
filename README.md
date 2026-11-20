@@ -47,6 +47,7 @@ Project API:
 - `PUT /api/projects/{id}/archive` — обновить содержимое проекта из ZIP;
 - `PATCH /api/projects/{id}` — переименовать;
 - `DELETE /api/projects/{id}` — удалить запись и файлы;
+- `GET /api/projects/{id}/download` — скачать безопасный ZIP проекта (до 1 GiB; без `.git`, symlink и потенциально секретных файлов/значений; большие текстовые файлы свыше 1 MiB исключаются, если их нельзя безопасно проверить);
 - `GET /api/projects/{id}/files` — дерево файлов;
 - `GET /api/projects/{id}/file?path=...` — безопасный просмотр текстового файла;
 - `PUT /api/projects/{id}/file?path=...` — безопасное сохранение поддерживаемого текстового файла (JSON `{ "content": "..." }`);
@@ -143,6 +144,10 @@ required: the API receives ZIP files, while the worker scans them later.
 The Compose configuration pins `WORKSPACE_ROOT=/workspace` so the two
 containers cannot accidentally use separate temporary directories.
 
+
+### Project ZIP export
+
+В окне Project Workspace доступна кнопка «Скачать ZIP». Экспорт формируется на сервере во временный файл и удаляется после отправки. В архив не попадают `.git`, символьные ссылки, файлы из каталогов/путей с маркерами секретов, текстовые файлы с обнаруженными учётными данными и текстовые файлы больше 1 MiB (их содержимое не экспортируется без полной проверки). Отдельный предел готового ZIP — 1 GiB; отдельные файлы больше 512 MiB пропускаются. Файлы проекта не исполняются.
 
 ### Safe project asset preview
 
