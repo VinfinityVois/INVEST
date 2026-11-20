@@ -1783,13 +1783,32 @@ def run_workflow(graph: WorkflowGraph):
 @app.get("/api/workflows/{workflow_id}/finding-states")
 def list_finding_states(workflow_id: UUID):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _lock_workflow_for_version_write(session, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(
             select(FindingState)
             .where(FindingState.workflow_id == workflow_id)
             .order_by(FindingState.fingerprint)
         ).all()
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            if row.state == "accepted_risk" and row.expires_at is not None and row.expires_at <= now:
+                row.state = "open"
+                row.reason = "Срок принятого риска истёк."
+                row.expires_at = None
+                session.add(AuditLog(
+                    action="finding.state.expired",
+                    entity="finding_state",
+                    entity_id=f"{workflow_id}:{row.fingerprint}",
+                    details={
+                        "workflow_id": str(workflow_id),
+                        "fingerprint": row.fingerprint,
+                        "previous_state": "accepted_risk",
+                        "new_state": "open",
+                        "reason": row.reason,
+                    },
+                ))
+        session.commit()
         return [
             {
                 "fingerprint": row.fingerprint,
