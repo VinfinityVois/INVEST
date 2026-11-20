@@ -26,6 +26,10 @@ type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_pos
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number> };
+type SecurityTrend = {
+  points: Array<{ run_id: string; status: string; queued_at?: string | null; finished_at?: string | null; duration_ms?: number | null; total_findings: number; severity: Record<string, number>; security_gate?: { decision?: "PASS" | "WARN" | "BLOCK"; blocked?: boolean } | null }>;
+  summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
+};
 type RunComparison = {
   from_run: { id: string; status: string; finished_at?: string | null };
   to_run: { id: string; status: string; finished_at?: string | null };
@@ -177,6 +181,8 @@ export default function App() {
   const [runCompareFrom, setRunCompareFrom] = useState("");
   const [runCompareTo, setRunCompareTo] = useState("");
   const [runComparison, setRunComparison] = useState<RunComparison | null>(null);
+  const [securityTrend, setSecurityTrend] = useState<SecurityTrend | null>(null);
+  const [securityTrendLoading, setSecurityTrendLoading] = useState(false);
   const [runCompareLoading, setRunCompareLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -236,6 +242,18 @@ export default function App() {
       .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
   }, []);
+
+  useEffect(() => {
+    if (!workflowId) { setSecurityTrend(null); return; }
+    let active = true;
+    setSecurityTrendLoading(true);
+    fetch("/api/workflows/" + workflowId + "/security-trend?limit=30")
+      .then(response => { if (!response.ok) throw new Error("Не удалось загрузить историю безопасности"); return response.json(); })
+      .then((data: SecurityTrend) => { if (active) setSecurityTrend(data); })
+      .catch(() => { if (active) setSecurityTrend(null); })
+      .finally(() => { if (active) setSecurityTrendLoading(false); });
+    return () => { active = false; };
+  }, [workflowId, workflowRuns[0]?.id]);
 
   useEffect(() => {
     if (!workflowId) { setTelemetry(null); return; }
@@ -1214,6 +1232,36 @@ export default function App() {
             </label>
             <button disabled={!runCompareFrom || !runCompareTo || runCompareFrom === runCompareTo || runCompareLoading} onClick={() => void compareWorkflowRuns()}>{runCompareLoading ? "СРАВНЕНИЕ…" : "СРАВНИТЬ ЗАПУСКИ"}</button>
           </div>}
+          {securityTrend && securityTrend.points.length > 0 && <section className="security-trend-panel">
+            <div className="security-trend-head">
+              <div><span className="section-caption">RISK HISTORY · LAST {securityTrend.points.length} RUNS</span><b>Динамика безопасности</b></div>
+              <div className="security-trend-latest"><strong className={securityTrend.summary.delta == null || securityTrend.summary.delta === 0 ? "delta-neutral" : securityTrend.summary.delta < 0 ? "delta-good" : "delta-bad"}>{securityTrend.summary.delta == null ? "—" : (securityTrend.summary.delta > 0 ? "+" : "") + securityTrend.summary.delta}</strong><small>изменение находок</small></div>
+            </div>
+            <div className="security-trend-chart" role="img" aria-label="График количества находок по последним запускам">
+              <svg viewBox="0 0 640 184" preserveAspectRatio="none">
+                {[0,1,2,3].map(tick => <g key={tick}><line x1="34" x2="628" y1={18+tick*43} y2={18+tick*43}/><text x="26" y={22+tick*43}>{Math.round(Math.max(...securityTrend.points.map(point => point.total_findings),1)*(3-tick)/3)}</text></g>)}
+                {securityTrend.points.length > 1 && <polyline points={securityTrend.points.map((point,index) => {
+                  const max=Math.max(...securityTrend.points.map(item=>item.total_findings),1);
+                  return (40+index*(580/Math.max(securityTrend.points.length-1,1)))+","+(150-(point.total_findings/max)*125);
+                }).join(" ")} />}
+                {securityTrend.points.map((point,index) => {
+                  const max=Math.max(...securityTrend.points.map(item=>item.total_findings),1);
+                  const x=40+index*(580/Math.max(securityTrend.points.length-1,1));
+                  const y=150-(point.total_findings/max)*125;
+                  return <g key={point.run_id} className="security-trend-point" onClick={() => { const run=workflowRuns.find(item=>item.id===point.run_id); if(run) void openHistoricalRun(run); }}>
+                    <circle cx={x} cy={y} r="4.5"/><title>{formatDate(point.finished_at || point.queued_at || undefined)} · {point.total_findings} находок · Gate {point.security_gate?.decision || "—"}</title>
+                  </g>;
+                })}
+              </svg>
+            </div>
+            <div className="security-trend-legend"><span><i className="trend-dot"/></span><span>Количество находок</span><span className="trend-gate-pass">PASS</span><span className="trend-gate-warn">WARN</span><span className="trend-gate-block">BLOCK</span><small>Нажми на точку, чтобы открыть запуск</small></div>
+            <div className="security-trend-breakdown">
+              {(["CRITICAL","HIGH","MEDIUM","LOW","INFO"] as const).map(level => <div key={level}><span>{level}</span><b>{securityTrend.points[securityTrend.points.length-1].severity[level] || 0}</b></div>)}
+              <div><span>ПОСЛЕДНИЙ GATE</span><b>{securityTrend.points[securityTrend.points.length-1].security_gate?.decision || "—"}</b></div>
+              <div><span>ДЛИТЕЛЬНОСТЬ</span><b>{formatDuration(securityTrend.points[securityTrend.points.length-1].duration_ms)}</b></div>
+            </div>
+          </section>}
+          {!securityTrend && securityTrendLoading && <p className="run-history-empty">Загружаем динамику безопасности…</p>}
           {runComparison && <div className="run-diff-panel">
             <div className="run-diff-heading"><b>ИЗМЕНЕНИЯ МЕЖДУ ЗАПУСКАМИ</b><small>{formatDate(runComparison.from_run.finished_at || "")} → {formatDate(runComparison.to_run.finished_at || "")}</small></div>
             <div className="run-diff-stats">
