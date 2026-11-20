@@ -444,6 +444,13 @@ export default function App() {
             <p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>
             {finding.why_it_matters && <div className="finding-explanation"><b>ПОЧЕМУ ЭТО ПРОБЛЕМА</b><p>{finding.why_it_matters}</p></div>}
             {finding.recommendation && <div className="finding-remediation"><b>КАК ИСПРАВИТЬ</b><p>{finding.recommendation}</p></div>}
+            {finding.ai_explanation && <div className="finding-ai-explanation">
+              <div><Bot size={13} /><b>AI EXPLANATION</b><span>{Math.round(finding.ai_explanation.confidence * 100)}% confidence</span></div>
+              <p><b>Причина:</b> {finding.ai_explanation.root_cause}</p>
+              <p><b>Влияние:</b> {finding.ai_explanation.impact}</p>
+              <p><b>Рекомендация:</b> {finding.ai_explanation.recommendation}</p>
+              {finding.ai_explanation.evidence_limits && <small>Ограничения анализа: {finding.ai_explanation.evidence_limits}</small>}
+            </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
             <button className="source-preview-toggle" onClick={() => setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding)}>
