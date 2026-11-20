@@ -129,7 +129,7 @@ def _catalog_alias_key(value: str) -> str:
     return re.sub(r"[-_.]+", ".", value).strip(".")
 
 
-def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]>:
+def _load_version_catalog(path: Path) -> dict[str, object]:
     """Read Gradle's TOML version catalog without evaluating Gradle expressions."""
     text = _read_text(path)
     if text is None:
@@ -145,7 +145,7 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None] |
     if not isinstance(versions, dict) or not isinstance(libraries, dict) or not isinstance(bundles, dict):
         return {}
 
-    result: dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]] = {}
+    result: dict[str, object] = {}
     for alias, entry in libraries.items():
         if not isinstance(alias, str) or not isinstance(entry, dict):
             continue
@@ -207,7 +207,7 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None] |
     return result
 
 
-def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dict[str, tuple[str, str, str | None] | list[tuple[str, str, str | None]]]]:
+def _load_version_catalogs(project_root: Path, build_dir: Path) -> dict[str, dict[str, object]]:
     """Load conventional and statically declared custom Gradle version catalogs."""
     roots = {project_root / "gradle", build_dir / "gradle"}
     catalog_files: set[Path] = set()
