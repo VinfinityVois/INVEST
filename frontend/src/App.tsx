@@ -25,9 +25,9 @@ type Telemetry = {
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
-  node_results?: Record<string, { status?: string; message?: string; findings?: number; explained_count?: number; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
+  node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[] };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number> };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -83,6 +83,9 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
       <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
+      {data.executionSeverity && Object.entries(data.executionSeverity).some(([, count]) => count > 0) && <div className="node-severity-breakdown">
+        {Object.entries(data.executionSeverity).filter(([, count]) => count > 0).sort(([a], [b]) => ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].indexOf(a) - ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].indexOf(b)).map(([severity, count]) => <span className={"node-severity severity-" + severity.toLowerCase()} key={severity}><b>{count}</b>{severity}</span>)}
+      </div>}
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
@@ -209,7 +212,7 @@ export default function App() {
       } else if (status === "idle" && telemetry.status === "running") {
         detail = "Ожидает завершения предыдущих связанных блоков.";
       }
-      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes } };
+      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail, executionNotes: notes, executionSeverity: output?.severity } };
     }));
     setEdges(currentEdges => currentEdges.map(edge => {
       const sourceStep = trace.get(edge.source);
