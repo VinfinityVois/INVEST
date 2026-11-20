@@ -1,7 +1,10 @@
+import json
+import time
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -190,6 +193,101 @@ def list_workflow_runs(workflow_id: UUID):
             }
             for run in rows
         ]
+
+
+def _run_telemetry(session, run: WorkflowRun):
+    findings = session.scalars(select(Finding).where(Finding.run_id == run.id)).all()
+    severity = {}
+    for finding in findings:
+        key = (finding.severity or "UNKNOWN").upper()
+        severity[key] = severity.get(key, 0) + 1
+
+    result = run.result if isinstance(run.result, dict) else {}
+    trace = result.get("trace", []) if isinstance(result, dict) else []
+    progress = result if run.status == "running" and "completed_nodes" in result else None
+    now = datetime.now(timezone.utc)
+    duration_ms = None
+    if run.started_at:
+        ended = run.finished_at or now
+        duration_ms = max(0, round((ended - run.started_at).total_seconds() * 1000))
+
+    scanner_types = {"scan.secrets", "scan.sca", "scan.sast"}
+    scanners = [
+        {
+            "node_id": item.get("node_id"),
+            "type": item.get("type"),
+            "status": item.get("status"),
+            "findings": item.get("findings", 0),
+            "duration_ms": item.get("duration_ms"),
+        }
+        for item in trace
+        if item.get("type") in scanner_types
+    ]
+    return {
+        "run_id": str(run.id),
+        "workflow_id": str(run.workflow_id) if run.workflow_id else None,
+        "status": run.status,
+        "source": run.source,
+        "queued_at": run.queued_at,
+        "started_at": run.started_at,
+        "finished_at": run.finished_at,
+        "duration_ms": duration_ms,
+        "total_findings": len(findings),
+        "severity": severity,
+        "scanners": scanners,
+        "completed_nodes": progress.get("completed_nodes", len(trace)) if progress else len(trace),
+        "total_nodes": progress.get("total_nodes", len(run.graph_snapshot.get("nodes", []))) if progress else len(run.graph_snapshot.get("nodes", [])),
+        "current_node": progress.get("current_node") if progress else None,
+    }
+
+
+@app.get("/api/workflows/{workflow_id}/telemetry/latest")
+def latest_workflow_telemetry(workflow_id: UUID):
+    with SessionLocal() as session:
+        if session.get(Workflow, workflow_id) is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        run = session.scalar(
+            select(WorkflowRun)
+            .where(WorkflowRun.workflow_id == workflow_id)
+            .order_by(WorkflowRun.queued_at.desc())
+            .limit(1)
+        )
+        if run is None:
+            return {"status": "never_run", "total_findings": 0, "severity": {}, "scanners": []}
+        return _run_telemetry(session, run)
+
+
+@app.get("/api/runs/{run_id}/telemetry")
+def get_run_telemetry(run_id: UUID):
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return _run_telemetry(session, run)
+
+
+@app.get("/api/runs/{run_id}/events")
+def stream_run_events(run_id: UUID):
+    def event_stream():
+        deadline = time.monotonic() + 1800
+        while time.monotonic() < deadline:
+            with SessionLocal() as session:
+                run = session.get(WorkflowRun, run_id)
+                if run is None:
+                    payload = {"status": "not_found", "run_id": str(run_id)}
+                    yield "event: error\\ndata: " + json.dumps(payload) + "\\n\\n"
+                    return
+                payload = _run_telemetry(session, run)
+            yield "data: " + json.dumps(payload, default=str) + "\\n\\n"
+            if payload["status"] in {"completed", "partial", "failed"}:
+                return
+            time.sleep(1)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/runs/{run_id}")
