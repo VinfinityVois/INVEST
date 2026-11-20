@@ -139,6 +139,7 @@ export default function App() {
   const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
   const [findingQuery, setFindingQuery] = useState("");
   const [findingSeverity, setFindingSeverity] = useState("Все");
+  const [findingLifecycleFilter, setFindingLifecycleFilter] = useState("Все");
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
@@ -740,14 +741,28 @@ export default function App() {
   };
   const categories = ["Все", ...Array.from(new Set(manifests.map(item => item.category)))];
   const filtered = manifests.filter(item => (category === "Все" || item.category === category) && (item.title + " " + item.description + " " + item.type).toLowerCase().includes(search.toLowerCase()));
+  const findingLifecycleCounts = useMemo(() => findings.reduce((counts, item) => {
+    const state = item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open";
+    counts[state] = (counts[state] || 0) + 1;
+    return counts;
+  }, {} as Record<string, number>), [findings, findingStates]);
   const findingGroups = useMemo(() => {
     const query = findingQuery.trim().toLowerCase();
-    const visible = findings.filter(item => (findingSeverity === "Все" || item.severity.toUpperCase() === findingSeverity)
-      && (!query || [item.rule_id, item.path, item.message, item.why_it_matters].filter(Boolean).join(" ").toLowerCase().includes(query)));
+    const visible = findings.filter(item => {
+      const lifecycle = item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open";
+      const lifecycleMatch = findingLifecycleFilter === "Все"
+        || (findingLifecycleFilter === "Открытые" && lifecycle === "open")
+        || (findingLifecycleFilter === "Принятый риск" && lifecycle === "accepted_risk")
+        || (findingLifecycleFilter === "Исправленные" && lifecycle === "fixed")
+        || (findingLifecycleFilter === "Ложные срабатывания" && lifecycle === "false_positive");
+      return lifecycleMatch
+        && (findingSeverity === "Все" || item.severity.toUpperCase() === findingSeverity)
+        && (!query || [item.rule_id, item.path, item.message, item.why_it_matters, item.recommendation].filter(Boolean).join(" ").toLowerCase().includes(query));
+    });
     const groups = new Map<string, Finding[]>();
     for (const item of visible) { const path = item.path || "Файл не указан"; groups.set(path, [...(groups.get(path) || []), item]); }
     return Array.from(groups, ([path, items]) => ({ path, items: items.sort((a,b) => (a.line || 0) - (b.line || 0)) })).sort((a,b) => a.path.localeCompare(b.path));
-  }, [findings, findingQuery, findingSeverity]);
+  }, [findings, findingQuery, findingSeverity, findingLifecycleFilter, findingStates]);
   const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
   const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
   const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) { setSelectedFinding(next); setSourceWindowStart(Math.max(1, (next.line || 1) - 40)); } };
@@ -952,7 +967,14 @@ export default function App() {
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
           <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
+          <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
           <span>{orderedVisibleFindings.length} / {findings.length}</span>
+          <div className="finding-lifecycle-summary" aria-label="Распределение находок по статусам">
+            <span className="is-open">{findingLifecycleCounts.open || 0} открыто</span>
+            <span className="is-risk">{findingLifecycleCounts.accepted_risk || 0} риск</span>
+            <span className="is-fixed">{findingLifecycleCounts.fixed || 0} исправлено</span>
+            <span className="is-false">{findingLifecycleCounts.false_positive || 0} FP</span>
+          </div>
         </div>}
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> : findingGroups.length === 0 ? <p className="empty-findings">По текущим фильтрам ничего не найдено.</p> :
           findingGroups.map(group => <section className="finding-file-group" key={group.path}>
