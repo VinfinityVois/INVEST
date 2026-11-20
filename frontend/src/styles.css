@@ -293,3 +293,6 @@
 .node-ai-note{display:flex;flex-direction:column;gap:3px;margin-top:5px;padding:6px 7px;border-left:2px solid #b783dc;border-radius:3px;background:rgba(112,65,151,.12);color:#c9b1dd;font-size:8px;line-height:1.4}
 .node-ai-note b{color:#d8b4f3;font-size:7px;letter-spacing:.08em}
 .node-ai-note span{overflow-wrap:anywhere}
+
+.ai-explanation-pending{border-style:dashed;border-color:rgba(177,121,225,.22);background:rgba(65,48,82,.08)}
+.ai-explanation-pending>div span{color:#b99bce}
