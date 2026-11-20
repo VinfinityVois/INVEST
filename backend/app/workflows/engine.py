@@ -205,6 +205,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "status": output.get("status", "completed"),
             "duration_ms": round((perf_counter() - node_started) * 1000, 2),
             **({"findings": output["summary"]["total"]} if "summary" in output else {}),
+            **({"message": output["message"]} if output.get("message") else {}),
+            **({"explained_count": output.get("explained_count", len(output.get("explanations", [])))} if node.type == "ai.explain" else {}),
         })
         if on_progress is not None:
             try:
@@ -225,6 +227,15 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     "total_findings": len(observed_findings),
                     "severity": severity_counts,
                     "trace": list(trace),
+                    "node_results": {
+                        key: {
+                            "status": value.get("status"),
+                            **({"message": value["message"]} if value.get("message") else {}),
+                            **({"findings": value["summary"]["total"]} if isinstance(value.get("summary"), dict) else {}),
+                            **({"explained_count": value.get("explained_count", len(value.get("explanations", [])))} if key in nodes and nodes[key].type == "ai.explain" else {}),
+                            **({"total_findings": len(value.get("findings", []))} if key in nodes and nodes[key].type == "ai.explain" else {}),
+                        } for key, value in outputs.items()
+                    },
                 })
             except Exception:
                 # Progress reporting must never break a security scan.
