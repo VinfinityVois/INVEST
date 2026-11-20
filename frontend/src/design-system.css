@@ -596,3 +596,37 @@
 .shell .edge-endpoint-readonly b { overflow:hidden;color:var(--text);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }
 .shell .edge-endpoint-readonly>i { color:var(--accent-text);font-style:normal; }
 .shell .edge-endpoint-readonly p { grid-column:1/-1;margin:0;color:var(--muted);font-size:9px;line-height:1.4; }
+
+/* Compact findings register */
+.shell .finding-file-group { margin:10px 0 14px;border:1px solid var(--border);border-radius:4px;overflow:hidden; }
+.shell .finding-file-heading { display:flex;align-items:center;gap:7px;padding:8px 9px;background:var(--gray-50); }
+.shell[data-theme="dark"] .finding-file-heading { background:var(--gray-800); }
+.shell .finding-file-heading b { min-width:0;overflow:hidden;color:var(--text);font:10px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-file-heading span { margin-left:auto;color:var(--muted);font:9px "IBM Plex Mono";white-space:nowrap; }
+.shell .finding-table-item { margin:0;padding:0;border:0;border-top:1px solid var(--border);border-left:0;border-radius:0;background:var(--surface); }
+.shell .finding-table-row {
+  display:grid;grid-template-columns:70px minmax(90px,.8fr) minmax(90px,1fr) minmax(110px,1.4fr) 14px;
+  align-items:center;gap:9px;width:100%;min-height:42px;padding:7px 9px;
+  border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer;
+}
+.shell .finding-table-row:hover,.shell .finding-table-row.is-selected { background:var(--gray-50); }
+.shell[data-theme="dark"] .finding-table-row:hover,.shell[data-theme="dark"] .finding-table-row.is-selected { background:var(--gray-800); }
+.shell .finding-table-row>b { min-width:0;overflow:hidden;color:var(--text);font:10px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-table-row>small { min-width:0;overflow:hidden;color:var(--muted);font:9px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-table-message { min-width:0;overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-table-row>svg { color:var(--muted);transition:transform .14s ease; }
+.shell .finding-table-row.is-selected>svg { transform:rotate(180deg);color:var(--accent-text); }
+.shell .finding-table-severity { display:inline-flex;justify-content:center;padding:3px 5px;border:1px solid var(--border);border-radius:3px;color:var(--text-secondary);font:8px "IBM Plex Mono"; }
+.shell .finding-table-severity.severity-critical,.shell .finding-table-severity.severity-high { border-color:color-mix(in srgb,var(--danger) 45%,var(--border));color:var(--danger); }
+.shell .finding-table-severity.severity-medium { border-color:color-mix(in srgb,var(--warning) 45%,var(--border));color:var(--warning); }
+.shell .finding-detail { padding:12px;border-top:1px solid var(--border);background:var(--surface); }
+.shell .finding-detail-heading { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px; }
+.shell .finding-detail-heading>b { color:var(--text);font-size:11px; }
+.shell .finding-detail-heading>span { color:var(--muted);font:9px "IBM Plex Mono"; }
+.shell .finding-detail>.finding-location { display:block; }
+@media(max-width:760px) {
+  .shell .finding-table-row { grid-template-columns:64px minmax(0,1fr) 14px;gap:6px; }
+  .shell .finding-table-row>b { grid-column:2; }
+  .shell .finding-table-row>small,.shell .finding-table-message { grid-column:2; }
+  .shell .finding-table-row>svg { grid-column:3;grid-row:1/4; }
+}
