@@ -9,12 +9,14 @@ import socket
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
+from croniter import croniter
 
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, WorkflowRun
+from app.models import AuditLog, Finding, FindingState, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
@@ -256,11 +258,62 @@ def process_run(run_id: str, worker_id: str) -> None:
     logger.info("Run %s finished with status=%s findings=%d", run_id, final_status, len(findings))
 
 
+
+def enqueue_due_schedules(limit: int = 10) -> int:
+    """Atomically enqueue due cron workflows and advance each schedule."""
+    now = datetime.now(timezone.utc)
+    enqueued = 0
+    with SessionLocal() as session:
+        due = session.scalars(
+            select(WorkflowSchedule)
+            .where(
+                WorkflowSchedule.enabled.is_(True),
+                WorkflowSchedule.next_run_at.is_not(None),
+                WorkflowSchedule.next_run_at <= now,
+            )
+            .order_by(WorkflowSchedule.next_run_at.asc())
+            .with_for_update(skip_locked=True)
+            .limit(max(1, min(limit, 50)))
+        ).all()
+        for schedule in due:
+            try:
+                zone = ZoneInfo(schedule.timezone)
+                local_now = now.astimezone(zone)
+                next_local = croniter(schedule.cron_expression, local_now).get_next(datetime)
+                schedule.next_run_at = next_local.astimezone(timezone.utc)
+            except (ValueError, KeyError):
+                schedule.enabled = False
+                schedule.next_run_at = None
+                logger.exception("Disabling invalid schedule %s", schedule.id)
+                continue
+
+            version = session.scalar(
+                select(WorkflowVersion)
+                .where(WorkflowVersion.workflow_id == schedule.workflow_id)
+                .order_by(WorkflowVersion.version.desc())
+                .limit(1)
+            )
+            if version is None:
+                schedule.enabled = False
+                schedule.next_run_at = None
+                continue
+            session.add(WorkflowRun(
+                workflow_id=schedule.workflow_id,
+                status="queued",
+                source="schedule",
+                graph_snapshot=version.graph,
+            ))
+            schedule.last_run_at = now
+            enqueued += 1
+        session.commit()
+    return enqueued
+
 def run_worker(poll_interval: float = 2.0) -> None:
     worker_id = make_worker_id()
     logger.info("Worker %s started", worker_id)
     while True:
         try:
+            enqueue_due_schedules()
             run_id = claim_next_run(worker_id)
             if run_id is None:
                 time.sleep(poll_interval)
