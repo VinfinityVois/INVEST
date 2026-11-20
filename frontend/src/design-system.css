@@ -575,3 +575,13 @@
 @media(prefers-reduced-motion:reduce) {
   .shell .workflow-drawer-toggle>svg:last-child { transition:none; }
 }
+
+.shell .node-port-list { display:flex;flex-wrap:wrap;gap:4px;margin:7px 0 2px; }
+.shell .node-port-list>span {
+  display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 5px;
+  border:1px solid var(--border);border-radius:3px;background:var(--gray-50);
+  color:var(--text-secondary);font:9px "IBM Plex Mono";
+}
+.shell[data-theme="dark"] .node-port-list>span { background:var(--gray-800); }
+.shell .node-port-list>span b { color:var(--accent-text);font-size:8px;font-weight:600; }
+.shell .node-port-list>span i { color:var(--muted);font-size:8px;font-style:normal; }
