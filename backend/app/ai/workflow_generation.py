@@ -60,6 +60,21 @@ def _validate_config(node_type: str, config: object) -> dict:
                 or (node_type == "source.upload" and key == "path")):
             value = ""
         cleaned[key] = value
+    required = schema.get("required", []) if isinstance(schema, dict) else []
+    for key in required if isinstance(required, list) else []:
+        if key in cleaned or key not in properties:
+            continue
+        spec = properties[key] if isinstance(properties[key], dict) else {}
+        if "default" in spec:
+            cleaned[key] = spec["default"]
+        elif spec.get("type") == "string":
+            cleaned[key] = ""
+        elif spec.get("type") == "array":
+            cleaned[key] = []
+        elif spec.get("type") == "boolean":
+            cleaned[key] = False
+        elif spec.get("type") in {"integer", "number"}:
+            cleaned[key] = 0
     return cleaned
 
 
@@ -131,7 +146,10 @@ def normalize_generated_graph(raw: object, prompt: str) -> WorkflowGraph:
                 changed = True
     if len(reachable) != len(nodes):
         raise WorkflowGenerationError("Все блоки должны быть соединены с триггером.")
-    graph = WorkflowGraph.model_validate({"name": name, "nodes": nodes, "edges": edges})
+    try:
+        graph = WorkflowGraph.model_validate({"name": name, "nodes": nodes, "edges": edges})
+    except Exception as exc:
+        raise WorkflowGenerationError("Модель вернула граф в неподдерживаемом формате.") from exc
     validation = validate_graph(graph, registry)
     if not validation.valid:
         details = "; ".join(issue.message for issue in validation.issues if issue.severity == "error")
