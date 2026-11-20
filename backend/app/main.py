@@ -1177,7 +1177,7 @@ def compare_workflow_runs(
                 "after_findings_truncated": after_report["findings_truncated"],
                 "absence_confirmed": diff["findings"]["absence_confirmed"],
                 "note": None if diff["findings"]["absence_confirmed"] else
-                    "Запуск назначения не завершён полностью: отсутствие прежних находок не считается подтверждённым исправлением.",
+                    "Полнота сравнения ограничена: запуск назначения неполный или один из отчётов усечён. Отсутствие находок не считается подтверждённым исправлением.",
             },
         }
 
