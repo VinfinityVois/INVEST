@@ -3,6 +3,7 @@ from pathlib import Path
 from time import perf_counter
 
 from app.config import settings
+from app.ai.explanations import explain_findings
 from app.policies.security_gate import evaluate_security_gate
 from app.scanners.secrets import scan_directory
 from app.scanners.presentation import enrich_finding
@@ -184,7 +185,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         elif node.type == "logic.if":
             output = {"status": "completed", "branch": "false"}
         elif node.type == "ai.explain":
-            output = {"status": "llm_profile_required"}
+            merged = []
+            for parent in parents:
+                merged.extend(parent.get("findings", []))
+            unique = {}
+            for finding in merged:
+                unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
+            try:
+                output = explain_findings(list(unique.values()), node.config)
+            except ValueError as exc:
+                output = {"status": "failed", "message": str(exc), "findings": list(unique.values()), "explanations": []}
         else:
             output = {"status": "adapter_required"}
 
