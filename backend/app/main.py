@@ -48,6 +48,7 @@ class ProjectRename(BaseModel):
 class SelectedRunRequest(BaseModel):
     node_ids: list[str] = Field(min_length=1, max_length=100)
     force_full_scan: bool = False
+    force_node_ids: list[str] = Field(default_factory=list, max_length=100)
 
     @field_validator("node_ids")
     @classmethod
@@ -888,7 +889,10 @@ def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
         if unknown:
             raise HTTPException(status_code=422, detail={"message": "Выбраны отсутствующие блоки.", "unknown_node_ids": unknown})
         snapshot = graph.model_dump(mode="json")
-        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids, "force_full_scan": request.force_full_scan}
+        known_force_ids = set(request.force_node_ids)
+        if not known_force_ids.issubset(known_ids):
+            raise HTTPException(status_code=422, detail={"message": "Для сброса кэша выбраны неизвестные блоки.", "unknown_node_ids": sorted(known_force_ids - known_ids)})
+        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids, "force_full_scan": request.force_full_scan, "force_node_ids": request.force_node_ids}
         run = WorkflowRun(
             workflow_id=workflow_id,
             status="queued",
