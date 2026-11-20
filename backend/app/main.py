@@ -1060,7 +1060,8 @@ def _compare_run_snapshots(before: dict, after: dict) -> dict:
         if isinstance(item, dict) and item.get("fingerprint")
     }
     old_ids, new_ids = set(old_findings), set(new_findings)
-    complete_after = after.get("run", {}).get("status") == "completed"
+    complete_before = before.get("run", {}).get("status") == "completed" and not before.get("findings_truncated", False)
+    complete_after = after.get("run", {}).get("status") == "completed" and not after.get("findings_truncated", False)
 
     def finding_summary(item: dict) -> dict:
         return {
@@ -1071,7 +1072,9 @@ def _compare_run_snapshots(before: dict, after: dict) -> dict:
             "line": item.get("line"),
         }
 
-    added = [finding_summary(new_findings[key]) for key in sorted(new_ids - old_ids)]
+    candidate_added = [finding_summary(new_findings[key]) for key in sorted(new_ids - old_ids)]
+    added = candidate_added if complete_before else []
+    not_observed_before = [] if complete_before else candidate_added
     persisted = []
     for key in sorted(old_ids & new_ids):
         old, new = old_findings[key], new_findings[key]
@@ -1116,12 +1119,14 @@ def _compare_run_snapshots(before: dict, after: dict) -> dict:
     return {
         "findings": {
             "new": added,
+            "not_observed_before": not_observed_before,
             "persisting": persisted,
             "disappeared": disappeared,
             "not_observed": not_observed,
             "absence_confirmed": complete_after,
             "summary": {
                 "new": len(added),
+                "not_observed_before": len(not_observed_before),
                 "persisting": len(persisted),
                 "disappeared": len(disappeared),
                 "not_observed": len(not_observed),
@@ -1130,6 +1135,7 @@ def _compare_run_snapshots(before: dict, after: dict) -> dict:
         "nodes": node_changes,
         "summary": {
             "new_findings": len(added),
+            "not_observed_before_findings": len(not_observed_before),
             "persisting_findings": len(persisted),
             "disappeared_findings": len(disappeared),
             "not_observed_findings": len(not_observed),
