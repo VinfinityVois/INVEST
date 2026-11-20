@@ -24,8 +24,9 @@ type Telemetry = {
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
+  node_results?: Record<string, { status?: string; message?: string; findings?: number; explained_count?: number; total_findings?: number }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" | "configuration_required" };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
@@ -61,13 +62,20 @@ const seedEdges: Edge[] = [
 
 function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
   const meta = categoryMeta[data.category] || { label: data.category, tone: "slate" };
-  return <div className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
+  const statusLabel = data.executionStatus === "running" ? "ВЫПОЛНЯЕТСЯ"
+    : data.executionStatus === "completed" ? "ЗАВЕРШЁН"
+    : data.executionStatus === "failed" ? "ОШИБКА"
+    : data.executionStatus === "blocked" ? "ЗАБЛОКИРОВАН"
+    : data.executionStatus === "configuration_required" ? "НУЖНА НАСТРОЙКА"
+    : data.executionStatus === "queued" ? "В ОЧЕРЕДИ" : "ГОТОВ К ЗАПУСКУ";
+  return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
     <Handle type="target" position={Position.Left} />
-    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" ? "В РАБОТЕ" : data.executionStatus === "completed" ? "ГОТОВО" : data.executionStatus === "failed" ? "ОШИБКА" : data.executionStatus === "blocked" ? "БЛОК" : data.executionStatus === "configuration_required" ? "НУЖНА НАСТРОЙКА" : "ОЖИДАНИЕ"}</span></div>
+    <div className="node-topline"><span>{meta.label}</span><span className="node-state">{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <p className="node-description">{data.description}</p>
-    <div className="node-footer"><span>INPUT / OUTPUT</span><span className="node-port-label">●</span></div>
+    {data.executionDetail && <div className="node-execution-detail">{data.executionDetail}</div>}
+    <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
     <Handle type="source" position={Position.Right} />
   </div>;
 }
@@ -88,6 +96,8 @@ export default function App() {
   const [lastRunId, setLastRunId] = useState<string | null>(() => window.localStorage.getItem("invest.lastRunId"));
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitRef, setGitRef] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Все");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("source");
@@ -139,20 +149,40 @@ export default function App() {
 
   useEffect(() => {
     if (!telemetry) return;
-    const completed = new Map((telemetry.scanners || []).map(scanner => [scanner.node_id || "", scanner.status]));
-    const traceResponse = telemetry as Telemetry & { trace?: Array<{ node_id: string; status: string }> };
-    for (const item of traceResponse.trace || []) completed.set(item.node_id, item.status);
-    setNodes(current => current.map(node => {
-      const traceStatus = completed.get(node.id);
-      const status = telemetry.current_node === node.id ? "running"
-        : traceStatus === "failed" ? "failed"
-        : traceStatus === "blocked" ? "blocked"
-        : traceStatus === "configuration_required" ? "configuration_required"
-        : traceStatus === "completed" || traceStatus === "ready" ? "completed"
-        : telemetry.status === "running" ? "idle" : node.data.executionStatus || "idle";
-      return { ...node, data: { ...node.data, executionStatus: status } };
+    const trace = new Map((telemetry.trace || []).map(item => [item.node_id, item]));
+    const current = telemetry.current_node || null;
+    const nodeResults = telemetry.node_results || {};
+    setNodes(currentNodes => currentNodes.map(node => {
+      const step = trace.get(node.id);
+      const output = nodeResults[node.id];
+      const status = current === node.id ? "running"
+        : step?.status === "failed" ? "failed"
+        : step?.status === "blocked" ? "blocked"
+        : step?.status === "configuration_required" ? "configuration_required"
+        : step?.status === "completed" || step?.status === "ready" ? "completed"
+        : telemetry.status === "queued" ? "queued" : "idle";
+      let detail = output?.message || "";
+      if (node.data.nodeType === "ai.explain" && output) {
+        detail = output.status === "configuration_required" ? "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
+          : output.status === "failed" ? "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки."
+          : output.status === "completed" ? `Объяснено находок: ${output.explained_count ?? 0} из ${output.total_findings ?? 0}.` : detail;
+      } else if (node.data.nodeType === "source.git" && output?.status === "ready") {
+        detail = "Репозиторий клонирован в изолированную рабочую область.";
+      } else if (node.data.nodeType === "source.upload" && output?.status === "ready") {
+        detail = "Каталог проекта доступен сканерам.";
+      } else if (status === "idle" && telemetry.status === "running") {
+        detail = "Ожидает завершения предыдущих связанных блоков.";
+      }
+      return { ...node, data: { ...node.data, executionStatus: status, executionDetail: detail } };
     }));
-  }, [telemetry, setNodes]);
+    setEdges(currentEdges => currentEdges.map(edge => {
+      const sourceStep = trace.get(edge.source);
+      const targetStep = trace.get(edge.target);
+      const active = current === edge.target && (sourceStep?.status === "completed" || sourceStep?.status === "ready");
+      const complete = !!sourceStep && !!targetStep && ["completed", "ready"].includes(sourceStep.status) && ["completed", "ready"].includes(targetStep.status);
+      return { ...edge, animated: active, className: active ? "edge-active" : complete ? "edge-completed" : "edge-idle" };
+    }));
+  }, [telemetry, setNodes, setEdges]);
 
   const selectedNode = nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = edges.find(edge => edge.id === selectedEdgeId) || null;
@@ -163,7 +193,7 @@ export default function App() {
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), animated: true, style: { stroke: "#70b7f4", strokeWidth: 2 } }, current));
+    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current));
     setSelectedNodeId(null); setSelectedEdgeId(null);
   }, [setEdges]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
@@ -225,9 +255,9 @@ export default function App() {
       const form = new FormData(); form.append("file", file);
       const response = await fetch("/api/sources/upload", { method: "POST", body: form });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Не удалось загрузить архив");
-      const sourceNode = nodes.find(node => node.data.nodeType === "source.upload");
-      if (sourceNode) updateNode(sourceNode.id, { config: { ...sourceNode.data.config, path: data.path } });
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
+      const sourceNode = nodes.find(node => node.data.category === "Source");
+      if (sourceNode) updateNode(sourceNode.id, { nodeType: "source.upload", label: "Workspace source", description: "Сканирует безопасно распакованный ZIP-каталог.", config: { path: data.path }, executionStatus: "idle", executionDetail: "" });
       setResult("Архив принят · " + data.files + " файлов · " + Math.round(data.expanded_bytes / 1024) + " KiB распаковано. Источник обновлён.");
     } catch (error) { setResult("Ошибка загрузки ZIP: " + String(error)); }
     finally { setUploading(false); }
@@ -358,6 +388,16 @@ export default function App() {
           <div className="section-caption">ИСТОЧНИК ПРОЕКТА</div>
           <label className="archive-upload"><UploadCloud size={15} /><span>{uploading ? "Загрузка и проверка…" : "Загрузить ZIP проекта"}</span><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadArchive(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
           <small className="upload-hint">До 50 MiB · архив проверяется · файлы проекта не исполняются</small>
+          <div className="source-divider"><span>ИЛИ КЛОНИРОВАТЬ ЧЕРЕЗ GIT</span></div>
+          <label className="source-field">HTTPS-ссылка репозитория<input value={gitUrl} onChange={event => setGitUrl(event.target.value)} placeholder="https://github.com/owner/repository.git" disabled={busy || uploading}/></label>
+          <label className="source-field">Ветка или тег<input value={gitRef} onChange={event => setGitRef(event.target.value)} placeholder="main (необязательно)" disabled={busy || uploading}/></label>
+          <button className="git-source-button" disabled={busy || uploading || !gitUrl.trim()} onClick={() => {
+            const sourceNode = nodes.find(node => node.data.category === "Source");
+            if (!sourceNode) { setResult("В графе отсутствует блок-источник."); return; }
+            updateNode(sourceNode.id, { nodeType: "source.git", label: "Git repository", description: "Клонирует разрешённый HTTPS-репозиторий в изолированную рабочую область.", config: { url: gitUrl.trim(), ...(gitRef.trim() ? { ref: gitRef.trim() } : {}) }, executionStatus: "idle", executionDetail: "" });
+            setResult("Git-источник настроен. Добавьте точный URL в ALLOWED_TARGETS корневого .env, затем нажмите «Запустить».");
+          }}><GitBranch size={13}/> Использовать Git-источник</button>
+          <small className="upload-hint">Только HTTPS и точное совпадение с ALLOWED_TARGETS в корневом .env. Клонирование выполняется worker при запуске.</small>
         </div>
         <div className="section-caption library-caption">КОМПОНЕНТЫ API</div>
         {filtered.map(manifest => <article className="library-item" key={manifest.type}>
