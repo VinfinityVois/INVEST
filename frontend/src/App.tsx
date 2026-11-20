@@ -23,6 +23,7 @@ type Telemetry = {
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
+  scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
 };
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" };
 type FlowNode = Node<NodeData>;
@@ -418,6 +419,11 @@ export default function App() {
             <div className="severity-strip">{["CRITICAL","HIGH","MEDIUM","LOW","INFO"].filter(level => (telemetry.severity?.[level] || 0) > 0).map(level => <span key={level} className={"severity-" + level.toLowerCase()}>{level} <b>{telemetry.severity[level]}</b></span>)}</div>
             {telemetry.scanners?.length > 0 && <div className="scanner-telemetry">{telemetry.scanners.map(scanner => <div key={scanner.node_id || scanner.type}><span>{scanner.type.replace("scan.", "").toUpperCase()}</span><small>{scanner.status}</small><b>{scanner.findings} · {formatDuration(scanner.duration_ms)}</b></div>)}</div>}
             {telemetry.current_node && <div className="telemetry-current"><span className="live-pulse" /> Сейчас выполняется: <b>{telemetry.current_node}</b></div>}
+            {telemetry.scanner_progress && <div className="scanner-file-progress">
+              <div><span>АНАЛИЗ ФАЙЛОВ</span><b>{telemetry.scanner_progress.files_scanned} / {telemetry.scanner_progress.total_files}</b></div>
+              <div className="scanner-file-track"><i style={{ width: telemetry.scanner_progress.total_files ? Math.min(100, telemetry.scanner_progress.files_scanned / telemetry.scanner_progress.total_files * 100) + "%" : "0%" }} /></div>
+              <small>Сейчас: {telemetry.scanner_progress.current_file}</small>
+            </div>}
             {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
               <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
