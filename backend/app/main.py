@@ -131,7 +131,7 @@ def _project_payload(project: Project) -> dict:
 
 def _safe_project_name(filename: str | None) -> str:
     stem = Path(filename or "Новый проект").stem
-    cleaned = re.sub(r"[^\\w .()\\-]+", " ", stem, flags=re.UNICODE).strip(" .-_")
+    cleaned = re.sub(r"[^\w .()-]+", " ", stem, flags=re.UNICODE).strip(" .-_")
     return (cleaned or "Новый проект")[:200]
 
 
