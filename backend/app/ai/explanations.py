@@ -156,6 +156,11 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "message": provider["endpoint_error"] or "Проверьте LLM_BASE_URL.",
             "findings": findings,
             "explanations": [],
+            "analyzed_count": 0,
+            "skipped_count": len(findings),
+            "explained_count": 0,
+            "unexplained_count": 0,
+            "coverage": 0.0,
         }
 
     options = config or {}
