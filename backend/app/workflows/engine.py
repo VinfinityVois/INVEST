@@ -4,6 +4,7 @@ from pathlib import Path
 from app.config import settings
 from app.scanners.secrets import scan_directory
 from app.scanners.sca import scan_gradle_project
+from app.scanners.sast import scan_kotlin_project
 from app.sources.git import GitSourceError, clone_allowed_repository
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
@@ -111,7 +112,14 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry):
                 findings = scan_gradle_project(artifacts[source_node])
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
-            output = {"status": "scanner_pending", "findings": []}
+            source_node = next(
+                (parent for parent in incoming[node_id] if parent in artifacts), None
+            )
+            if source_node is None:
+                output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
+            else:
+                findings = scan_kotlin_project(artifacts[source_node])
+                output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "findings.merge":
             merged = []
             for parent in parents:
