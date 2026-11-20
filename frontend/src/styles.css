@@ -635,3 +635,14 @@
 .run-history-row>strong{color:#c2d3e3;font:8px 'DM Mono';white-space:nowrap}
 .run-history-empty{padding:9px;color:#7189a1;font:8px 'DM Mono'}
 @media(max-width:560px){.run-comparison{grid-template-columns:1fr}.run-comparison-total{display:grid;grid-template-columns:1fr auto;align-items:center}.run-comparison-total>strong{grid-column:2;grid-row:1/3}.run-comparison-levels{grid-template-columns:repeat(3,minmax(0,1fr))}.run-history-row{grid-template-columns:1fr auto;gap:6px}.run-history-row>small{grid-column:1}.run-history-row>strong{grid-column:1}.run-history-row>button{grid-column:2;grid-row:1/4}}
+
+
+/* Provenance-bound evidence inside AI finding explanations */
+.ai-source-evidence{display:grid;gap:4px;margin:9px 0 7px;padding:8px;border:1px solid rgba(103,151,190,.2);border-radius:5px;background:rgba(5,13,22,.58)}
+.ai-source-evidence> b{margin-bottom:3px;color:#83a8c8;font:7px 'DM Mono';letter-spacing:.45px}
+.ai-source-evidence>div{display:grid;grid-template-columns:34px minmax(0,1fr);gap:8px;align-items:start;padding:4px 5px;border-left:2px solid rgba(110,147,180,.24);background:rgba(20,34,49,.36)}
+.ai-source-evidence>div.is-finding-line{border-left-color:#d6a45e;background:rgba(112,77,35,.12)}
+.ai-source-evidence>div>span{color:#718ba5;font:8px 'DM Mono';text-align:right}
+.ai-source-evidence code{overflow-wrap:anywhere;white-space:pre-wrap;color:#b8c9d9;font:8px/1.55 'DM Mono'}
+.ai-no-evidence{display:block;margin:7px 0;color:#d2ad76;font:8px/1.5 'DM Mono'}
+.ai-confidence-note{display:block;margin-top:6px;color:#7f94a8;font:7px/1.5 'DM Mono'}
