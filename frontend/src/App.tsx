@@ -1131,10 +1131,15 @@ export default function App() {
             <label className="field-label">Язык объяснений<select value={String(selectedNode.data.config.language || "ru")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, language: event.target.value } })}><option value="ru">Русский</option><option value="en">English</option></select></label>
             <label className="field-label">Максимум находок<input type="number" min={1} max={25} value={Number(selectedNode.data.config.max_findings ?? 20)} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, max_findings: Math.max(1, Math.min(25, Number(event.target.value) || 1)) } })}/></label>
             <p className="edit-hint">AI не меняет severity, не создаёт новые уязвимости и не влияет на Security Gate. Ветка AI независима от проверки политики.</p>
+          </> : selectedNode.data.nodeType === "notify.webhook" ? <>
+            <div className="ai-node-guide"><div><Zap size={15}/><b>WEBHOOK · ДОСТАВКА УВЕДОМЛЕНИЯ</b></div><p>Отправляет JSON-сводку после AI explanation. В уведомление не включаются исходный код, code context и masked values.</p></div>
+            <label className="field-label">HTTPS URL webhook.site<input value={String(selectedNode.data.config.url || "")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, url: event.target.value } })} placeholder="https://webhook.site/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false}/></label>
+            <p className="edit-hint">Разрешённый домен задаётся через NOTIFY_WEBHOOK_ALLOWED_HOSTS в корневом .env. Только HTTPS:443, без redirects.</p>
+            {telemetry?.node_results?.[selectedNode.id]?.message && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ РЕЗУЛЬТАТ: {String(telemetry.node_results[selectedNode.id].status || "unknown").toUpperCase()}</b><p>{telemetry.node_results[selectedNode.id].message}</p></div>}
           </> : <>
             <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
           </>}
-          {selectedNode.data.nodeType !== "ai.explain" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
+          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
