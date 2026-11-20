@@ -81,6 +81,8 @@ def test_clone_supports_pinned_commit_sha_with_detached_checkout(tmp_path, monke
         if "clone" in args:
             destination = Path(args[-1])
             (destination / ".git").mkdir(parents=True)
+        if "rev-parse" in args:
+            return SimpleNamespace(returncode=0, stdout=commit + "\\n", stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("app.sources.git.subprocess.run", fake_run)
@@ -93,7 +95,7 @@ def test_clone_supports_pinned_commit_sha_with_detached_checkout(tmp_path, monke
     )
 
     assert result["ref"] == commit
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert "--branch" not in calls[0][0]
     assert calls[1][0][-3:] == ["origin", commit] or calls[1][0][-2:] == ["origin", commit]
     assert calls[2][0][-3:] == ["checkout", "--detach", "FETCH_HEAD"]
