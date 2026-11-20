@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.config import settings
+from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.db import SessionLocal
 from app.models import Finding, Workflow, WorkflowRun, WorkflowVersion
 from app.workflows.registry import registry
@@ -36,6 +38,23 @@ def database_health():
         return {"status": "ok", "service": "postgres"}
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
+
+@app.post("/api/sources/upload", status_code=201)
+def upload_source(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
+    try:
+        result = extract_project_archive(file.file, settings.workspace_root)
+        return {
+            **result,
+            "source": "workspace-upload",
+            "message": "Архив безопасно распакован. Команды проекта не запускались.",
+        }
+    except ArchiveValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Не удалось сохранить архив в рабочую директорию.") from exc
 
 
 @app.get("/api/node-types")
