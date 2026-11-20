@@ -5,7 +5,8 @@ import {Activity,AlertTriangle,Bot,Check,CirclePlay,GitBranch,Layers3,Plus,Shiel
 type Manifest={type:string;title:string;category:string;description:string};
 const seedNodes:Node[]=[
 {id:"trigger",position:{x:80,y:170},data:{label:"Manual trigger"},style:{border:"1px solid #3b82f6",background:"#111a2a",color:"#dbeafe",borderRadius:9,padding:12,width:170}},
-{id:"source",position:{x:270,y:170},data:{label:"Git repository"},style:{border:"1px solid #64748b",background:"#18202c",color:"#dbe4f0",borderRadius:9,padding:12,width:170}},\n{id:"secrets",position:{x:470,y:170},data:{label:"Secrets scanner"},style:{border:"1px solid #8b5cf6",background:"#1b1530",color:"#ede9fe",borderRadius:9,padding:12,width:170}},
+{id:"source",position:{x:270,y:170},data:{label:"Git repository"},style:{border:"1px solid #64748b",background:"#18202c",color:"#dbe4f0",borderRadius:9,padding:12,width:170}},
+{id:"secrets",position:{x:470,y:170},data:{label:"Secrets scanner"},style:{border:"1px solid #8b5cf6",background:"#1b1530",color:"#ede9fe",borderRadius:9,padding:12,width:170}},
 {id:"merge",position:{x:760,y:170},data:{label:"Merge findings"},style:{border:"1px solid #0d9488",background:"#102522",color:"#ccfbf1",borderRadius:9,padding:12,width:170}}];
 const seedEdges:Edge[]=[{id:"e1",source:"trigger",target:"source",animated:true},{id:"e2",source:"source",target:"secrets",animated:true},{id:"e3",source:"secrets",target:"merge",animated:true}];
 const typeById=(id:string)=>id==="trigger"?"trigger.manual":id==="source"?"source.git":id==="secrets"?"scan.secrets":id==="merge"?"findings.merge":id.replace(/-\d+$/,"");
