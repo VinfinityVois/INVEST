@@ -473,11 +473,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             findings = list(unique.values())
             field = str(node.config.get("field", "severity"))
             operator = str(node.config.get("operator", "equals"))
-            expected = str(node.config.get("value", ""))[:256]
+            expected = str(node.config.get("value", "")).strip()[:256]
             allowed_fields = {"severity", "rule_id", "path", "category", "message", "cve", "cwe", "count"}
             allowed_operators = {"equals", "not_equals", "contains", "not_contains", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}
+            numeric_operators = {"greater_than", "greater_or_equal", "less_than", "less_or_equal"}
             if field not in allowed_fields or operator not in allowed_operators:
-                output = {"status": "failed", "message": "Некорректное поле или оператор сравнения.", "findings": findings}
+                output = {"status": "failed", "message": "Некорректное поле или оператор сравнения.", "findings": findings, "matched_findings": [], "unmatched_findings": findings}
+            elif not expected:
+                output = {"status": "configuration_required", "message": "Укажите значение для сравнения.", "findings": findings, "matched_findings": [], "unmatched_findings": findings}
+            elif operator in numeric_operators and field not in {"count", "severity"}:
+                output = {"status": "failed", "message": "Числовое сравнение поддерживается только для count и severity.", "findings": findings, "matched_findings": [], "unmatched_findings": findings}
             else:
                 try:
                     if field == "count":
@@ -508,8 +513,15 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                             elif operator == "not_contains":
                                 is_match = expected.casefold() not in actual.casefold()
                             else:
-                                actual_number = float(actual)
-                                expected_number = float(expected)
+                                if field == "severity":
+                                    severity_rank = {"CRITICAL": 5, "HIGH": 4, "MEDIUM": 3, "LOW": 2, "INFO": 1}
+                                    actual_number = severity_rank.get(actual.upper())
+                                    expected_number = severity_rank.get(expected.upper())
+                                    if actual_number is None or expected_number is None:
+                                        raise ValueError("Unknown severity")
+                                else:
+                                    actual_number = float(actual)
+                                    expected_number = float(expected)
                                 is_match = {
                                     "greater_than": actual_number > expected_number,
                                     "greater_or_equal": actual_number >= expected_number,
@@ -525,77 +537,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                         "findings": findings,
                         "matched_findings": matched,
                         "unmatched_findings": unmatched,
+                        "branch": "true" if matched else "false",
                         "summary": {"total": len(findings), "matched": len(matched), "unmatched": len(unmatched)},
                     }
                 except (ValueError, TypeError):
                     output = {"status": "failed", "message": "Для числового сравнения укажите числовое значение и поле.", "findings": findings}
-        elif node.type == "logic.compare":
-            merged = []
-            for parent in parents:
-                merged.extend(parent.get("findings", []))
-            unique = {}
-            for finding in merged:
-                unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
-            findings = list(unique.values())
-            field = str(node.config.get("field", "severity")).strip()
-            operator = str(node.config.get("operator", "equals")).strip()
-            expected = str(node.config.get("value", "")).strip()
-            allowed_fields = {"severity", "rule_id", "path", "category", "message", "cve", "cwe", "count"}
-            allowed_operators = {"equals", "not_equals", "contains", "not_contains", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}
-            if field not in allowed_fields or operator not in allowed_operators or not expected:
-                output = {"status": "configuration_required", "message": "Укажите поле, оператор и значение для сравнения.", "findings": findings, "matched_findings": [], "unmatched_findings": findings}
-            elif operator in {"greater_than", "greater_or_equal", "less_than", "less_or_equal"} and field not in {"count", "severity"}:
-                output = {"status": "failed", "message": "Числовое сравнение поддерживается только для count и severity.", "findings": findings, "matched_findings": [], "unmatched_findings": findings}
-            else:
-                severity_rank = {"CRITICAL": 5, "HIGH": 4, "MEDIUM": 3, "LOW": 2, "INFO": 1}
-                def matches(finding):
-                    actual = len(findings) if field == "count" else finding.get(field)
-                    if isinstance(actual, list):
-                        actual_text = ",".join(str(value) for value in actual)
-                    else:
-                        actual_text = "" if actual is None else str(actual)
-                    left = actual_text.casefold()
-                    right = expected.casefold()
-                    if operator == "equals":
-                        return left == right
-                    if operator == "not_equals":
-                        return left != right
-                    if operator == "contains":
-                        return right in left
-                    if operator == "not_contains":
-                        return right not in left
-                    if field == "severity":
-                        left_number = severity_rank.get(actual_text.upper())
-                        right_number = severity_rank.get(expected.upper())
-                    else:
-                        try:
-                            left_number = float(actual_text)
-                            right_number = float(expected)
-                        except ValueError:
-                            left_number = right_number = None
-                    if left_number is None or right_number is None:
-                        return False
-                    if operator == "greater_than":
-                        return left_number > right_number
-                    if operator == "greater_or_equal":
-                        return left_number >= right_number
-                    if operator == "less_than":
-                        return left_number < right_number
-                    return left_number <= right_number
-                if field == "count":
-                    matched = findings if matches({}) else []
-                    unmatched = [] if matched else findings
-                else:
-                    matched = [finding for finding in findings if matches(finding)]
-                    unmatched = [finding for finding in findings if not matches(finding)]
-                output = {
-                    "status": "completed",
-                    "branch": "true" if matched else "false",
-                    "findings": findings,
-                    "matched_findings": matched,
-                    "unmatched_findings": unmatched,
-                    "summary": {"total": len(findings), "matched": len(matched), "unmatched": len(unmatched)},
-                }
         elif node.type == "logic.if":
             output = {"status": "completed", "branch": "false"}
         elif node.type == "ai.explain":
