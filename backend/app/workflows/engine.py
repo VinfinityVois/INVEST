@@ -213,8 +213,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             **({"message": output["message"]} if output.get("message") else {}),
             **({
                 "explained_count": output.get("explained_count", len(output.get("explanations", []))),
-                "analyzed_count": output.get("analyzed_count", output.get("analyzed_count", 0)),
-                "skipped_count": output.get("skipped_count", max(0, len(output.get("findings", [])) - min(len(output.get("findings", [])), int(node.config.get("max_findings", 20) or 20)))),
+                "analyzed_count": output.get("analyzed_count", 0),
+                "skipped_count": output.get("skipped_count", 0),
                 "coverage": output.get("coverage", 0),
             } if node.type == "ai.explain" else {}),
         })
@@ -248,8 +248,8 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                             }} if isinstance(value.get("findings"), list) and value.get("findings") else {}),
                             **({
                                 "explained_count": value.get("explained_count", len(value.get("explanations", []))),
-                                "analyzed_count": value.get("analyzed_count", min(len(value.get("findings", [])), int(nodes[key].config.get("max_findings", 20) or 20))),
-                                "skipped_count": value.get("skipped_count", max(0, len(value.get("findings", [])) - min(len(value.get("findings", [])), int(nodes[key].config.get("max_findings", 20) or 20)))),
+                                "analyzed_count": value.get("analyzed_count", 0),
+                                "skipped_count": value.get("skipped_count", 0),
                                 "unexplained_count": value.get("unexplained_count", 0),
                                 "coverage": value.get("coverage", 0),
                                 "provider": value.get("provider"),
