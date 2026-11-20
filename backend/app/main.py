@@ -4,6 +4,7 @@ import shutil
 import re
 import os
 import hashlib
+import html
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -13,7 +14,7 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
@@ -962,6 +963,88 @@ def latest_workflow_telemetry(workflow_id: UUID):
         if run is None:
             return {"status": "never_run", "total_findings": 0, "severity": {}, "scanners": []}
         return _run_telemetry(session, run)
+
+
+def _safe_report_value(value, key: str = ""):
+    """Bound and redact report content before it leaves the API."""
+    if re.search(r"(?i)(api[_-]?key|access[_-]?token|authorization|password|passwd|client[_-]?secret|private[_-]?key|ciphertext|nonce)", key):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {
+            str(child_key)[:120]: _safe_report_value(child_value, str(child_key))
+            for child_key, child_value in list(value.items())[:500]
+        }
+    if isinstance(value, (list, tuple)):
+        return [_safe_report_value(item) for item in value[:5000]]
+    if isinstance(value, str):
+        return _redact(value[:5000])
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return str(value)[:500]
+
+
+def _build_run_report(session, run: WorkflowRun) -> dict:
+    telemetry = _safe_report_value(_run_telemetry(session, run))
+    rows = session.scalars(
+        select(Finding).where(Finding.run_id == run.id).order_by(Finding.severity, Finding.path, Finding.line).limit(5000)
+    ).all()
+    findings = [
+        _safe_report_value({
+            "fingerprint": item.fingerprint,
+            "rule_id": item.rule_id,
+            "severity": item.severity,
+            "path": item.path,
+            "line": item.line,
+            **(item.payload if isinstance(item.payload, dict) else {}),
+        })
+        for item in rows
+    ]
+    return {
+        "report_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "run": {
+            "id": str(run.id),
+            "workflow_id": str(run.workflow_id) if run.workflow_id else None,
+            "status": run.status,
+            "source": run.source,
+            "queued_at": run.queued_at.isoformat() if run.queued_at else None,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "error": _safe_report_value(run.error) if run.error else None,
+        },
+        "telemetry": telemetry,
+        "findings": findings,
+        "findings_truncated": len(rows) >= 5000,
+    }
+
+
+@app.get("/api/runs/{run_id}/report.json")
+def export_run_report_json(run_id: UUID):
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return _build_run_report(session, run)
+
+
+@app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
+def export_run_report_html(run_id: UUID):
+    with SessionLocal() as session:
+        run = session.get(WorkflowRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        report = _build_run_report(session, run)
+    encoded = html.escape(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+    title = html.escape(f"INVEST · Отчёт запуска {report['run']['id']}")
+    document = f"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title><style>
+:root{{color-scheme:dark}}body{{margin:0;padding:32px;background:#0b1119;color:#d7e3ee;font:14px/1.6 system-ui,sans-serif}}
+main{{max-width:1100px;margin:auto}}h1{{font-size:22px}}.meta{{color:#8ea5b9}}pre{{overflow:auto;padding:20px;border:1px solid #26384a;border-radius:8px;background:#101c29;color:#c4d9e9;white-space:pre-wrap;overflow-wrap:anywhere}}
+@media(max-width:640px){{body{{padding:14px}}pre{{padding:12px;font-size:12px}}}}
+</style></head><body><main><h1>Отчёт INVEST</h1><p class="meta">Запуск {html.escape(report['run']['id'])} · статус {html.escape(report['run']['status'])}</p>
+<p>Отчёт содержит телеметрию, хронологию, диагностические сообщения и находки. Секретные поля и значения маскируются.</p><pre>{encoded}</pre></main></body></html>"""
+    return HTMLResponse(document, headers={"Content-Disposition": f'inline; filename="invest-run-{run_id}.html"' })
 
 
 @app.get("/api/runs/{run_id}/telemetry")
