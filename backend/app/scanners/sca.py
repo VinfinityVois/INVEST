@@ -174,18 +174,17 @@ def _make_finding(group: str, artifact: str, version: str, advisory: dict, path:
     }
 
 
-def scan_gradle_project(root: str | Path, advisories_path: Path | None = None) -> list[dict]:
+def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
     project = Path(root).resolve()
     advisory_index = _load_advisories(advisories_path)
     findings: dict[str, dict] = {}
-    visited = 0
+    candidates = [
+        path for path in project.rglob("build.gradle*")
+        if not any(part in SKIP_DIRS for part in path.parts) and not path.is_symlink()
+    ][:MAX_FILES]
+    total_files = len(candidates)
 
-    for build_file in project.rglob("build.gradle*"):
-        if any(part in SKIP_DIRS for part in build_file.parts) or build_file.is_symlink():
-            continue
-        visited += 1
-        if visited > MAX_FILES:
-            break
+    for visited, build_file in enumerate(candidates, 1):
         build_text = _read_text(build_file)
         if build_text is None:
             continue
@@ -218,5 +217,10 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None) -
                     if _affected(version, advisory.get("ranges", [])):
                         finding = _make_finding(group, artifact, version, advisory, relative_path, line)
                         findings.setdefault(finding["fingerprint"], finding)
+        if on_progress:
+            try:
+                on_progress({"files_scanned": visited, "total_files": total_files, "current_file": relative_path})
+            except Exception:
+                pass
 
     return sorted(findings.values(), key=lambda item: (item["path"], item["line"], item["rule_id"]))
