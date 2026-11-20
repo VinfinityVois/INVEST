@@ -206,3 +206,61 @@ def test_spring_boot_bom_unknown_version_is_not_guessed(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_gradle_lockfile_scans_vulnerable_transitive_dependencies(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation("org.springframework.boot:spring-boot-starter-web:3.2.0") }\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        '# This is a Gradle lockfile\n'
+        'org.springframework.boot:spring-boot-starter-web:3.2.0=runtimeClasspath\n'
+        'org.apache.commons:commons-lang3:3.17.0=runtimeClasspath\n'
+        'org.yaml:snakeyaml:2.2=runtimeClasspath\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["artifact"] == "commons-lang3"
+    assert findings[0]["version"] == "3.17.0"
+    assert findings[0]["path"] == "gradle.lockfile"
+    assert findings[0]["line"] == 3
+
+
+def test_gradle_lockfile_does_not_duplicate_direct_dependency_findings(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation("org.apache.commons:commons-lang3:3.17.0") }\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        "org.apache.commons:commons-lang3:3.17.0=runtimeClasspath\n",
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+
+    assert len(findings) == 1
+    assert findings[0]["path"] == "build.gradle.kts"
+
+
+def test_gradle_lockfile_ambiguous_versions_are_not_used_as_override(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies { implementation("org.apache.commons:commons-lang3") }\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        "org.apache.commons:commons-lang3:3.17.0=runtimeClasspath\n"
+        "org.apache.commons:commons-lang3:3.20.0=testRuntimeClasspath\n",
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
