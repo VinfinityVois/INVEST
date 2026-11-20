@@ -295,17 +295,19 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     cache_bypass_reason = "Кэш блока сброшен пользователем"
                 elif force_full_scan:
                     cache_bypass_reason = "Запрошен полный анализ"
+                elif isinstance(metadata, dict) and metadata.get("cache_key") != cache_key:
+                    if metadata.get("scanner_version") != components["scanner_version"] or metadata.get("schema_version") != components["schema_version"]:
+                        cache_bypass_reason = "Обновилась версия сканера или формат кэша"
+                    elif metadata.get("config_hash") != components["config_hash"]:
+                        cache_bypass_reason = "Изменилась конфигурация блока"
+                    elif metadata.get("source_hash") != components["source_hash"]:
+                        cache_bypass_reason = "Изменилось содержимое исходного проекта"
+                    else:
+                        cache_bypass_reason = "Нет метаданных актуальности кэша"
+                elif not isinstance(metadata, dict):
+                    cache_bypass_reason = "Нет метаданных актуальности кэша"
                 elif not (isinstance(cached_output, dict) and cached_output.get("status") == "completed"):
                     cache_bypass_reason = "Нет сохранённого результата"
-                elif not isinstance(metadata, dict) or metadata.get("cache_key") != cache_key:
-                    if isinstance(metadata, dict):
-                        if metadata.get("scanner_version") != components["scanner_version"] or metadata.get("schema_version") != components["schema_version"]:
-                            cache_bypass_reason = "Обновилась версия сканера или формат кэша"
-                        elif metadata.get("config_hash") != components["config_hash"]:
-                            cache_bypass_reason = "Изменилась конфигурация блока"
-                        elif metadata.get("source_hash") != components["source_hash"]:
-                            cache_bypass_reason = "Изменилось содержимое исходного проекта"
-                    cache_bypass_reason = cache_bypass_reason or "Нет метаданных актуальности кэша"
                 else:
                     cache_age_seconds = _cache_age_seconds(metadata.get("cached_at"))
                     if cache_age_seconds is None:
