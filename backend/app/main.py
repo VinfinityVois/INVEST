@@ -205,6 +205,9 @@ def _run_telemetry(session, run: WorkflowRun):
     result = run.result if isinstance(run.result, dict) else {}
     trace = result.get("trace", []) if isinstance(result, dict) else []
     progress = result if run.status == "running" and "completed_nodes" in result else None
+    if progress:
+        severity = progress.get("severity", severity)
+    total_findings = progress.get("total_findings", len(findings)) if progress else len(findings)
     now = datetime.now(timezone.utc)
     duration_ms = None
     if run.started_at:
@@ -232,7 +235,7 @@ def _run_telemetry(session, run: WorkflowRun):
         "started_at": run.started_at,
         "finished_at": run.finished_at,
         "duration_ms": duration_ms,
-        "total_findings": len(findings),
+        "total_findings": total_findings,
         "severity": severity,
         "scanners": scanners,
         "completed_nodes": progress.get("completed_nodes", len(trace)) if progress else len(trace),
