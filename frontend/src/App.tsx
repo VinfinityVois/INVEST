@@ -463,6 +463,13 @@ export default function App() {
     } catch (error) { setResult("Поиск по содержимому: " + String(error)); }
     finally { setProjectContentSearching(false); }
   };
+  const downloadProjectFile = () => {
+    if (!activeProject) return;
+    const path = projectFilePreview?.path || projectVisualPreview?.path;
+    if (!path) return;
+    const params = new URLSearchParams({ path });
+    window.location.assign(`/api/projects/${activeProject.id}/file/download?${params}`);
+  };
   const downloadProject = () => {
     if (!activeProject) return;
     window.location.assign(`/api/projects/${activeProject.id}/download`);
@@ -889,7 +896,7 @@ export default function App() {
           </aside>
           <section className="project-file-view">
             <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || projectVisualPreview?.path || "Выбери файл в дереве проекта"}</span>
-              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}
+              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setProjectEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { setProjectEditing(false); setProjectDraft(projectFilePreview.content || ""); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
             </div>
             {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <textarea className="project-code-editor" spellCheck={false} value={projectDraft} onChange={event => setProjectDraft(event.target.value)} /> : <pre className="project-source-code">{projectFilePreview.lines.map(line => <span className="code-line" key={line.line}><i>{line.line}</i><code>{line.text || " "}</code></span>)}</pre> : <div className="project-file-empty"><FolderOpen size={30}/><b>Проект открыт в INVEST</b><p>Выбери файл слева, чтобы просмотреть его содержимое. Каталог проекта уже подключён к блоку Project source на графе.</p></div>}
           </section>
