@@ -476,7 +476,7 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
             pom = ET.fromstring(source)
         except ET.ParseError:
             continue
-        props = _maven_properties(pom)
+        parent_properties = {}
         parent = _maven_child(pom, "parent")
         if parent is not None:
             rel = _maven_text(parent, "relativePath")
@@ -484,9 +484,10 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
             parent_source = _read_text(parent_path) if parent_path.is_file() and not parent_path.is_symlink() else None
             if parent_source:
                 try:
-                    props = _maven_properties(ET.fromstring(parent_source), props)
+                    parent_properties = _maven_properties(ET.fromstring(parent_source))
                 except ET.ParseError:
                     pass
+        props = _maven_properties(pom, parent_properties)
         managed = _maven_managed(pom_path, pom, props, bom_snapshots)
         relative = pom_path.relative_to(project).as_posix()
         for section in _maven_profile_sections(pom_path, pom):
