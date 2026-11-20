@@ -150,6 +150,8 @@ export default function App() {
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [projectFolderOpen, setProjectFolderOpen] = useState(true);
+  const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -653,9 +655,13 @@ export default function App() {
         <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
         <p className="panel-intro">Добавляй компоненты на холст. Настройки, замена и удаление доступны в инспекторе выбранного блока.</p>
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
-        <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
+        <section className={"palette-folder" + (projectFolderOpen ? " folder-open" : "")}>
+          <button className="palette-folder-head project-folder-head" onClick={() => setProjectFolderOpen(value => !value)} aria-expanded={projectFolderOpen}>
+            <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><FolderOpen size={15}/><b>ПРОЕКТЫ / PROJECT LIBRARY</b></span>
+            <small>{projects.length}</small>
+          </button>
+          {projectFolderOpen && <div className="palette-folder-body">
         <div className="source-section">
-          <div className="section-caption">ПРОЕКТЫ / PROJECT LIBRARY</div>
           <div className="project-library">
             <label className="project-add-button"><Plus size={13}/><span>{uploadingProjectId === "new" ? "Загрузка проекта…" : "Добавить ZIP в библиотеку"}</span><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0]); event.currentTarget.value = ""; }}/></label>
             <small className="upload-hint">До 300 MiB на архив · постоянное хранение · файлы не исполняются</small>
@@ -684,7 +690,15 @@ export default function App() {
           }}><GitBranch size={13}/> Использовать Git-источник</button>
           <small className="upload-hint">Только HTTPS и точное совпадение с ALLOWED_TARGETS в корневом .env. Клонирование выполняется worker при запуске.</small>
         </div>
-        <div className="section-caption library-caption">КОМПОНЕНТЫ API</div>
+          </div>}
+        </section>
+        <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
+          <button className="palette-folder-head components-folder-head" onClick={() => setComponentsFolderOpen(value => !value)} aria-expanded={componentsFolderOpen}>
+            <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><Code2 size={15}/><b>КОМПОНЕНТЫ API</b></span>
+            <small>{manifests.length}</small>
+          </button>
+          {componentsFolderOpen && <div className="palette-folder-body">
+          <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
         {filtered.map(manifest => <article className="library-item" key={manifest.type}>
           <div className="library-main"><div className={"library-icon tone-" + (categoryMeta[manifest.category] || {tone:"slate"}).tone}><Code2 size={15} /></div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
           <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{categoryMeta[manifest.category]?.label || manifest.category} · тип: {manifest.type}</span></details>
@@ -692,6 +706,8 @@ export default function App() {
         {!manifests.length && <div className="empty-library">Загружаем реестр компонентов API…</div>}
         {manifests.length > 0 && filtered.length === 0 && <div className="empty-library">Ничего не найдено.</div>}
         <div className="palette-note"><LockKeyhole size={14} /><span>Код репозитория анализируется как данные, без запуска его скриптов.</span></div>
+          </div>}
+        </section>
         </>}
       </aside>
 
