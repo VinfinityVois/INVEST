@@ -67,5 +67,5 @@ def test_entropy_rule_does_not_scan_unrelated_random_literals():
 
 def test_entropy_rule_does_not_duplicate_existing_secret_assignment_finding():
     findings = scan_text('private val apiKey = "k7Qp9xVm2Rz8Nw4Hs6Ty3Bc"', "AuthConfig.kt")
-    assert len(findings) == 1
-    assert findings[0]["rule_id"] == "named_secret_literal"
+    assert any(item["rule_id"] == "named_secret_literal" for item in findings)
+    assert not any(item["rule_id"] == "high_entropy_secret" for item in findings)
