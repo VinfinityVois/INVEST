@@ -25,7 +25,7 @@ type Telemetry = {
   trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" | "configuration_required" };
 type FlowNode = Node<NodeData>;
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
