@@ -220,10 +220,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
     nodes = {node.id: node for node in graph.nodes}
     outgoing = defaultdict(list)
     incoming = defaultdict(list)
+    incoming_edge_handles = defaultdict(list)
     indegree = {node.id: 0 for node in graph.nodes}
     for edge in graph.edges:
         outgoing[edge.source].append(edge.target)
         incoming[edge.target].append(edge.source)
+        incoming_edge_handles[edge.target].append((edge.source, edge.source_handle))
         indegree[edge.target] += 1
 
     queue = deque(node_id for node_id, degree in indegree.items() if degree == 0)
@@ -273,7 +275,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         node = nodes[node_id]
         cache_hit = False
         cache_bypass_reason = None
-        parents = [outputs[parent] for parent in incoming[node_id] if parent in outputs]
+        parents = []
+        for parent_id, source_handle in incoming_edge_handles[node_id]:
+            parent_output = outputs.get(parent_id)
+            if parent_output is None:
+                continue
+            if source_handle == "true" and "matched_findings" in parent_output:
+                parent_output = {**parent_output, "findings": parent_output["matched_findings"]}
+            elif source_handle == "false" and "unmatched_findings" in parent_output:
+                parent_output = {**parent_output, "findings": parent_output["unmatched_findings"]}
+            parents.append(parent_output)
 
         def report_scanner_progress(progress):
             if on_progress is None:
