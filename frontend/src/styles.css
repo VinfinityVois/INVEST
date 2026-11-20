@@ -603,3 +603,35 @@
 .finding-lifecycle-summary .is-false{color:#a1b0c0;border-color:rgba(161,176,192,.2)}
 @media(max-width:760px){.finding-browser{grid-template-columns:minmax(0,1fr) auto}.finding-browser select{max-width:100%}.finding-lifecycle-summary{grid-column:1/-1}}
 @media(max-width:420px){.finding-browser{grid-template-columns:1fr}.finding-browser select{width:100%}.finding-browser>span{text-align:left}.finding-lifecycle-summary{gap:4px}}
+
+
+/* Run history and regression comparison */
+.run-history-card{margin:12px 0 14px;padding:11px;border:1px solid rgba(105,145,183,.2);border-radius:8px;background:linear-gradient(145deg,rgba(12,24,38,.78),rgba(7,14,24,.68))}
+.run-history-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.run-history-heading>div{display:grid;gap:3px}
+.run-history-heading>div>b{color:#d0e0f0;font-size:11px;font-weight:600}
+.run-history-heading>button,.run-history-row>button{padding:5px 8px;border:1px solid #36516c;border-radius:4px;background:rgba(22,43,64,.7);color:#91b8d8;font:7px 'DM Mono';cursor:pointer}
+.run-history-heading>button:disabled,.run-history-row>button:disabled{opacity:.45;cursor:default}
+.run-comparison{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:10px;border:1px solid rgba(106,150,190,.16);border-radius:6px;background:rgba(5,12,21,.46)}
+.run-comparison-total{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.run-comparison-total>span{color:#7894ad;font:7px 'DM Mono';letter-spacing:.45px}
+.run-comparison-total>strong{font:700 25px 'DM Mono'}
+.run-comparison-total>small,.run-comparison-note{color:#7189a1;font:7px 'DM Mono';line-height:1.5}
+.delta-good{color:#7dd3ad!important}.delta-bad{color:#e69b9d!important}.delta-neutral{color:#91a8bf!important}
+.run-comparison-levels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.run-comparison-levels>div{display:flex;flex-direction:column;gap:5px;padding:6px 5px;border:1px solid rgba(111,148,184,.12);border-radius:4px;background:rgba(14,27,42,.58)}
+.run-comparison-levels span{color:#819bb5;font:6px 'DM Mono'}
+.run-comparison-levels b{color:#d4e1ee;font:10px 'DM Mono';white-space:nowrap}
+.run-comparison-levels i{font:7px 'DM Mono';font-style:normal}
+.run-comparison-note{grid-column:1/-1}
+.run-history-list{display:grid;gap:4px;margin-top:8px}
+.run-history-row{display:grid;grid-template-columns:minmax(95px,.8fr) minmax(100px,1fr) auto auto;align-items:center;gap:8px;padding:7px 8px;border:1px solid rgba(105,145,183,.12);border-radius:5px;background:rgba(7,15,25,.46)}
+.run-history-row.is-current{border-color:rgba(100,174,224,.34);background:rgba(36,81,117,.16)}
+.run-history-row>div{display:flex;align-items:center;gap:6px;min-width:0}
+.run-history-row>div>b{color:#7894ad;font:8px 'DM Mono'}
+.run-history-state{color:#8eb5d4;font:6px 'DM Mono';letter-spacing:.25px}
+.run-history-state.state-completed{color:#83d9b6}.run-history-state.state-partial{color:#e8c27e}.run-history-state.state-failed{color:#ef9da3}
+.run-history-row>small{color:#7189a1;font:7px 'DM Mono'}
+.run-history-row>strong{color:#c2d3e3;font:8px 'DM Mono';white-space:nowrap}
+.run-history-empty{padding:9px;color:#7189a1;font:8px 'DM Mono'}
+@media(max-width:560px){.run-comparison{grid-template-columns:1fr}.run-comparison-total{display:grid;grid-template-columns:1fr auto;align-items:center}.run-comparison-total>strong{grid-column:2;grid-row:1/3}.run-comparison-levels{grid-template-columns:repeat(3,minmax(0,1fr))}.run-history-row{grid-template-columns:1fr auto;gap:6px}.run-history-row>small{grid-column:1}.run-history-row>strong{grid-column:1}.run-history-row>button{grid-column:2;grid-row:1/4}}
