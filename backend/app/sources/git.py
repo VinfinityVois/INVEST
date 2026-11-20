@@ -92,7 +92,10 @@ def clone_allowed_repository(
         "--no-recurse-submodules",
     ]
     pinned_commit = bool(safe_ref and re.fullmatch(r"[0-9a-fA-F]{40}", safe_ref))
-    if safe_ref and not pinned_commit:
+    if pinned_commit:
+        safe_ref = safe_ref.lower()
+        args.append("--no-checkout")
+    elif safe_ref:
         args.extend(["--branch", safe_ref])
     args.extend([canonical_url, str(destination)])
 
@@ -125,22 +128,33 @@ def clone_allowed_repository(
         if not destination.is_dir() or not (destination / ".git").is_dir():
             raise GitSourceError("Git did not create the expected repository directory")
         if pinned_commit:
-            fetch_args = [
+            git_prefix = [
                 "git", "-c", f"core.hooksPath={disabled_hooks}",
-                "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=" ,
-                "fetch", "--depth", "1", "origin", safe_ref,
+                "-c", "core.fsmonitor=false",
+                "-c", "protocol.file.allow=never",
+                "-c", "submodule.recurse=false",
+                "-c", "http.followRedirects=false",
+                "-c", "filter.lfs.smudge=",
+                "-c", "filter.lfs.process=",
             ]
-            fetched = subprocess.run(fetch_args, cwd=destination, env=env, capture_output=True, text=True, timeout=120, check=False)
+            fetch_args = git_prefix + ["fetch", "--depth", "1", "--no-tags", "origin", safe_ref]
+            fetched = subprocess.run(
+                fetch_args, cwd=destination, env=env, capture_output=True, text=True, timeout=120, check=False,
+            )
             if fetched.returncode != 0:
-                detail = (fetched.stderr or fetched.stdout or "Pinned commit fetch failed")[-500:]
-                raise GitSourceError(f"Git pinned commit fetch failed: {detail}")
+                raise GitSourceError("Git could not fetch the requested commit SHA.")
             checkout = subprocess.run(
-                ["git", "-c", f"core.hooksPath={disabled_hooks}", "checkout", "--detach", "FETCH_HEAD"],
+                git_prefix + ["checkout", "--detach", "FETCH_HEAD"],
                 cwd=destination, env=env, capture_output=True, text=True, timeout=120, check=False,
             )
             if checkout.returncode != 0:
-                detail = (checkout.stderr or checkout.stdout or "Pinned commit checkout failed")[-500:]
-                raise GitSourceError(f"Git pinned commit checkout failed: {detail}")
+                raise GitSourceError("Git could not check out the requested commit SHA.")
+            verified = subprocess.run(
+                git_prefix + ["rev-parse", "HEAD"],
+                cwd=destination, env=env, capture_output=True, text=True, timeout=30, check=False,
+            )
+            if verified.returncode != 0 or verified.stdout.strip().lower() != safe_ref:
+                raise GitSourceError("Git checkout did not match the requested commit SHA.")
         return {
             "path": destination.name,
             "source": "git",
