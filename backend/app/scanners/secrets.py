@@ -1,5 +1,5 @@
 """Context-aware secret scanner; never executes repository files."""
-import hashlib, hmac, re
+import hashlib, hmac, math, re
 from pathlib import Path
 from app.config import settings
 
@@ -15,6 +15,12 @@ PATTERNS=[
  ("private_key",re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),.99,"CRITICAL","private-key"),
  ("generic_assignment",re.compile(r"""(?i)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd)\b\s*[:=]\s*["']([^"'\s]{8,})["']"""),.78,"MEDIUM","secret"),
 ]
+def _shannon_entropy(value):
+ if not value: return 0.0
+ counts={char:value.count(char) for char in set(value)}
+ return -sum((count/len(value))*math.log2(count/len(value)) for count in counts.values())
+
+SECRET_LITERAL_ASSIGNMENT=re.compile(r"""(?i)(?P<name>[A-Za-z_][\w.-]*(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|credential|authorization)[\w.-]*)\s*[:=]\s*["'](?P<value>[^"'\r\n]{20,})["']""")
 def _is_placeholder(value):
  low=value.strip().lower()
  return any(x in low for x in PLACEHOLDERS) or low in {"password","secret","token"} or low.startswith("$")
@@ -40,6 +46,12 @@ def scan_text(text,path):
    add("named_secret_literal",cls,line_no,named.group(2),"HIGH" if "pass" in name else "MEDIUM",.88)
   bearer=re.search(r"(?i)\b(?:authorization|token)\b\s*:\s*['\"]?Bearer\s+([A-Za-z0-9._~+/=-]{8,})",line)
   if bearer: add("bearer_configuration","configuration-token",line_no,bearer.group(1),"HIGH",.94)
+  entropy_match=SECRET_LITERAL_ASSIGNMENT.search(line)
+  if entropy_match and SECRET_NAME.search(entropy_match.group("name")):
+   candidate=entropy_match.group("value")
+   already_detected=any(item["line"]==line_no for item in findings)
+   if not already_detected and len(candidate)>=20 and _shannon_entropy(candidate)>=3.5:
+    add("high_entropy_secret","high-entropy-secret",line_no,candidate,"MEDIUM",.76)
   fallback=re.search(r"(?i)(?:getenv|environment\.getproperty|System\.getProperty)\s*\([^)]*\)\s*\?:\s*"+QUOTED,line)
   if fallback: add("secret_fallback","secret-fallback",line_no,fallback.group(1),"LOW",.92)
  if re.search(r"(?i)setBearerAuth\s*\(\s*\w+\s*\)|set\s*\(\s*['\"]Authorization['\"]",text):
