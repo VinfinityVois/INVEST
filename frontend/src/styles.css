@@ -557,3 +557,7 @@
 .editor-jump-control button{height:25px;padding:0 7px;border:1px solid #3b5c78;border-radius:4px;background:#14283c;color:#a9c9e5;font:7px 'DM Mono';cursor:pointer}
 .editor-jump-control button:disabled{opacity:.35;cursor:not-allowed}
 @media(max-width:760px){.editor-jump-control{width:100%;justify-content:flex-start}.project-editor-findbar>small{width:100%;line-height:1.5}}
+
+.project-library-actions .project-apply-button{border-color:rgba(80,190,157,.38);background:rgba(36,112,91,.16);color:#8ce0c2}
+.project-library-actions .project-apply-button:hover{border-color:rgba(105,226,185,.72);background:rgba(36,132,101,.28);color:#c0ffe7}
+.project-library-actions .project-apply-button:focus-visible{outline:2px solid #7ce0bd;outline-offset:2px}
