@@ -151,3 +151,58 @@ def test_gradle_subproject_uses_root_catalog_and_lockfile(tmp_path):
     )
 
     assert scan_gradle_project(project) == []
+
+
+def test_spring_boot_bom_supplies_versions_for_unversioned_dependencies(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'val bootBomVersion = "3.2.0"\n'
+        'dependencies {\n'
+        '    implementation(platform("org.springframework.boot:spring-boot-dependencies:$bootBomVersion"))\n'
+        '    implementation("org.apache.commons:commons-lang3")\n'
+        '    implementation("com.fasterxml.jackson.core:jackson-databind")\n'
+        '    implementation("com.google.code.gson:gson")\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+    by_artifact = {item["artifact"]: item for item in findings}
+
+    assert by_artifact["commons-lang3"]["version"] == "3.13.0"
+    assert by_artifact["jackson-databind"]["version"] == "2.15.3"
+    assert "gson" not in by_artifact
+
+
+def test_spring_boot_bom_does_not_override_explicit_or_locked_versions(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies {\n'
+        '    implementation(enforcedPlatform("org.springframework.boot:spring-boot-dependencies:3.2.0"))\n'
+        '    implementation("org.apache.commons:commons-lang3:3.20.0")\n'
+        '    implementation("com.fasterxml.jackson.core:jackson-databind")\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    (project / "gradle.lockfile").write_text(
+        "com.fasterxml.jackson.core:jackson-databind:2.18.8=runtimeClasspath\n",
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
+
+
+def test_spring_boot_bom_unknown_version_is_not_guessed(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies {\n'
+        '    implementation(platform("org.springframework.boot:spring-boot-dependencies:3.3.0"))\n'
+        '    implementation("org.apache.commons:commons-lang3")\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project) == []
