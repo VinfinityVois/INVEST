@@ -1,6 +1,6 @@
-import pytest
+from types import SimpleNamespace
 
-from app.workflows.engine import _evaluate_condition
+from app.workflows.engine import _active_parent_ids, _evaluate_condition
 
 
 def test_condition_compares_total_findings():
@@ -60,3 +60,24 @@ def test_condition_rejects_unknown_operator():
     )
     assert matched is False
     assert "оператор" in error
+
+
+def test_branch_routing_activates_only_selected_output_handle():
+    edges = [
+        SimpleNamespace(source="condition", source_handle="true"),
+        SimpleNamespace(source="condition", source_handle="false"),
+    ]
+    outputs = {"condition": {"status": "completed", "branch": "true"}}
+    assert _active_parent_ids(edges, outputs) == ["condition"]
+
+
+def test_branch_routing_ignores_skipped_upstream_nodes():
+    edges = [SimpleNamespace(source="inactive", source_handle=None)]
+    outputs = {"inactive": {"status": "skipped"}}
+    assert _active_parent_ids(edges, outputs) == []
+
+
+def test_branch_routing_keeps_unconditional_parent():
+    edges = [SimpleNamespace(source="merge", source_handle=None)]
+    outputs = {"merge": {"status": "completed", "findings": []}}
+    assert _active_parent_ids(edges, outputs) == ["merge"]
