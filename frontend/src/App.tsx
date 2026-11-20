@@ -54,7 +54,7 @@ type Telemetry = {
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
-  trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number; cached?: boolean }>;
+  trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number; cached?: boolean; cache_bypass_reason?: string; cache_age_seconds?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
@@ -861,12 +861,12 @@ export default function App() {
     } catch { setResult("Не удалось связаться с API. Проверьте backend."); setShowResult(true); }
     finally { setBusy(false); }
   };
-  const runWorkflow = async (selectedNodeIds?: string[], forceFullScan = false) => {
+  const runWorkflow = async (selectedNodeIds?: string[], forceFullScan = false, forceNodeIds: string[] = []) => {
     setBusy(true); setFindings([]);
     try {
       const id = await persistWorkflow();
       const endpoint = selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs";
-      const response = await fetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan }) } : {}) });
+      const response = await fetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
       const queued = await response.json();
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
@@ -1206,8 +1206,9 @@ export default function App() {
               <button type="button" onClick={() => { setSelectedNodeId(step.node_id); setSelectedEdgeId(null); }} className={selectedNodeId === step.node_id ? "trace-item-button is-selected" : "trace-item-button"}>
                 <span className="trace-index">{String(index + 1).padStart(2, "0")}</span>
                 <span className="trace-main"><b>{node?.data.label || step.type || step.node_id}</b><small>{step.type || step.node_id}{step.reason_code ? " · " + step.reason_code : ""}</small>{(step.reason || result?.message || step.message) && <em>{step.reason || result?.message || step.message}</em>}</span>
-                <span className="trace-meta"><strong>{label}</strong>{step.diagnostic_level && <small>{step.diagnostic_level === "error" ? "КРИТИЧНОЕ СОБЫТИЕ" : step.diagnostic_level === "warning" ? "ТРЕБУЕТ ВНИМАНИЯ" : step.diagnostic_level === "blocked" ? "НЕТ ВХОДНЫХ ДАННЫХ" : "ИНФОРМАЦИЯ"}</small>}{step.duration_ms != null && <small>{formatDuration(step.duration_ms)}</small>}{typeof step.findings === "number" && <small>{step.findings} находок</small>}{step.provider && <small>LLM: {step.provider}</small>}{step.model && <small>МОДЕЛЬ: {step.model}</small>}{step.provider_request_ms != null && <small>ЗАПРОС: {formatDuration(step.provider_request_ms)}</small>}{step.provider_attempts != null && <small>ПОПЫТКИ: {step.provider_attempts}</small>}{step.provider_http_status != null && <small>HTTP: {step.provider_http_status}</small>}{step.provider_error_code && <small className="trace-provider-error">{step.provider_error_code}</small>}</span>
+                <span className="trace-meta"><strong>{label}</strong>{step.cached && <small className="trace-cache-hit">ИЗ КЭША</small>}{step.cache_bypass_reason && <small>Причина нового сканирования: {step.cache_bypass_reason}</small>}{step.cache_age_seconds != null && <small>Возраст кэша: {Math.floor(step.cache_age_seconds / 3600)} ч</small>}{step.diagnostic_level && <small>{step.diagnostic_level === "error" ? "КРИТИЧНОЕ СОБЫТИЕ" : step.diagnostic_level === "warning" ? "ТРЕБУЕТ ВНИМАНИЯ" : step.diagnostic_level === "blocked" ? "НЕТ ВХОДНЫХ ДАННЫХ" : "ИНФОРМАЦИЯ"}</small>}{step.duration_ms != null && <small>{formatDuration(step.duration_ms)}</small>}{typeof step.findings === "number" && <small>{step.findings} находок</small>}{step.provider && <small>LLM: {step.provider}</small>}{step.model && <small>МОДЕЛЬ: {step.model}</small>}{step.provider_request_ms != null && <small>ЗАПРОС: {formatDuration(step.provider_request_ms)}</small>}{step.provider_attempts != null && <small>ПОПЫТКИ: {step.provider_attempts}</small>}{step.provider_http_status != null && <small>HTTP: {step.provider_http_status}</small>}{step.provider_error_code && <small className="trace-provider-error">{step.provider_error_code}</small>}</span>
               </button>
+              {["scan.secrets","scan.sca","scan.sast"].includes(step.type) && <button type="button" className="trace-cache-reset" disabled={busy} onClick={() => void runWorkflow([step.node_id], false, [step.node_id])} title="Повторно выполнить этот блок без кэша">Пересканировать блок</button>}
             </li>;
           })}</ol>
         </section>}
