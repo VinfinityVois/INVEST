@@ -1,5 +1,11 @@
 # AI Security Workflow
 
+**Визуальная платформа автоматизации проверок безопасности кода**
+
+Кейс Банка «Центр-инвест» · [CyberGarden 2026](https://cybergarden.ru)
+
+Репозиторий: [github.com/VinfinityVois/INVEST](https://github.com/VinfinityVois/INVEST)
+
 Визуальная платформа для построения и запуска security-workflow: собственные анализаторы, AI-объяснения подтверждённых находок и уведомления.
 
 ## Архитектура
