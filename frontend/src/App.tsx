@@ -417,7 +417,17 @@ export default function App() {
             {telemetry.status === "running" && <div className="telemetry-progress"><i style={{ width: `${telemetry.total_nodes ? Math.min(100, (telemetry.completed_nodes || 0) / telemetry.total_nodes * 100) : 0}%` }} /></div>}
             <div className="severity-strip">{["CRITICAL","HIGH","MEDIUM","LOW","INFO"].filter(level => (telemetry.severity?.[level] || 0) > 0).map(level => <span key={level} className={"severity-" + level.toLowerCase()}>{level} <b>{telemetry.severity[level]}</b></span>)}</div>
             {telemetry.scanners?.length > 0 && <div className="scanner-telemetry">{telemetry.scanners.map(scanner => <div key={scanner.node_id || scanner.type}><span>{scanner.type.replace("scan.", "").toUpperCase()}</span><small>{scanner.status}</small><b>{scanner.findings} · {formatDuration(scanner.duration_ms)}</b></div>)}</div>}
-            {telemetry.current_node && <div className="telemetry-current">Сейчас выполняется: <b>{telemetry.current_node}</b></div>}
+            {telemetry.current_node && <div className="telemetry-current"><span className="live-pulse" /> Сейчас выполняется: <b>{telemetry.current_node}</b></div>}
+            {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
+              <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>
+              {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
+                <i>{step.status === "completed" ? "✓" : step.status === "failed" ? "!" : step.status === "blocked" ? "Ⅱ" : index + 1}</i>
+                <span><b>{step.type}</b><small>{step.status === "completed" ? "Завершён" : step.status === "failed" ? "Ошибка" : step.status === "blocked" ? "Заблокирован" : step.status}</small></span>
+                <em>{formatDuration(step.duration_ms)}</em>
+                {typeof step.findings === "number" && <strong>{step.findings} находок</strong>}
+              </div>)}
+              {telemetry.status === "running" && telemetry.current_node && <div className="execution-active"><span className="live-pulse" /> Выполняется {telemetry.current_node}…</div>}
+            </div>}
           </> : <p className="telemetry-empty">Запусков пока нет. Телеметрия появится после первой проверки.</p>}
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
