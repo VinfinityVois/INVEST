@@ -22,6 +22,7 @@ type Telemetry = {
   scanners: Array<{ node_id?: string; type: string; status: string; findings: number; duration_ms?: number | null }>;
   completed_nodes?: number; total_nodes?: number; current_node?: string | null;
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
+  trace?: Array<{ node_id: string; type: string; status: string; duration_ms?: number; findings?: number }>;
 };
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "running" | "completed" | "failed" | "blocked" };
 type FlowNode = Node<NodeData>;
@@ -421,7 +422,21 @@ export default function App() {
         </section>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> :
-          findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}><div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div><small>{finding.path}{finding.line ? ":" + finding.line : ""}</small><p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>{finding.masked_value && <code>{finding.masked_value}</code>}
+          findings.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}>
+            <div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div>
+            <small className="finding-location">{finding.path}{finding.line ? ":" + finding.line : ""}</small>
+            <p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>
+            {finding.why_it_matters && <div className="finding-explanation"><b>ПОЧЕМУ ЭТО ПРОБЛЕМА</b><p>{finding.why_it_matters}</p></div>}
+            {finding.recommendation && <div className="finding-remediation"><b>КАК ИСПРАВИТЬ</b><p>{finding.recommendation}</p></div>}
+            {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
+            {finding.masked_value && <code>{finding.masked_value}</code>}
+            <button className="source-preview-toggle" onClick={() => setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding)}>
+              <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть фрагмент" : "Показать место в коде"}
+            </button>
+            {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
+              <div className="source-code-head"><span>{finding.path}</span><b>СТРОКА {finding.line || "—"}</b></div>
+              {finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : <p>Фрагмент недоступен. Откройте файл проекта по указанному пути.</p>}
+            </div>}
             {finding.fingerprint && <div className="finding-lifecycle">
               <label>Статус
                 <select value={findingStates[finding.fingerprint]?.state || "open"} onChange={event => void updateFindingLifecycle(finding, event.target.value as FindingLifecycle["state"])}>
