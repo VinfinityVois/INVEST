@@ -75,7 +75,7 @@ def test_run_snapshot_diff_tracks_finding_lifecycle_and_node_changes():
         "telemetry": {"trace": [{"node_id": "scan", "status": "completed", "duration_ms": 15, "findings": 2}]},
     }
     diff = _compare_run_snapshots(before, after)
-    assert diff["findings"]["summary"] == {"new": 1, "persisting": 1, "disappeared": 1, "not_observed": 0}
+    assert diff["findings"]["summary"] == {"new": 1, "not_observed_before": 0, "persisting": 1, "disappeared": 1, "not_observed": 0}
     assert diff["findings"]["persisting"][0]["severity_changed"] is True
     assert diff["findings"]["absence_confirmed"] is True
     assert diff["nodes"][0]["fields"]["duration_ms"] == {"before": 10, "after": 15}
@@ -90,6 +90,42 @@ def test_partial_run_does_not_mark_missing_findings_as_disappeared():
         "telemetry": {"trace": []},
     }
     after = {"run": {"status": "partial"}, "findings": [], "telemetry": {"trace": []}}
+    diff = _compare_run_snapshots(before, after)
+    assert diff["findings"]["disappeared"] == []
+    assert len(diff["findings"]["not_observed"]) == 1
+    assert diff["findings"]["absence_confirmed"] is False
+
+
+def test_truncated_previous_run_does_not_claim_new_findings():
+    from app.main import _compare_run_snapshots
+
+    before = {
+        "run": {"status": "completed"},
+        "findings_truncated": True,
+        "findings": [],
+        "telemetry": {"trace": []},
+    }
+    after = {
+        "run": {"status": "completed"},
+        "findings_truncated": False,
+        "findings": [{"fingerprint": "possibly-old", "rule_id": "R1", "severity": "HIGH", "path": "a.py", "line": 1}],
+        "telemetry": {"trace": []},
+    }
+    diff = _compare_run_snapshots(before, after)
+    assert diff["findings"]["new"] == []
+    assert len(diff["findings"]["not_observed_before"]) == 1
+
+
+def test_truncated_target_run_does_not_confirm_disappearance():
+    from app.main import _compare_run_snapshots
+
+    before = {
+        "run": {"status": "completed"},
+        "findings_truncated": False,
+        "findings": [{"fingerprint": "old", "rule_id": "R1", "severity": "HIGH", "path": "a.py", "line": 1}],
+        "telemetry": {"trace": []},
+    }
+    after = {"run": {"status": "completed"}, "findings_truncated": True, "findings": [], "telemetry": {"trace": []}}
     diff = _compare_run_snapshots(before, after)
     assert diff["findings"]["disappeared"] == []
     assert len(diff["findings"]["not_observed"]) == 1
