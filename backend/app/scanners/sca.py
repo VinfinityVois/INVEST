@@ -154,6 +154,19 @@ def _load_version_catalog(path: Path) -> dict[str, tuple[str, str, str | None]]:
     return result
 
 
+def _load_project_lockfile(build_dir: Path, project_root: Path) -> dict[tuple[str, str], str]:
+    """Find the nearest Gradle lockfile without traversing outside the project."""
+    current = build_dir
+    while current == project_root or project_root in current.parents:
+        candidate = current / "gradle.lockfile"
+        if candidate.is_file():
+            return _load_lockfile(candidate)
+        if current == project_root:
+            break
+        current = current.parent
+    return {}
+
+
 def _numeric_version(value: str) -> tuple[int, ...] | None:
     if not re.fullmatch(r"\d+(?:\.\d+)*", value):
         return None
@@ -249,7 +262,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
 
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
-        locked = _load_lockfile(build_file.parent / "gradle.lockfile")
+        locked = _load_project_lockfile(build_file.parent, project)
         catalog_path = project / "gradle" / "libs.versions.toml"
         if not catalog_path.is_file():
             catalog_path = build_file.parent / "gradle" / "libs.versions.toml"
