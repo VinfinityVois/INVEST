@@ -768,3 +768,6 @@
 .workflow-diff-row.diff-removed>b{color:#db8a8a}
 .workflow-diff-row.diff-changed>b{color:#d9b875}
 @media(max-width:640px){.workflow-diff-row{grid-template-columns:72px minmax(0,1fr)}.workflow-diff-row>small{grid-column:2}.workflow-version-compare-control button{margin-left:0}}
+
+.run-report-links button{border:0;padding:0;background:transparent;color:#8fb8d0;font:8px 'DM Mono';letter-spacing:.04em;cursor:pointer}
+.run-report-links button:hover{color:#d2eafa;text-decoration:underline}
