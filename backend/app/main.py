@@ -1807,6 +1807,11 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
         raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
     if payload.state != "accepted_risk" and payload.expires_at is not None:
         raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
+    if payload.expires_at is not None:
+        if payload.expires_at.tzinfo is None or payload.expires_at.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Укажите срок действия с часовым поясом.")
+        if payload.expires_at <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=422, detail="Срок принятия риска должен быть в будущем.")
 
     with SessionLocal() as session:
         # Serialize concurrent lifecycle updates for this workflow. This prevents
