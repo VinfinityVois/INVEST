@@ -463,6 +463,72 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 }
             except ValueError as exc:
                 output = {"status": "failed", "decision": "INVALID_POLICY", "message": str(exc), "findings": []}
+        elif node.type == "logic.compare":
+            merged = []
+            for parent in parents:
+                merged.extend(parent.get("findings", []))
+            unique = {}
+            for finding in merged:
+                unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
+            findings = list(unique.values())
+            field = str(node.config.get("field", "severity"))
+            operator = str(node.config.get("operator", "equals"))
+            expected = str(node.config.get("value", ""))[:256]
+            allowed_fields = {"severity", "rule_id", "path", "category", "message", "cve", "cwe", "count"}
+            allowed_operators = {"equals", "not_equals", "contains", "not_contains", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}
+            if field not in allowed_fields or operator not in allowed_operators:
+                output = {"status": "failed", "message": "Некорректное поле или оператор сравнения.", "findings": findings}
+            else:
+                try:
+                    if field == "count":
+                        actual_number = float(len(findings))
+                        expected_number = float(expected)
+                        is_match = {
+                            "equals": actual_number == expected_number,
+                            "not_equals": actual_number != expected_number,
+                            "contains": expected in str(len(findings)),
+                            "not_contains": expected not in str(len(findings)),
+                            "greater_than": actual_number > expected_number,
+                            "greater_or_equal": actual_number >= expected_number,
+                            "less_than": actual_number < expected_number,
+                            "less_or_equal": actual_number <= expected_number,
+                        }[operator]
+                        matched = findings if is_match else []
+                    else:
+                        matched = []
+                        for finding in findings:
+                            raw = finding.get(field, "")
+                            actual = ", ".join(str(item) for item in raw) if isinstance(raw, list) else str(raw if raw is not None else "")
+                            if operator == "equals":
+                                is_match = actual.casefold() == expected.casefold()
+                            elif operator == "not_equals":
+                                is_match = actual.casefold() != expected.casefold()
+                            elif operator == "contains":
+                                is_match = expected.casefold() in actual.casefold()
+                            elif operator == "not_contains":
+                                is_match = expected.casefold() not in actual.casefold()
+                            else:
+                                actual_number = float(actual)
+                                expected_number = float(expected)
+                                is_match = {
+                                    "greater_than": actual_number > expected_number,
+                                    "greater_or_equal": actual_number >= expected_number,
+                                    "less_than": actual_number < expected_number,
+                                    "less_or_equal": actual_number <= expected_number,
+                                }[operator]
+                            if is_match:
+                                matched.append(finding)
+                    matched_keys = {finding.get("fingerprint") or repr(sorted(finding.items())) for finding in matched}
+                    unmatched = [finding for finding in findings if (finding.get("fingerprint") or repr(sorted(finding.items()))) not in matched_keys]
+                    output = {
+                        "status": "completed",
+                        "findings": findings,
+                        "matched_findings": matched,
+                        "unmatched_findings": unmatched,
+                        "summary": {"total": len(findings), "matched": len(matched), "unmatched": len(unmatched)},
+                    }
+                except (ValueError, TypeError):
+                    output = {"status": "failed", "message": "Для числового сравнения укажите числовое значение и поле.", "findings": findings}
         elif node.type == "logic.if":
             output = {"status": "completed", "branch": "false"}
         elif node.type == "ai.explain":
