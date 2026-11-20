@@ -38,6 +38,14 @@ def test_rejects_unsafe_archive_paths(tmp_path, name):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_accepts_windows_style_separators_after_safe_normalization(tmp_path):
+    archive = make_zip([("project\\src\\Main.kt", "fun main() = Unit")])
+
+    result = extract_project_archive(archive, tmp_path)
+
+    assert (tmp_path / result["path"] / "project" / "src" / "Main.kt").read_text() == "fun main() = Unit"
+
+
 def test_rejects_non_zip_and_cleans_workspace(tmp_path):
     with pytest.raises(ArchiveValidationError):
         extract_project_archive(BytesIO(b"not a zip"), tmp_path)
