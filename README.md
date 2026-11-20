@@ -53,9 +53,11 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 ## Текущий статус
 
-Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, постановка запусков в устойчивую очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач, polling статуса запуска и findings API/UI. Расширение Kotlin SAST до полноценного межпроцедурного AST/taint-анализа, Spring Boot dependency management, расширение транзитивного SCA, - Last-run telemetry API and inspector panel: persisted status, queue/start/finish timestamps, total duration, finding counts by severity, per-scanner timings, completed/total nodes, and current node.
-- Server-Sent Events (`/api/runs/{run_id}/events`) stream node-level execution progress; the UI falls back to polling if the stream is unavailable.
-- SSE progress streaming, AI gateway и объяснения остаются в разработке. GitHub Actions проверяет backend tests и frontend build.
+Реализованы редактор React Flow с независимо сворачиваемыми боковыми панелями, реестр нод, валидация графа, сохранение workflow и версий, загрузка ZIP, allowlisted Git source, secrets scanner, начальный Gradle SCA-анализатор с локальным Maven advisory snapshot, Kotlin/Spring SAST (SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes, IDOR) с эталонным benchmark, устойчивая очередь PostgreSQL (`FOR UPDATE SKIP LOCKED`), отдельный worker с heartbeat и восстановлением просроченных задач.
+
+Добавлена телеметрия последнего запуска: статус, время постановки в очередь/начала/завершения, длительность, общее число находок и распределение по severity, длительность каждого сканера и прогресс узлов. API предоставляет `/api/workflows/{workflow_id}/telemetry/latest`, `/api/runs/{run_id}/telemetry` и SSE-поток `/api/runs/{run_id}/events`. Интерфейс получает прогресс через SSE и использует polling как резервный режим.
+
+Остаются в разработке: полноценный межпроцедурный AST/taint-анализ Kotlin SAST, Spring Boot dependency management, расширение транзитивного SCA, AI gateway и объяснения. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
 
 ## Принципы безопасности
 
