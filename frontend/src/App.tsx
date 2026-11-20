@@ -575,8 +575,13 @@ export default function App() {
     setWorkflowDirty(true); setSelectedNodeId(null); setSelectedEdgeId(null);
   }, [setEdges, isValidConnection]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
-    setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false })); setWorkflowDirty(true);
-  }, [setEdges]);
+    if (!isValidConnection(newConnection)) {
+      setResult("Связь не переназначена: типы портов несовместимы.");
+      return;
+    }
+    setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false }));
+    setWorkflowDirty(true);
+  }, [setEdges, isValidConnection]);
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes);
     if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
@@ -975,7 +980,17 @@ export default function App() {
       if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
       setWorkflowDraftName(workflow.name || "");
-      setNodes(workflow.graph.nodes || []);
+      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic", description: manifest?.description || "",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
+          },
+        } as FlowNode;
+      }));
       setEdges(workflow.graph.edges || []);
       setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
       setSelectedEdgeId(null);
@@ -1008,7 +1023,7 @@ export default function App() {
             label: manifest?.title || node.type, nodeType: node.type,
             category: manifest?.category || "Logic",
             description: manifest?.description || "AI-generated draft block.",
-            config: node.config || {}, executionStatus: "idle",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [], executionStatus: "idle",
             executionDetail: "Черновик создан AI · требуется проверка конфигурации",
           },
         };
