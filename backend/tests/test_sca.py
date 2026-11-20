@@ -199,7 +199,7 @@ def test_spring_boot_bom_unknown_version_is_not_guessed(tmp_path):
     project.mkdir()
     (project / "build.gradle.kts").write_text(
         'dependencies {\n'
-        '    implementation(platform("org.springframework.boot:spring-boot-dependencies:3.3.0"))\n'
+        '    implementation(platform("org.springframework.boot:spring-boot-dependencies:3.6.0"))\n'
         '    implementation("org.apache.commons:commons-lang3")\n'
         '}\n',
         encoding="utf-8",
@@ -287,3 +287,24 @@ def test_root_lockfile_does_not_duplicate_direct_findings_across_subprojects(tmp
 
     assert len(findings) == 1
     assert findings[0]["path"] == "service-a/build.gradle.kts"
+
+
+def test_spring_boot_bom_35_snapshot_uses_tagged_managed_versions(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies {\n'
+        '    implementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.0"))\n'
+        '    implementation("org.apache.commons:commons-lang3")\n'
+        '    implementation("com.fasterxml.jackson.core:jackson-databind")\n'
+        '    implementation("com.google.code.gson:gson")\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    findings = scan_gradle_project(project)
+    by_artifact = {item["artifact"]: item for item in findings}
+
+    assert by_artifact["commons-lang3"]["version"] == "3.17.0"
+    assert by_artifact["jackson-databind"]["version"] == "2.19.0"
+    assert "gson" not in by_artifact
