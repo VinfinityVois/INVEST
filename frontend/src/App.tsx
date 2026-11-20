@@ -9,12 +9,13 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
+type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; lines: Array<{ line: number; text: string }> };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
@@ -121,6 +122,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [projectFileQuery, setProjectFileQuery] = useState("");
+  const [expandedProjectDirs, setExpandedProjectDirs] = useState<Set<string>>(new Set());
   const [projectFilePreview, setProjectFilePreview] = useState<ProjectFilePreview | null>(null);
   const [projectWorkspaceOpen, setProjectWorkspaceOpen] = useState(false);
   const [projectFilesLoading, setProjectFilesLoading] = useState(false);
@@ -532,6 +535,49 @@ export default function App() {
   const aiNode = nodes.find(node => node.data.nodeType === "ai.explain");
   const aiNodeResult = aiNode ? telemetry?.node_results?.[aiNode.id] : undefined;
 
+  const projectTree = useMemo(() => {
+    const root: ProjectTreeNode = { name: "", path: "", kind: "directory", children: [] };
+    const query = projectFileQuery.trim().toLowerCase();
+    for (const file of projectFiles) {
+      if (query && !file.path.toLowerCase().includes(query)) continue;
+      const parts = file.path.split("/").filter(Boolean);
+      let cursor = root;
+      parts.forEach((part, index) => {
+        const currentPath = parts.slice(0, index + 1).join("/");
+        const isFile = index === parts.length - 1;
+        let child = cursor.children.find(item => item.name === part);
+        if (!child) {
+          child = { name: part, path: currentPath, kind: isFile ? "file" : "directory", size: isFile ? file.size : undefined, children: [] };
+          cursor.children.push(child);
+        }
+        cursor = child;
+      });
+    }
+    const sort = (items: ProjectTreeNode[]) => {
+      items.sort((a, b) => a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1);
+      items.forEach(item => sort(item.children));
+    };
+    sort(root.children);
+    return root.children;
+  }, [projectFiles, projectFileQuery]);
+
+  const toggleProjectDir = (path: string) => setExpandedProjectDirs(current => {
+    const next = new Set(current);
+    if (next.has(path)) next.delete(path); else next.add(path);
+    return next;
+  });
+  const renderProjectTree = (items: ProjectTreeNode[], depth = 0): React.ReactNode => items.map(item => {
+    const expanded = projectFileQuery.trim() ? true : expandedProjectDirs.has(item.path);
+    if (item.kind === "directory") return <div className="project-tree-entry" key={item.path}>
+      <button className="project-file-row project-folder-row" style={{ paddingLeft: 7 + depth * 13 }} onClick={() => toggleProjectDir(item.path)} aria-expanded={expanded}>
+        <ChevronRight size={11} className={expanded ? "project-tree-chevron expanded" : "project-tree-chevron"}/><FolderOpen size={13}/><span title={item.path}>{item.name}</span><small>{item.children.length}</small>
+      </button>
+      {expanded && <div className="project-tree-children">{renderProjectTree(item.children, depth + 1)}</div>}
+    </div>;
+    const file = projectFiles.find(candidate => candidate.path === item.path);
+    return <button key={item.path} className={"project-file-row project-leaf-row" + (projectFilePreview?.path === item.path ? " selected" : "")} style={{ paddingLeft: 24 + depth * 13 }} onClick={() => file && void openProjectFile(file)}><FileText size={12}/><span title={item.path}>{item.name}</span><small>{(item.size || 0) < 1024 ? (item.size || 0) + " B" : ((item.size || 0) / 1024).toFixed(0) + " KB"}</small></button>;
+  });
+
   return <main className="shell">
     <header className="topbar">
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
@@ -729,8 +775,9 @@ export default function App() {
       <section className="project-workspace">
         <header className="project-workspace-header"><div><div className="eyebrow">PROJECT WORKSPACE / SOURCE EXPLORER</div><h2><FolderOpen size={19}/> {activeProject.name}</h2><p>{activeProject.file_count} файлов · {(activeProject.expanded_bytes / 1048576).toFixed(1)} MiB · {activeProject.workspace_path}</p></div><div className="project-workspace-actions"><span className="project-connected"><i/> ПОДКЛЮЧЁН К WORKFLOW</span><button className="ghost" onClick={() => setProjectWorkspaceOpen(false)}><X size={14}/> Закрыть</button></div></header>
         <div className="project-workspace-body">
-          <aside className="project-file-tree"><div className="section-caption">ФАЙЛЫ ПРОЕКТА · {projectFiles.length}</div>{projectFilesLoading && <small className="source-loading">Загрузка…</small>}
-            {projectFiles.map(file => <button className={"project-file-row" + (projectFilePreview?.path === file.path ? " selected" : "")} key={file.path} onClick={() => void openProjectFile(file)}><FileText size={12}/><span title={file.path}>{file.path}</span><small>{file.size < 1024 ? file.size + " B" : (file.size / 1024).toFixed(0) + " KB"}</small></button>)}
+          <aside className="project-file-tree"><div className="project-tree-toolbar"><div className="section-caption">СТРУКТУРА ПРОЕКТА · {projectFiles.length} ФАЙЛОВ</div><label className="project-tree-search"><Search size={12}/><input value={projectFileQuery} onChange={event => setProjectFileQuery(event.target.value)} placeholder="Поиск по файлам и папкам…"/>{projectFileQuery && <button onClick={() => setProjectFileQuery("")} title="Очистить поиск"><X size={11}/></button>}</label></div>{projectFilesLoading && <small className="source-loading">Загрузка…</small>}
+            {projectFiles.length > 0 && projectTree.length > 0 && <div className="project-tree-list">{renderProjectTree(projectTree)}</div>}
+            {projectFiles.length > 0 && projectTree.length === 0 && <p className="telemetry-empty">По запросу ничего не найдено.</p>}
             {projectFiles.length === 0 && <p className="telemetry-empty">В архиве не найдено файлов для отображения.</p>}
           </aside>
           <section className="project-file-view"><div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || "Выбери файл в дереве проекта"}</span>{projectFilePreview && <small>{projectFilePreview.total_lines} строк · текстовый просмотр</small>}</div>
