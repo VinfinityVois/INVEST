@@ -190,6 +190,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
     fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
