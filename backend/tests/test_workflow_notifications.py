@@ -75,3 +75,13 @@ def test_webhook_posts_bounded_payload_without_following_redirects(monkeypatch):
     assert calls["client_options"]["follow_redirects"] is False
     assert calls["payload"]["report"]["finding_count"] == 1
     assert "message" not in calls["payload"]["report"]["findings"][0]
+
+
+def test_safe_report_collects_findings_from_multiple_upstream_steps():
+    report = notifications._safe_report([
+        {"status": "completed", "findings": [{"fingerprint": "secret-1", "severity": "HIGH", "path": "A.kt"}]},
+        {"status": "completed", "findings": [{"fingerprint": "sast-2", "severity": "CRITICAL", "path": "B.kt"}]},
+        {"status": "skipped", "findings": [{"fingerprint": "inactive-3", "severity": "CRITICAL", "path": "C.kt"}]},
+    ])
+    assert report["finding_count"] == 2
+    assert report["severity_counts"] == {"HIGH": 1, "CRITICAL": 1}

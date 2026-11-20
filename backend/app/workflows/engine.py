@@ -501,7 +501,9 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 }
         elif node.type == "notify.webhook":
             try:
-                output = send_webhook_notification(node.config, parents, node_id=node_id, workflow_name=graph.name)
+                # Include findings from all executed upstream steps, not only the direct parent.
+                executed_outputs = [value for value in outputs.values() if value.get("status") != "skipped"]
+                output = send_webhook_notification(node.config, executed_outputs, node_id=node_id, workflow_name=graph.name)
             except ValueError as exc:
                 output = {"status": "configuration_required", "message": str(exc)}
             except Exception as exc:
