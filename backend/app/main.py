@@ -5,6 +5,7 @@ import re
 import os
 import hashlib
 import tempfile
+import zipfile
 from pathlib import Path, PurePosixPath
 from datetime import datetime, timezone
 from typing import Literal
@@ -13,6 +14,7 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -434,6 +436,91 @@ def preview_project_file(
             "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
         }
+
+
+@app.get("/api/projects/{project_id}/download")
+def download_project_archive(project_id: UUID):
+    """Export a project without VCS metadata, symlinks, or likely credentials."""
+    text_suffixes = {
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
+        ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml",
+        ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1",
+    }
+    max_archive_bytes = 1024 * 1024 * 1024
+    temporary_path = None
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        try:
+            fd, temporary_path = tempfile.mkstemp(prefix="invest-project-", suffix=".zip")
+            os.close(fd)
+            included = 0
+            skipped_sensitive = 0
+            with zipfile.ZipFile(temporary_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as archive:
+                for current, directories, filenames in os.walk(root, followlinks=False):
+                    current_path = Path(current)
+                    directories[:] = sorted(
+                        name for name in directories
+                        if name != ".git"
+                        and not (current_path / name).is_symlink()
+                        and not _project_path_is_sensitive(PurePosixPath((current_path / name).relative_to(root).as_posix()))
+                    )
+                    for filename in sorted(filenames):
+                        source = current_path / filename
+                        if source.is_symlink():
+                            continue
+                        relative = PurePosixPath(source.relative_to(root).as_posix())
+                        if _project_path_is_sensitive(relative):
+                            skipped_sensitive += 1
+                            continue
+                        try:
+                            if not source.is_file():
+                                continue
+                            size = source.stat().st_size
+                            if size > 512 * 1024 * 1024:
+                                skipped_sensitive += 1
+                                continue
+                            if relative.suffix.lower() in text_suffixes and size <= 1_000_000:
+                                try:
+                                    content = source.read_text(encoding="utf-8")
+                                except (UnicodeDecodeError, OSError):
+                                    content = None
+                                if content is not None and not _project_content_is_safe(content):
+                                    skipped_sensitive += 1
+                                    continue
+                            archive.write(source, arcname=relative.as_posix())
+                            included += 1
+                            if os.path.getsize(temporary_path) > max_archive_bytes:
+                                raise HTTPException(status_code=413, detail="Экспорт ограничен размером ZIP до 1 GiB.")
+                        except OSError:
+                            continue
+            if included == 0:
+                raise HTTPException(status_code=404, detail="В проекте нет файлов, доступных для экспорта.")
+            session.add(AuditLog(
+                action="project.exported",
+                entity="project",
+                entity_id=str(project_id),
+                details={"included_files": included, "skipped_sensitive_files": skipped_sensitive},
+            ))
+            session.commit()
+            safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", project.name).strip("-._") or "project"
+            return FileResponse(
+                temporary_path,
+                media_type="application/zip",
+                filename=f"{safe_name}.zip",
+                background=BackgroundTask(os.unlink, temporary_path),
+                headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+            )
+        except HTTPException:
+            if temporary_path and os.path.exists(temporary_path):
+                os.unlink(temporary_path)
+            raise
+        except (OSError, zipfile.BadZipFile) as exc:
+            if temporary_path and os.path.exists(temporary_path):
+                os.unlink(temporary_path)
+            raise HTTPException(status_code=500, detail="Не удалось сформировать ZIP-экспорт проекта.") from exc
 
 
 @app.api_route("/api/projects/{project_id}/preview", methods=["GET", "HEAD"])
