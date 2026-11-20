@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -19,6 +20,7 @@ from starlette.background import BackgroundTask
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
+from croniter import croniter
 
 from app.config import settings
 from app.ai.explanations import provider_configuration
@@ -27,7 +29,7 @@ from app.sources.run_files import RunSourceFileError, resolve_run_source_file
 from app.scanners.presentation import _redact
 from app.security.redaction import redact_text
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion
+from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
@@ -43,6 +45,10 @@ class ProjectRename(BaseModel):
         if not value:
             raise ValueError("Название проекта не может быть пустым.")
         return value
+
+
+class WorkflowScheduleUpdate(BaseModel):
+    enabled: bool = True
 
 
 class SelectedRunRequest(BaseModel):
@@ -824,6 +830,99 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
         session.add(WorkflowVersion(workflow_id=workflow_id, version=version, graph=graph.model_dump(mode="json")))
         session.commit()
         return {"id": str(workflow.id), "name": workflow.name, "version": version}
+
+
+@app.get("/api/workflows/{workflow_id}/schedule")
+def get_workflow_schedule(workflow_id: UUID):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        schedule = session.scalar(
+            select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
+        )
+        if schedule is None:
+            return {"enabled": False, "configured": False}
+        return {
+            "enabled": schedule.enabled,
+            "configured": True,
+            "cron": schedule.cron_expression,
+            "timezone": schedule.timezone,
+            "next_run_at": schedule.next_run_at,
+            "last_run_at": schedule.last_run_at,
+        }
+
+
+@app.put("/api/workflows/{workflow_id}/schedule")
+def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        schedule = session.scalar(
+            select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
+        )
+        if not payload.enabled:
+            if schedule is not None:
+                schedule.enabled = False
+                schedule.next_run_at = None
+                session.commit()
+            return {"enabled": False, "configured": schedule is not None}
+
+        version = session.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        triggers = [node for node in graph.nodes if node.type == "trigger.schedule"]
+        if len(triggers) != 1:
+            raise HTTPException(status_code=422, detail="Добавьте ровно одну Schedule trigger ноду.")
+        config = triggers[0].config
+        expression = str(config.get("cron", "")).strip()
+        timezone_name = str(config.get("timezone", "UTC")).strip() or "UTC"
+        if not expression or not croniter.is_valid(expression):
+            raise HTTPException(status_code=422, detail="Укажите корректное cron-выражение из пяти полей.")
+        try:
+            zone = ZoneInfo(timezone_name)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=422, detail="Укажите существующий IANA timezone.") from exc
+        now = datetime.now(timezone.utc)
+        next_run = croniter(expression, now.astimezone(zone)).get_next(datetime).astimezone(timezone.utc)
+        if schedule is None:
+            schedule = WorkflowSchedule(
+                workflow_id=workflow_id,
+                cron_expression=expression,
+                timezone=timezone_name,
+                enabled=True,
+                next_run_at=next_run,
+            )
+            session.add(schedule)
+        else:
+            schedule.cron_expression = expression
+            schedule.timezone = timezone_name
+            schedule.enabled = True
+            schedule.next_run_at = next_run
+        session.add(AuditLog(
+            action="workflow.schedule.updated",
+            entity="workflow",
+            entity_id=str(workflow_id),
+            details={"enabled": True, "cron": expression, "timezone": timezone_name},
+        ))
+        session.commit()
+        return {
+            "enabled": True,
+            "configured": True,
+            "cron": expression,
+            "timezone": timezone_name,
+            "next_run_at": next_run,
+        }
 
 
 @app.post("/api/workflows/{workflow_id}/runs", status_code=202)
