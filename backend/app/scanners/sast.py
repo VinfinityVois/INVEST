@@ -143,51 +143,45 @@ def _method_parameters(signature: str) -> list[tuple[str, bool]]:
     return parameters
 
 
-def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
-    """Conservative same-file call-graph taint analysis for Kotlin SQL sinks.
+def _scan_interprocedural_sql_taint(path: str, text: str, project_files: dict[str, str] | None = None) -> list[dict]:
+    """Bounded same-project Kotlin taint analysis across direct function calls.
 
-    Tracks explicitly annotated HTTP inputs through local assignments and direct
-    function arguments. It only reports when tainted data reaches a SQL API's
-    first argument and that expression is SQL-like or derived from such SQL.
+    This is deliberately conservative and lexical (not a Kotlin compiler AST):
+    annotated HTTP parameters and request accessors are tracked through local
+    assignments and direct calls, including helpers declared in other .kt files.
     """
+    sources = project_files or {path: text}
     methods = []
-    for name, start, body_start, end, body in _method_blocks(text):
-        signature = text[start:body_start]
-        parameters = _method_parameters(signature)
-        methods.append({
-            "name": name, "start": start, "body_start": body_start,
-            "body": body, "parameters": parameters,
-            "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
-        })
-    # Kotlin expression-bodied functions are common in controllers/services and
-    # are not covered by the block-body iterator above.
-    block_starts = {method["start"] for method in methods}
     expression_pattern = re.compile(
         r"(?m)^\s*(?:(?:override|private|internal|public|suspend)\s+)*"
         r"fun\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*"
         r"(?:\:\s*[^=\n]+)?\s*=\s*([^\n]*)"
     )
-    for match in expression_pattern.finditer(text):
-        if match.start() in block_starts:
-            continue
-        expression = match.group(3).strip()
-        if not expression:
-            next_line = text[match.end():].splitlines()
-            expression = next_line[0].strip() if next_line else ""
-        if not expression:
-            continue
-        signature = f"fun {match.group(1)}({match.group(2)})"
-        parameters = _method_parameters(signature)
-        methods.append({
-            "name": match.group(1), "start": match.start(),
-            "body_start": match.start(3), "body": expression,
-            "parameters": parameters,
-            "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
-        })
+    for source_path, source_text in sources.items():
+        block_methods = list(_method_blocks(source_text))
+        block_starts = {item[1] for item in block_methods}
+        for name, start, body_start, _end, body in block_methods:
+            parameters = _method_parameters(source_text[start:body_start])
+            methods.append({
+                "name": name, "path": source_path, "source": source_text,
+                "body_start": body_start, "body": body, "parameters": parameters,
+                "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
+            })
+        for match in expression_pattern.finditer(source_text):
+            if match.start() in block_starts:
+                continue
+            expression = match.group(3).strip()
+            if not expression:
+                continue
+            parameters = _method_parameters(f"fun {match.group(1)}({match.group(2)})")
+            methods.append({
+                "name": match.group(1), "path": source_path, "source": source_text,
+                "body_start": match.start(3), "body": expression, "parameters": parameters,
+                "tainted_parameters": {i for i, (_param, source) in enumerate(parameters) if source},
+            })
 
     if not methods:
         return []
-
     by_name: dict[str, list[int]] = {}
     for index, method in enumerate(methods):
         by_name.setdefault(method["name"], []).append(index)
@@ -195,28 +189,28 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
     tainted_arguments = [set(method["tainted_parameters"]) for method in methods]
     tainted_variables: list[set[str]] = [set() for _ in methods]
     interprocedural_arguments: list[set[int]] = [set() for _ in methods]
-    # Fixed point over direct calls. A hard cap protects against pathological graphs.
-    for _iteration in range(min(12, len(methods) + 1)):
+    # Fixed-point propagation is bounded by both graph size and iteration count.
+    for _iteration in range(min(16, len(methods) + 1)):
         changed = False
         for index, method in enumerate(methods):
-            variables = set(name for position, (name, _source) in enumerate(method["parameters"])
-                            if position in tainted_arguments[index])
+            variables = {
+                name for position, (name, _source) in enumerate(method["parameters"])
+                if position in tainted_arguments[index]
+            }
             body = method["body"]
             for _pass in range(8):
                 before = len(variables)
-                for assignment in re.finditer(
-                    r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([^\n;]+)", body
-                ):
+                for assignment in re.finditer(r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([^\n;]+)", body):
                     variable, expression = assignment.groups()
-                    if re.search(r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(", expression):
+                    request_source = re.search(
+                        r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(",
+                        expression,
+                    )
+                    carries_taint = any(
+                        re.search(rf"\b{re.escape(item)}\b", expression) for item in variables
+                    )
+                    if request_source or carries_taint:
                         variables.add(variable)
-                    elif any(re.search(rf"\b{re.escape(item)}\b", expression) for item in variables):
-                        variables.add(variable)
-                    elif "$" in expression and _SQL_CONTEXT.search(expression):
-                        # A template is a taint carrier only when an interpolation
-                        # references a value already marked as tainted.
-                        if any(re.search(rf"\$\{{?{re.escape(item)}\}}?", expression) for item in variables):
-                            variables.add(variable)
                 if len(variables) == before:
                     break
             if variables != tainted_variables[index]:
@@ -229,18 +223,18 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                     continue
                 args = _split_call_arguments(call.group(2))
                 for target in targets:
-                    target_parameters = methods[target]["parameters"]
-                    for position, argument in enumerate(args[:len(target_parameters)]):
-                        argument_is_tainted = bool(re.search(
+                    for position, argument in enumerate(args[:len(methods[target]["parameters"])]):
+                        is_tainted = bool(re.search(
                             r"\brequest\s*\.\s*(?:getParameter|getHeader|getQueryString)\s*\(",
                             argument,
-                        )) or any(re.search(rf"\b{re.escape(item)}\b", argument) for item in variables)
-                        if argument_is_tainted:
+                        )) or any(
+                            re.search(rf"\b{re.escape(item)}\b", argument) for item in variables
+                        )
+                        if is_tainted:
                             if position not in tainted_arguments[target]:
                                 tainted_arguments[target].add(position)
-                                interprocedural_arguments[target].add(position)
                                 changed = True
-                            elif position not in methods[target]["tainted_parameters"]:
+                            if position not in methods[target]["tainted_parameters"]:
                                 interprocedural_arguments[target].add(position)
         if not changed:
             break
@@ -249,14 +243,10 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
     for index, method in enumerate(methods):
         if not interprocedural_arguments[index]:
             continue
-        variables = set(tainted_variables[index])
+        variables = tainted_variables[index]
         body = method["body"]
         for sink in _SQL_SINK_CALL.finditer(body):
             expression = sink.group(1).strip()
-            if not _SQL_CONTEXT.search(expression) and not any(
-                re.search(rf"\b{re.escape(item)}\b", expression) for item in variables
-            ):
-                continue
             reaches_sink = any(
                 re.search(rf"\$\{{?{re.escape(item)}\}}?", expression)
                 or re.search(rf"\b{re.escape(item)}\b", expression)
@@ -265,14 +255,13 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
             if not reaches_sink:
                 continue
             findings.append(_finding(
-                "kotlin.taint.interprocedural-sql-injection", path,
-                _line(text, method["body_start"] + sink.start()), "HIGH",
+                "kotlin.taint.interprocedural-sql-injection", method["path"],
+                _line(method["source"], method["body_start"] + sink.start()), "HIGH",
                 "Данные HTTP-запроса проходят через вызов функции и попадают в SQL-выражение. "
                 "Используйте bind-параметры вместо конкатенации или Kotlin string templates.",
                 "CWE-89", 0.91,
             ))
     return findings
-
 
 def _scan_tls(path: str, text: str) -> list[dict]:
     findings = []
@@ -382,7 +371,7 @@ def scan_kotlin_project(root: str | Path, on_progress=None) -> list[dict]:
     findings = []
     for path, text in files.items():
         findings.extend(_scan_sql(path, text))
-        findings.extend(_scan_interprocedural_sql_taint(path, text))
+        findings.extend(_scan_interprocedural_sql_taint(path, text, files))
         findings.extend(_scan_tls(path, text))
         findings.extend(_scan_cors(path, text))
     findings.extend(_scan_public_sensitive_route(files))
