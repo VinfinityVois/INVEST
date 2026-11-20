@@ -90,3 +90,42 @@ def test_workspace_source_rejects_absolute_paths(tmp_path, monkeypatch):
 
     assert result["status"] == "failed"
     assert result["outputs"]["source"]["status"] == "failed"
+
+
+def test_git_source_is_passed_to_secrets_scanner(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    repository = workspace / "git-test"
+    repository.mkdir(parents=True)
+    (repository / "application.properties").write_text(
+        'spring.datasource.password=GitSourcePasswordValue123',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+    monkeypatch.setattr(settings, "allowed_targets", "https://github.com/example/repo")
+    monkeypatch.setattr(
+        "app.workflows.engine.clone_allowed_repository",
+        lambda **kwargs: {
+            "path": "git-test",
+            "source": "git",
+            "repository": "https://github.com/example/repo",
+            "ref": "main",
+        },
+    )
+
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.git", "config": {"url": "https://github.com/example/repo", "ref": "main"}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["source"]["status"] == "ready"
+    assert result["outputs"]["scan"]["summary"]["total"] == 1
