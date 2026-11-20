@@ -711,3 +711,9 @@
 .trace-meta{display:grid;justify-items:end;gap:3px}.trace-meta>strong{color:#9bb8cf;font:6px 'DM Mono';letter-spacing:.3px}
 .trace-completed .trace-index{color:#8bd1b1;background:rgba(67,151,113,.14)}.trace-running .trace-index{color:#a6d9f2;background:rgba(69,145,190,.2)}.trace-failed .trace-index,.trace-blocked .trace-index{color:#e6a19b;background:rgba(171,75,69,.17)}.trace-skipped .trace-index{color:#9ba7b3;background:rgba(110,124,138,.13)}
 @media(prefers-reduced-motion:reduce){.trace-item-button{transition:none}}
+
+.trace-filters{display:flex;flex-wrap:wrap;gap:5px}
+.trace-filters button{padding:5px 8px;border:1px solid rgba(103,137,168,.2);border-radius:4px;background:rgba(10,23,36,.72);color:#8da5bb;font:7px 'DM Mono';cursor:pointer}
+.trace-filters button:hover,.trace-filters button.is-active{border-color:rgba(106,174,220,.55);background:rgba(35,68,94,.6);color:#d2e5f5}
+.trace-error .trace-index{color:#f0a19b;background:rgba(171,75,69,.2)}
+.trace-blocked .trace-index{color:#d9b77d;background:rgba(171,130,69,.17)}
