@@ -166,6 +166,26 @@ Kotlin SAST дополнен ограниченным межпроцедурны
 - ZIP/Git checkout выполняется в workspace; запуск проектных файлов запрещён.
 
 
+## GitHub Actions: запуск Security Gate
+
+В \`.github/workflows/security-check.yml\` добавлен ручной CI workflow. Он вызывает сохранённый workflow в INVEST, ждёт завершения worker и возвращает ненулевой exit code при \`BLOCK\`, ошибке, частичном выполнении, отсутствии решения gate или timeout. \`PASS\` и \`WARN\` завершаются успешно.
+
+### Настройка API
+
+1. Сгенерируйте отдельный случайный секрет длиной не менее 32 байт и задайте его как \`CI_TRIGGER_TOKEN\` в корневом \`.env\` платформы. Не используйте \`APP_SECRET_KEY\`, \`LLM_API_KEY\` или webhook URL в качестве CI-токена.
+2. Перезапустите API после изменения \`.env\`.
+3. В настройках GitHub repository → Settings → Secrets and variables → Actions добавьте:
+   - \`INVEST_API_BASE_URL\` — публичный HTTPS URL API, доступный GitHub-hosted runner;
+   - \`INVEST_CI_TOKEN\` — то же значение, что \`CI_TRIGGER_TOKEN\`.
+4. В интерфейсе INVEST сохраните workflow, содержащий ровно одну ноду \`CI security gate\`. В демонстрационном \`examples/demo-workflow.json\` эта нода уже добавлена. Источник должен быть разрешён через \`ALLOWED_TARGETS\`.
+5. Скопируйте UUID workflow и запустите GitHub Actions → **INVEST security check** → Run workflow, передав UUID.
+
+CI API:
+- \`POST /api/ci/workflows/{workflow_id}/runs\` — защищённый запуск сохранённого workflow; требует \`X-CI-Token\` и ровно одну Security Gate ноду;
+- \`GET /api/ci/runs/{run_id}\` — защищённый минимальный polling endpoint; возвращает статус и решение gate без исходных findings или source excerpts.
+
+Если \`CI_TRIGGER_TOKEN\` не задан, оба endpoint закрыты ответом \`503\`. Неверный/отсутствующий токен получает \`401\`. Секрет передаётся только в заголовке и сравнивается constant-time. Не публикуйте API без HTTPS и сетевого ограничения доступа. GitHub-hosted runner не может обращаться к \`localhost\`; API должен быть доступен из runner либо используйте self-hosted runner в доверенной сети.
+
 ## Security Gate
 
 The `ci.gate` node evaluates the merged findings using explicit severity thresholds.
