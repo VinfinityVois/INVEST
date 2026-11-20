@@ -17,6 +17,7 @@ def test_demo_workflow_is_valid_and_pins_training_repository():
     source = next(node for node in graph.nodes if node.type == "source.git")
     assert source.config["url"] == "https://github.com/TBagirov/training"
     assert source.config["ref"] == "fe1fcbe212669783480666b9b60147c8a8c6eef4"
+    assert source.config["subdirectory"] == "training-project""
     assert {node.type for node in graph.nodes} >= {
         "trigger.manual", "source.git", "scan.secrets", "scan.sca", "scan.sast",
         "findings.merge", "ai.explain", "notify.webhook",
