@@ -407,7 +407,7 @@ def preview_project_file(
         except (OSError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=404, detail="Файл недоступен для текстового просмотра (лимит 1 MiB).") from exc
         lines = content.splitlines()
-        safe_name = not any(token in relative.name.lower() for token in ("secret", "credential", "password", "token", "private", ".env"))
+        safe_name = not any(token in part.lower() for part in relative.parts for token in ("secret", "credential", "password", "token", "private", ".env"))
         editable_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
         editable = safe_name and relative.suffix.lower() in editable_suffixes and all(_redact(line) == line for line in lines)
         first = min(start_line, max(1, len(lines)))
@@ -430,7 +430,7 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
         raise HTTPException(status_code=400, detail="Invalid project file path")
     if relative.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}:
         raise HTTPException(status_code=415, detail="Этот тип файла нельзя редактировать в браузере.")
-    if any(token in relative.name.lower() for token in ("secret", "credential", "password", "token", "private", ".env")):
+    if any(token in part.lower() for part in relative.parts for token in ("secret", "credential", "password", "token", "private", ".env")):
         raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами доступны только для чтения.")
     if any(_redact(line) != line for line in payload.content.splitlines()):
         raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
@@ -493,7 +493,7 @@ def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_l
                 if scanned >= 3000 or len(results) >= 100:
                     break
                 item = Path(current) / filename
-                if item.is_symlink() or item.suffix.lower() not in text_suffixes or any(token in filename.lower() for token in ("secret", "credential", "password", "token", "private", ".env")):
+                if item.is_symlink() or item.suffix.lower() not in text_suffixes or any(token in part.lower() for part in item.relative_to(root).parts for token in ("secret", "credential", "password", "token", "private", ".env")):
                     continue
                 try:
                     if item.stat().st_size > 512_000:
