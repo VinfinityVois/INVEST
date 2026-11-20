@@ -619,3 +619,53 @@ def test_maven_child_inherits_parent_dependency_management(tmp_path):
     findings = scan_maven_project(project)
 
     assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
+
+
+def test_maven_inherits_dependency_management_through_multiple_local_parents(tmp_path):
+    project = tmp_path / "project"
+    (project / "module").mkdir(parents=True)
+    (project / "grandparent.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>grandparent</artifactId>"
+        "<version>1</version><dependencyManagement><dependencies><dependency>"
+        "<groupId>com.google.code.gson</groupId><artifactId>gson</artifactId><version>2.8.8</version>"
+        "</dependency></dependencies></dependencyManagement></project>",
+        encoding="utf-8",
+    )
+    (project / "parent.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId>"
+        "<artifactId>grandparent</artifactId><version>1</version><relativePath>grandparent.xml</relativePath>"
+        "</parent><groupId>demo</groupId><artifactId>parent</artifactId><version>1</version></project>",
+        encoding="utf-8",
+    )
+    (project / "module" / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId>"
+        "<artifactId>parent</artifactId><version>1</version><relativePath>../parent.xml</relativePath>"
+        "</parent><artifactId>app</artifactId><dependencies><dependency>"
+        "<groupId>com.google.code.gson</groupId><artifactId>gson</artifactId></dependency>"
+        "</dependencies></project>",
+        encoding="utf-8",
+    )
+
+    findings = scan_maven_project(project / "module")
+
+    assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
+
+
+def test_maven_empty_parent_relative_path_disables_local_parent_lookup(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId><artifactId>parent</artifactId>"
+        "<version>1</version><properties><inherited.version>2.9.10.3</inherited.version></properties></project>",
+        encoding="utf-8",
+    )
+    (project / "module").mkdir()
+    (project / "module" / "pom.xml").write_text(
+        "<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId><artifactId>parent</artifactId>"
+        "<version>1</version><relativePath/></parent><artifactId>app</artifactId><dependencies><dependency>"
+        "<groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId>"
+        "<version>$" "{inherited.version}</version></dependency></dependencies></project>",
+        encoding="utf-8",
+    )
+
+    assert scan_maven_project(project / "module") == []
