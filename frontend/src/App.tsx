@@ -163,6 +163,11 @@ export default function App() {
         : step?.status === "completed" || step?.status === "ready" ? "completed"
         : telemetry.status === "queued" ? "queued" : "idle";
       let detail = output?.message || "";
+      if (output?.status === "completed" && node.data.nodeType.startsWith("scan.")) {
+        detail = `Проверка завершена · найдено: ${output.findings ?? 0}.`;
+      } else if (output?.status === "completed" && node.data.nodeType === "findings.merge") {
+        detail = `Объединено уникальных находок: ${output.findings ?? 0}.`;
+      }
       let notes: string[] = [];
       if (node.data.nodeType === "ai.explain" && output) {
         notes = (output.explanations || []).map(item => [item.root_cause, item.recommendation].filter(Boolean).join(" · ")).filter(Boolean);
