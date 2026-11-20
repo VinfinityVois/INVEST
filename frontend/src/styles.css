@@ -548,3 +548,12 @@
 .project-source-code .syntax-string{color:#9bc99d}
 .project-source-code .syntax-number{color:#d7ad79}
 .project-source-code .syntax-keyword{color:#c29be8}
+
+/* Editor line navigation */
+.editor-jump-control{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.editor-jump-control label{height:25px;display:flex;align-items:center;gap:5px;padding:0 6px;border:1px solid #30475f;border-radius:4px;background:#08131f;color:#7893ae}
+.editor-jump-control label span{font:6px 'DM Mono';letter-spacing:.5px}
+.editor-jump-control input{width:38px;border:0;outline:0;background:transparent;color:#d8e8f7;text-align:center;font:8px 'DM Mono'}
+.editor-jump-control button{height:25px;padding:0 7px;border:1px solid #3b5c78;border-radius:4px;background:#14283c;color:#a9c9e5;font:7px 'DM Mono';cursor:pointer}
+.editor-jump-control button:disabled{opacity:.35;cursor:not-allowed}
+@media(max-width:760px){.editor-jump-control{width:100%;justify-content:flex-start}.project-editor-findbar>small{width:100%;line-height:1.5}}
