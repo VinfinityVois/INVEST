@@ -380,3 +380,57 @@
 .node-severity.severity-medium{border-color:rgba(207,169,91,.3);background:rgba(118,91,30,.16);color:#e7cb88}
 .node-severity.severity-low{border-color:rgba(93,157,198,.27);background:rgba(37,84,119,.16);color:#9ac9e8}
 .node-severity.severity-info{border-color:rgba(130,145,164,.22);background:rgba(66,79,96,.16);color:#aebdce}
+
+
+/* Persistent project library and in-platform source explorer */
+.project-library{display:flex;flex-direction:column;gap:7px;margin:8px 0 13px}
+.project-add-button{height:34px;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #397b77;border-radius:6px;background:linear-gradient(110deg,#123b3a,#142b39);color:#c8fff0;font-size:9px;font-weight:700;cursor:pointer}
+.project-add-button:hover{border-color:#54b7a6;background:#174642}
+.project-add-button input,.project-library-actions label input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.project-library-item{padding:8px;background:rgba(13,23,35,.88);border:1px solid #293c52;border-radius:7px;transition:border-color .16s,background .16s}
+.project-library-item.project-active{border-color:#438b83;background:linear-gradient(120deg,rgba(20,62,57,.38),rgba(16,29,43,.92))}
+.project-library-main{display:flex;align-items:center;gap:8px;min-width:0}
+.project-folder-icon{width:28px;height:28px;display:grid;place-items:center;flex-shrink:0;border:1px solid #365f65;border-radius:6px;background:#142c35;color:#8bd6c4}
+.project-library-copy{min-width:0;flex:1}
+.project-library-copy b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dce8f4;font-size:9px}
+.project-library-copy small{display:block;margin-top:3px;color:#7e92a9;font:7px 'DM Mono'}
+.project-library-actions{display:flex;align-items:center;gap:4px;margin-top:7px;padding-top:6px;border-top:1px solid #26374a}
+.project-library-actions button,.project-library-actions label{height:24px;min-width:24px;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 6px;border:1px solid #30455d;border-radius:4px;background:#152438;color:#a9c1da;font-size:7px;cursor:pointer}
+.project-library-actions button:first-child{flex:1;color:#bcebdc;border-color:#315e59;background:#142d2d}
+.project-library-actions button:hover,.project-library-actions label:hover{border-color:#6796bd;color:#fff}
+.project-library-actions .project-delete{color:#e79a9d;border-color:#67404a;background:#301d28}
+.project-library-empty{display:flex;align-items:center;gap:8px;padding:12px;border:1px dashed #304259;border-radius:6px;color:#8194aa;font-size:8px;line-height:1.5}
+.source-secondary-caption{margin-top:12px;padding-top:10px;border-top:1px solid #26374b}
+.project-workspace-backdrop{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:26px;background:rgba(2,6,12,.82);backdrop-filter:blur(10px)}
+.project-workspace{width:min(1420px,96vw);height:min(880px,92vh);display:flex;flex-direction:column;overflow:hidden;border:1px solid #334b65;border-radius:12px;background:linear-gradient(155deg,#101c2b,#080f19);box-shadow:0 28px 100px #000b}
+.project-workspace-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px;border-bottom:1px solid #26394f;background:rgba(15,27,42,.92)}
+.project-workspace-header h2{display:flex;align-items:center;gap:9px;margin:7px 0 4px;color:#e5f0fb;font-size:16px}
+.project-workspace-header h2 svg{color:#8bd6c4}
+.project-workspace-header p{margin:0;color:#8195ac;font:8px 'DM Mono'}
+.project-workspace-actions{display:flex;align-items:center;gap:12px}
+.project-workspace-actions .ghost{height:32px;display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:5px;font-size:9px}
+.project-connected{display:flex;align-items:center;gap:6px;color:#82d8b8;font:8px 'DM Mono';letter-spacing:.5px}
+.project-connected i{width:6px;height:6px;border-radius:50%;background:#55d6a1;box-shadow:0 0 10px #55d6a180}
+.project-workspace-body{display:grid;grid-template-columns:minmax(240px,310px) minmax(0,1fr);flex:1;min-height:0}
+.project-file-tree{overflow:auto;padding:13px;border-right:1px solid #26394f;background:rgba(5,12,21,.45)}
+.project-file-tree>.section-caption{margin-bottom:10px}
+.project-file-row{width:100%;min-height:29px;display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid transparent;border-radius:4px;background:transparent;color:#9fb2c8;text-align:left;cursor:pointer}
+.project-file-row:hover,.project-file-row.selected{border-color:#315578;background:#14273c;color:#d4e9ff}
+.project-file-row>svg{flex-shrink:0;color:#7db8e6}
+.project-file-row span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:8px 'DM Mono'}
+.project-file-row small{flex-shrink:0;color:#6e829b;font:7px 'DM Mono'}
+.project-file-view{display:flex;flex-direction:column;min-width:0;min-height:0;background:#080e17}
+.project-file-view-head{min-height:39px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 13px;border-bottom:1px solid #26374b;color:#b8cde2;font:8px 'DM Mono'}
+.project-file-view-head>span{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.project-file-view-head svg{flex-shrink:0;color:#81bce9}
+.project-file-view-head small{color:#6f849d;white-space:nowrap}
+.project-source-code{flex:1;overflow:auto;margin:0;padding:12px 0;color:#c0cedd;font:9px/1.7 'DM Mono';tab-size:4}
+.project-source-code .code-line{display:flex;min-height:17px;white-space:pre}
+.project-source-code .code-line i{width:48px;flex-shrink:0;padding-right:12px;color:#61758d;text-align:right;font-style:normal;user-select:none}
+.project-source-code .code-line code{padding-right:18px;color:#c2d0df;font:inherit}
+.project-file-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:30px;text-align:center;color:#8095ac}
+.project-file-empty svg{color:#5f8caf}
+.project-file-empty b{color:#c9d9e9;font-size:13px}
+.project-file-empty p{max-width:420px;margin:0;font-size:9px;line-height:1.7}
+.project-workspace-footer{display:flex;justify-content:space-between;gap:12px;padding:9px 14px;border-top:1px solid #26394f;background:#0d1724;color:#71869e;font:7px 'DM Mono';letter-spacing:.45px}
+@media(max-width:760px){.project-workspace-backdrop{padding:8px}.project-workspace{width:100%;height:96vh}.project-workspace-header{align-items:flex-start;padding:12px;flex-direction:column}.project-workspace-actions{width:100%;justify-content:space-between}.project-workspace-body{grid-template-columns:minmax(135px,38%) minmax(0,1fr)}.project-file-tree{padding:7px}.project-file-row{padding:5px 3px}.project-file-row small{display:none}.project-workspace-footer{font-size:6px}.project-library-actions{gap:3px}.project-library-actions button,.project-library-actions label{padding:0 4px}}
