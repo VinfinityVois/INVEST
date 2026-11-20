@@ -211,7 +211,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             "duration_ms": round((perf_counter() - node_started) * 1000, 2),
             **({"findings": output["summary"]["total"]} if "summary" in output else {}),
             **({"message": output["message"]} if output.get("message") else {}),
-            **({"explained_count": output.get("explained_count", len(output.get("explanations", [])))} if node.type == "ai.explain" else {}),
+            **({
+                "explained_count": output.get("explained_count", len(output.get("explanations", []))),
+                "analyzed_count": output.get("analyzed_count", min(len(output.get("findings", [])), int(node.config.get("max_findings", 20) or 20))),
+                "skipped_count": output.get("skipped_count", max(0, len(output.get("findings", [])) - min(len(output.get("findings", [])), int(node.config.get("max_findings", 20) or 20)))),
+                "coverage": output.get("coverage", 0),
+            } if node.type == "ai.explain" else {}),
         })
         if on_progress is not None:
             try:
@@ -241,7 +246,15 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                                 severity: sum(1 for finding in value.get("findings", []) if str(finding.get("severity", "UNKNOWN")).upper() == severity)
                                 for severity in sorted({str(finding.get("severity", "UNKNOWN")).upper() for finding in value.get("findings", [])})
                             }} if isinstance(value.get("findings"), list) and value.get("findings") else {}),
-                            **({"explained_count": value.get("explained_count", len(value.get("explanations", [])))} if key in nodes and nodes[key].type == "ai.explain" else {}),
+                            **({
+                                "explained_count": value.get("explained_count", len(value.get("explanations", []))),
+                                "analyzed_count": value.get("analyzed_count", min(len(value.get("findings", [])), int(nodes[key].config.get("max_findings", 20) or 20))),
+                                "skipped_count": value.get("skipped_count", max(0, len(value.get("findings", [])) - min(len(value.get("findings", [])), int(nodes[key].config.get("max_findings", 20) or 20)))),
+                                "unexplained_count": value.get("unexplained_count", 0),
+                                "coverage": value.get("coverage", 0),
+                                "provider": value.get("provider"),
+                                "model": value.get("model"),
+                            } if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"total_findings": len(value.get("findings", []))} if key in nodes and nodes[key].type == "ai.explain" else {}),
                             **({"explanations": [
                                 {
