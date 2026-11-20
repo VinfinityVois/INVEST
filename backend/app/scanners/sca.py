@@ -14,7 +14,7 @@ DATA_FILE = Path(__file__).resolve().parents[3] / "data" / "maven-advisories.jso
 DEPENDENCY_CALL = re.compile(
     r"(?P<call>\b(?:implementation|api|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly|runtimeClasspath|compileClasspath)\s*\(\s*"
     r"(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
-    r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*\))",
+    r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
     re.MULTILINE | re.DOTALL,
 )
 COORDINATE = re.compile(r"^([^:\s]+):([^:\s]+)(?::([^:\s]+))?$")
