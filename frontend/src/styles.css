@@ -341,3 +341,32 @@
 .source-code-preview .code-line-hit code{color:#fff1cb}
 .source-code-preview .code-line-hit i{color:#ffd17a}
 .source-code-preview .code-line-hit:before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:#eab45f;box-shadow:0 0 8px rgba(234,180,95,.3)}
+
+
+/* Workflow node cards: compact briefing-style output area inside each node */
+.workflow-node{overflow:visible;position:relative;padding:0 10px 8px;background:linear-gradient(155deg,rgba(19,31,49,.97),rgba(9,17,29,.97));border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.035)}
+.workflow-node .node-topline{margin:0 -10px;padding:8px 10px 7px;border-bottom:1px solid rgba(255,255,255,.075);background:rgba(5,12,22,.24);border-radius:9px 9px 0 0}
+.workflow-node .node-main{margin:9px 0 5px}
+.workflow-node .node-description{margin:5px 0 8px;min-height:0;line-height:1.5}
+.node-state{display:inline-flex;align-items:center;gap:3px;padding:3px 5px;border:1px solid rgba(255,255,255,.09);border-radius:4px;background:rgba(4,10,18,.35);font-size:6px;letter-spacing:.45px;white-space:nowrap}
+.node-state.state-neutral{color:#91a7bf}
+.node-state.state-active{color:#8ed7ff;border-color:rgba(105,190,245,.28);background:rgba(44,111,156,.13)}
+.node-state.state-success{color:#83d9b6;border-color:rgba(86,190,147,.25);background:rgba(27,107,76,.14)}
+.node-state.state-warning{color:#e8c27e;border-color:rgba(208,160,77,.27);background:rgba(132,89,29,.14)}
+.node-state.state-danger{color:#f0a0a4;border-color:rgba(211,92,100,.3);background:rgba(126,40,49,.16)}
+.node-output{margin:8px 0 7px;padding:7px 8px 8px;border:1px solid rgba(112,143,174,.17);border-left:2px solid #6586a8;border-radius:6px;background:linear-gradient(145deg,rgba(5,12,21,.72),rgba(13,23,36,.68));}
+.node-output-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;color:#829bb5;font:6px 'DM Mono';letter-spacing:.85px}
+.node-output-heading i{display:grid;place-items:center;width:14px;height:14px;border-radius:4px;background:rgba(120,151,181,.12);color:#9cb4cc;font:9px 'DM Mono';font-style:normal}
+.node-output>p{margin:0;color:#b5c5d7;font-size:8px;line-height:1.5;overflow-wrap:anywhere}
+.node-output-success{border-left-color:#55bd96;background:linear-gradient(145deg,rgba(12,48,39,.3),rgba(8,20,27,.7))}
+.node-output-success .node-output-heading,.node-output-success .node-output-heading i{color:#83d9b6}
+.node-output-active{border-left-color:#65b8eb;background:linear-gradient(145deg,rgba(19,57,83,.3),rgba(8,20,31,.72))}
+.node-output-active .node-output-heading,.node-output-active .node-output-heading i{color:#91d5ff}
+.node-output-warning{border-left-color:#c99b4f;background:linear-gradient(145deg,rgba(70,49,19,.28),rgba(17,20,26,.72))}
+.node-output-warning .node-output-heading,.node-output-warning .node-output-heading i{color:#e8c27e}
+.node-output-danger{border-left-color:#d46d76;background:linear-gradient(145deg,rgba(76,28,36,.32),rgba(19,17,25,.72))}
+.node-output-danger .node-output-heading,.node-output-danger .node-output-heading i{color:#f0a0a4}
+.node-output .node-ai-note{margin-top:6px;padding:6px 7px;background:rgba(104,69,139,.13)}
+.workflow-node .node-footer{margin-top:7px}
+.workflow-node .react-flow__handle{width:9px;height:9px;border:2px solid #0b1420;background:#78b9ed}
+@media(prefers-reduced-motion:reduce){.node-live-dot{animation:none!important}}
