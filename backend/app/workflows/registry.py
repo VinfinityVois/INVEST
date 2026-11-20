@@ -19,6 +19,7 @@ def add(t, title, category, description, ins=(), outs=(), config=None):
       outputs=[Port(name=n,data_type=d) for n,d in outs],config_schema=config or {}))
 
 add("trigger.manual","Manual trigger","Trigger","Запуск вручную.",outs=[("event","event")])
+add("trigger.schedule","Schedule trigger","Trigger","Запуск сохранённого workflow по cron-расписанию.",outs=[("event","event")],config={"type":"object","required":["cron"],"properties":{"cron":{"type":"string","title":"Cron expression","default":"*/5 * * * *","description":"Пять полей cron; время интерпретируется в выбранном часовом поясе."},"timezone":{"type":"string","title":"Timezone","default":"UTC","description":"IANA timezone, например Europe/Amsterdam."}}})
 add("source.git","Git repository","Source","Источник из allowlist Git.",[("event","event")],[("source","source")],{"type":"object","properties":{"url":{"type":"string"},"ref":{"type":"string"}}})
 add("source.upload","Workspace source","Source","Каталог проекта внутри WORKSPACE_ROOT.",[("event","event")],[("source","source")],{"type":"object","properties":{"path":{"type":"string","description":"Относительный путь внутри WORKSPACE_ROOT"}}})
 add("scan.secrets","Secrets scanner","Security","Собственный поиск секретов.",[("source","source")],[("findings","findings")])
