@@ -147,11 +147,22 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         })
         if on_progress is not None:
             try:
+                observed_findings = {}
+                for node_output in outputs.values():
+                    for finding in node_output.get("findings", []):
+                        fingerprint = finding.get("fingerprint") or repr(sorted(finding.items()))
+                        observed_findings.setdefault(str(fingerprint), finding)
+                severity_counts = {}
+                for finding in observed_findings.values():
+                    severity = str(finding.get("severity", "UNKNOWN")).upper()
+                    severity_counts[severity] = severity_counts.get(severity, 0) + 1
                 on_progress({
                     "status": "running",
                     "completed_nodes": len(trace),
                     "total_nodes": len(order),
                     "current_node": node_id,
+                    "total_findings": len(observed_findings),
+                    "severity": severity_counts,
                     "trace": list(trace),
                 })
             except Exception:
