@@ -406,9 +406,11 @@ def _maven_resolve(value, properties):
     return result if "$" + "{" not in result else None
 
 
-def _maven_profile_sections(pom_path, pom):
+def _maven_profile_sections(pom_path, pom, project_root=None):
     profiles = _maven_child(pom, "profiles")
-    config = _read_text(pom_path.parent / ".mvn" / "maven.config") or ""
+    config_root = Path(project_root).resolve() if project_root is not None else pom_path.parent
+    config_path = config_root / ".mvn" / "maven.config"
+    config = _read_text(config_path) or ""
     explicit = set()
     disabled = set()
     user_properties = {}
@@ -462,10 +464,10 @@ def _maven_profile_sections(pom_path, pom):
             yield profile
 
 
-def _maven_managed(pom_path, pom, properties, snapshots=None):
+def _maven_managed(pom_path, pom, properties, snapshots=None, project_root=None):
     result: dict[tuple[str, str], set[str]] = {}
     snapshots = snapshots or {}
-    for section in _maven_profile_sections(pom_path, pom):
+    for section in _maven_profile_sections(pom_path, pom, project_root):
         section_properties = _maven_properties(section, properties)
         management = _maven_child(section, "dependencyManagement")
         dependencies = _maven_child(management, "dependencies")
@@ -536,7 +538,7 @@ def _maven_parent_context(pom_path, project, snapshots, visited=None, depth=0):
     )
     parent_properties = _maven_properties(parent_pom, inherited_properties)
     parent_managed = dict(inherited_managed)
-    parent_managed.update(_maven_managed(parent_path, parent_pom, parent_properties, snapshots))
+    parent_managed.update(_maven_managed(parent_path, parent_pom, parent_properties, snapshots, project))
     return parent_properties, parent_managed
 
 def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
@@ -558,9 +560,9 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         parent_properties, parent_managed = _maven_parent_context(pom_path, project, bom_snapshots)
         props = _maven_properties(pom, parent_properties)
         managed = dict(parent_managed)
-        managed.update(_maven_managed(pom_path, pom, props, bom_snapshots))
+        managed.update(_maven_managed(pom_path, pom, props, bom_snapshots, project))
         relative = pom_path.relative_to(project).as_posix()
-        for section in _maven_profile_sections(pom_path, pom):
+        for section in _maven_profile_sections(pom_path, pom, project):
             section_properties = _maven_properties(section, props)
             deps = _maven_child(section, "dependencies")
             for dep in _maven_children(deps, "dependency"):
