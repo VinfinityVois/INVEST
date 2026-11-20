@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -164,6 +164,7 @@ const nodeTypes = { workflow: memo(WorkflowNode) };
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "dark" ? "dark" : "light");
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => { window.localStorage.setItem("invest.theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
@@ -1198,6 +1199,18 @@ export default function App() {
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
         <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button><button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === "light" ? "dark" : "light")} title={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"} aria-label={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"}>{theme === "light" ? <Moon size={16}/> : <Sun size={16}/>}</button>
+         <div className="app-menu-wrap">
+           <button className="icon-button app-menu-trigger" type="button" onClick={() => setAppMenuOpen(value => !value)} aria-label="Открыть меню приложения" aria-expanded={appMenuOpen} title="Меню приложения"><Menu size={16}/></button>
+           {appMenuOpen && <div className="app-menu" role="menu">
+             <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Навигация</small></div>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Projects library</b><small>Исходные проекты и файлы</small></span></button>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны</b><small>Готовые security-сценарии</small></span></button>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); const ai = nodes.find(node => node.data.nodeType === "ai.explain"); if (ai) { setSelectedNodeId(ai.id); setSelectedEdgeId(null); setRightCollapsed(false); setInspectorTab("properties"); } else setAiGraphOpen(true); }}><Activity size={15}/><span><b>AI profile</b><small>Провайдер и параметры объяснений</small></span></button>
+             <div className="app-menu-divider"/>
+             <a role="menuitem" href="/api/v1/docs" target="_blank" rel="noreferrer" onClick={() => setAppMenuOpen(false)}><BookOpen size={15}/><span><b>Документация API</b><small>OpenAPI reference</small></span></a>
+             <button role="menuitem" onClick={() => { setTheme(value => value === "light" ? "dark" : "light"); setAppMenuOpen(false); }}>{theme === "light" ? <Moon size={15}/> : <Sun size={15}/>}<span><b>Оформление</b><small>{theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}</small></span></button>
+           </div>}
+         </div>
       </div>
     </header>
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
