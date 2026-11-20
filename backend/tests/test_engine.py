@@ -313,9 +313,12 @@ def test_ci_gate_blocks_workflow_on_critical_findings(tmp_path, monkeypatch):
         ],
     )
 
-    result = execute_graph(graph, registry)
+    progress = []
+    result = execute_graph(graph, registry, on_progress=progress.append)
 
     assert result["status"] == "failed"
     assert result["security_gate"]["decision"] == "BLOCK"
     assert result["outputs"]["gate"]["status"] == "blocked"
     assert result["outputs"]["gate"]["counts"]["CRITICAL"] == 1
+    assert progress[-1]["node_results"]["scan"]["severity"]["CRITICAL"] == 1
+    assert progress[-1]["node_results"]["merge"]["severity"]["CRITICAL"] == 1
