@@ -3,7 +3,6 @@ import time
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
-from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
