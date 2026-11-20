@@ -54,3 +54,19 @@ def test_selected_node_scope_includes_all_upstream_dependencies_only():
     )
     assert resolve_execution_scope(graph, ["secrets"]) == ["trigger", "source", "secrets"]
     assert resolve_execution_scope(graph, ["gate"]) == ["trigger", "source", "secrets", "sca", "merge", "gate"]
+
+
+
+def test_schedule_trigger_is_accepted_as_a_workflow_trigger():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "schedule", "type": "trigger.schedule", "config": {"cron": "*/5 * * * *"}},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+        ],
+        edges=[{"id": "edge", "source": "schedule", "target": "source"}],
+    )
+
+    result = validate_graph(graph, registry)
+
+    assert result.valid
+    assert not any(issue.code == "missing_trigger" for issue in result.issues)
