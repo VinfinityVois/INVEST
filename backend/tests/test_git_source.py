@@ -69,3 +69,31 @@ def test_rejects_unsafe_git_refs(tmp_path, ref):
             tmp_path,
             {"https://github.com/example/repo"},
         )
+
+
+
+def test_clone_supports_pinned_commit_sha_with_detached_checkout(tmp_path, monkeypatch):
+    commit = "fe1fcbe212669783480666b9b60147c8a8c6eef4"
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        if "clone" in args:
+            destination = Path(args[-1])
+            (destination / ".git").mkdir(parents=True)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("app.sources.git.subprocess.run", fake_run)
+
+    result = clone_allowed_repository(
+        "https://github.com/example/project",
+        commit,
+        tmp_path,
+        {"https://github.com/example/project"},
+    )
+
+    assert result["ref"] == commit
+    assert len(calls) == 3
+    assert "--branch" not in calls[0][0]
+    assert calls[1][0][-3:] == ["origin", commit] or calls[1][0][-2:] == ["origin", commit]
+    assert calls[2][0][-3:] == ["checkout", "--detach", "FETCH_HEAD"]
