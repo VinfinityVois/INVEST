@@ -464,3 +464,40 @@
 @media (max-width:1023px) {
   .shell .desktop-recommendation { display:flex; }
 }
+
+/* Workflow identity and canvas status */
+.shell .editor-head { display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0; }
+.shell .editor-title-group { min-width:0;flex:1; }
+.shell .editor-title-row { display:flex;align-items:center;gap:10px;min-width:0; }
+.shell .workflow-title-input {
+  display:block;width:min(460px,100%);min-width:0;height:34px;padding:0 7px;margin:1px 0 0 -7px;
+  border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);
+  font:600 24px/1.25 Inter,sans-serif;letter-spacing:-.035em;
+}
+.shell .workflow-title-input:hover { border-color:var(--border); }
+.shell .workflow-title-input:focus { border-color:var(--accent-500);outline:2px solid color-mix(in srgb,var(--accent-500) 20%,transparent);background:var(--surface); }
+.shell .workflow-title-input::placeholder { color:var(--text);opacity:.85; }
+.shell .workflow-save-state {
+  display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;padding:4px 7px;
+  border:1px solid var(--border);border-radius:3px;background:var(--gray-50);
+  color:var(--text-secondary);font-size:10px;font-weight:500;white-space:nowrap;
+}
+.shell[data-theme="dark"] .workflow-save-state { background:var(--gray-800); }
+.shell .workflow-save-state i { width:6px;height:6px;border-radius:50%;background:var(--accent-600); }
+.shell .workflow-save-state.is-draft i { background:var(--gray-400); }
+.shell .workflow-save-state.is-draft { color:var(--muted); }
+.shell .node-output-heading>i { display:inline-flex;align-items:center;justify-content:center; }
+.shell .node-output-spinner { animation:node-spin 1.2s linear infinite; }
+.shell .node-port-label { font:500 9px "IBM Plex Mono";letter-spacing:.04em; }
+.shell .workflow-node .node-copy { min-width:0; }
+.shell .workflow-node .node-copy b,.shell .workflow-node .node-copy small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+@keyframes node-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) {
+  .shell .node-output-spinner { animation:none; }
+}
+@media (max-width:760px) {
+  .shell .editor-head { align-items:flex-start; }
+  .shell .editor-title-row { flex-wrap:wrap;gap:5px; }
+  .shell .workflow-title-input { font-size:20px;max-width:100%; }
+  .shell .workflow-save-state { font-size:9px; }
+}
