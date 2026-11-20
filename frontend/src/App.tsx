@@ -251,6 +251,7 @@ export default function App() {
   const [aiGraphPrompt, setAiGraphPrompt] = useState("");
   const [aiGraphBusy, setAiGraphBusy] = useState(false);
   const [workflowDraftName, setWorkflowDraftName] = useState("");
+  const [workflowDirty, setWorkflowDirty] = useState(true);
   const [aiGraphError, setAiGraphError] = useState("");
 
 
@@ -544,24 +545,32 @@ export default function App() {
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current));
+    setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current)); setWorkflowDirty(true);
     setSelectedNodeId(null); setSelectedEdgeId(null);
   }, [setEdges]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
-    setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false }));
+    setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false })); setWorkflowDirty(true);
   }, [setEdges]);
+  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    onNodesChange(changes);
+    if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
+  }, [onNodesChange]);
+  const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
+    onEdgesChange(changes);
+    if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
+  }, [onEdgesChange]);
 
   const addNode = (manifest: Manifest) => {
     const id = manifest.type + "-" + Date.now();
     const position = { x: 180 + (nodes.length % 3) * 245, y: 90 + Math.floor(nodes.length / 3) * 145 };
     const initialConfig = manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {};
     const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig } };
-    setNodes(current => [...current, node]); setSelectedNodeId(id); setSelectedEdgeId(null);
+    setNodes(current => [...current, node]); setWorkflowDirty(true); setSelectedNodeId(id); setSelectedEdgeId(null);
   };
-  const updateNode = (id: string, patch: Partial<NodeData>) => setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node));
+  const updateNode = (id: string, patch: Partial<NodeData>) => { setWorkflowDirty(true); setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)); };
   const deleteSelectedNode = () => {
     if (!selectedNodeId) return;
-    setNodes(current => current.filter(node => node.id !== selectedNodeId));
+    setWorkflowDirty(true); setNodes(current => current.filter(node => node.id !== selectedNodeId));
     setEdges(current => current.filter(edge => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
     setSelectedNodeId(null);
   };
@@ -889,7 +898,7 @@ export default function App() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(JSON.stringify(data));
-    setWorkflowId(data.id); return data.id as string;
+    setWorkflowId(data.id); setWorkflowDirty(false); return data.id as string;
   };
   const loadTemplateLibrary = async () => {
     setTemplateLoading(true);
@@ -1282,7 +1291,7 @@ export default function App() {
       </aside>
 
       <section className="editor">
-        <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => setWorkflowDraftName(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (!workflowId ? " is-draft" : "")}><i/>{workflowId ? "Сохранённая версия" : "Черновик"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
+        <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (!workflowId ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
         <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect}
