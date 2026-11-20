@@ -9,7 +9,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles,
 } from "lucide-react";
 
 type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
@@ -244,6 +244,12 @@ export default function App() {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState("");
+  const [aiGraphOpen, setAiGraphOpen] = useState(false);
+  const [aiGraphPrompt, setAiGraphPrompt] = useState("");
+  const [aiGraphBusy, setAiGraphBusy] = useState(false);
+  const [workflowDraftName, setWorkflowDraftName] = useState("");
+  const [aiGraphError, setAiGraphError] = useState("");
+
 
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -584,7 +590,7 @@ export default function App() {
   };
 
   const graph = useMemo(() => ({
-    name: activeProject?.name || "Security pipeline",
+    name: workflowDraftName || activeProject?.name || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
   }), [nodes, edges, activeProject?.name]);
@@ -920,6 +926,7 @@ export default function App() {
       const workflow = await loaded.json();
       if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
+      setWorkflowDraftName(workflow.name || "");
       setNodes(workflow.graph.nodes || []);
       setEdges(workflow.graph.edges || []);
       setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
@@ -930,6 +937,52 @@ export default function App() {
     } catch (error) {
       setTemplateError(String(error));
     } finally { setTemplateBusyId(null); }
+  };
+  const generateGraphFromPrompt = async () => {
+    if (aiGraphPrompt.trim().length < 10) {
+      setAiGraphError("Опиши задачу минимум в 10 символах.");
+      return;
+    }
+    setAiGraphBusy(true);
+    setAiGraphError("");
+    try {
+      const response = await fetch("/api/workflows/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiGraphPrompt.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const generatedNodes = (data.graph?.nodes || []).map((node: {id:string;type:string;position:{x:number;y:number};config:Record<string,unknown>}) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic",
+            description: manifest?.description || "AI-generated draft block.",
+            config: node.config || {}, executionStatus: "idle",
+            executionDetail: "Черновик создан AI · требуется проверка конфигурации",
+          },
+        };
+      });
+      const generatedEdges = (data.graph?.edges || []).map((edge: {id:string;source:string;target:string;source_handle?:string|null;target_handle?:string|null}) => ({
+        id: edge.id, source: edge.source, target: edge.target,
+        sourceHandle: edge.source_handle || undefined, targetHandle: edge.target_handle || undefined,
+        type: "smoothstep",
+      }));
+      if (!generatedNodes.length) throw new Error("AI вернул пустой граф.");
+      setNodes(generatedNodes);
+      setEdges(generatedEdges);
+      setWorkflowId(null);
+      setWorkflowDraftName(data.graph.name || "AI workflow draft");
+      setSelectedNodeId(generatedNodes[0].id);
+      setSelectedEdgeId(null);
+      setAiGraphOpen(false);
+      setResult("AI создал черновик · " + (data.graph.name || "workflow") + ". Проверь блоки и соединения, затем нажми «Проверить» и «Сохранить». Запуск не выполнялся.");
+      setShowResult(true);
+    } catch (error) {
+      setAiGraphError(String(error));
+    } finally { setAiGraphBusy(false); }
   };
   const saveWorkflow = async () => {
     setBusy(true);
@@ -1130,6 +1183,7 @@ export default function App() {
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
+        <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
         <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
@@ -1593,6 +1647,21 @@ export default function App() {
           </div>
         </aside>}
         <footer className="project-workspace-footer"><span>READ-ONLY SOURCE VIEW · SECRET MASKING ENABLED</span><span>Запуск анализа доступен на основном холсте</span></footer>
+      </section>
+    </div>}
+    {aiGraphOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !aiGraphBusy) setAiGraphOpen(false); }}>
+      <section className="template-library-dialog ai-graph-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-graph-title">
+        <header className="template-library-header">
+          <div><span className="eyebrow">AI WORKFLOW DRAFT</span><h2 id="ai-graph-title"><Sparkles size={18}/> Создать граф по описанию</h2><p>AI предложит только блоки из реестра INVEST. Граф будет проверен, но не сохранён и не запущен.</p></div>
+          <button className="icon-button" onClick={() => !aiGraphBusy && setAiGraphOpen(false)} aria-label="Закрыть"><X size={16}/></button>
+        </header>
+        <div className="ai-graph-form">
+          <label htmlFor="ai-graph-prompt">ОПИШИ, ЧТО ДОЛЖЕН ДЕЛАТЬ WORKFLOW</label>
+          <textarea id="ai-graph-prompt" value={aiGraphPrompt} maxLength={2000} onChange={event => setAiGraphPrompt(event.target.value)} placeholder="Например: создай pipeline для проверки Kotlin/Spring Boot проекта: источник из Git, поиск секретов, SCA зависимостей, Kotlin SAST, объединение находок и Security Gate…" />
+          <div className="ai-graph-guidance"><span>{aiGraphPrompt.length}/2000</span><span>Не добавляй API-ключи, приватные URL и учётные данные.</span></div>
+          {aiGraphError && <div className="template-library-error"><AlertTriangle size={14}/><span>{aiGraphError}</span></div>}
+          <div className="ai-graph-actions"><button className="ghost" disabled={aiGraphBusy} onClick={() => setAiGraphOpen(false)}>Отмена</button><button className="template-card-clone" disabled={aiGraphBusy || aiGraphPrompt.trim().length < 10} onClick={() => void generateGraphFromPrompt()}><Sparkles size={13}/>{aiGraphBusy ? "Создаю черновик…" : "Сгенерировать граф"}</button></div>
+        </div>
       </section>
     </div>}
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
