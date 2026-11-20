@@ -45,6 +45,7 @@ const seedNodes: FlowNode[] = [
   { id: "sast", type: "workflow", position: { x: 550, y: 470 }, data: { label: "Kotlin SAST", nodeType: "scan.sast", category: "Security", description: "Статически анализирует Kotlin/Spring-код на поддерживаемые классы проблем.", config: {} } },
   { id: "merge", type: "workflow", position: { x: 850, y: 285 }, data: { label: "Merge findings", nodeType: "findings.merge", category: "Logic", description: "Объединяет результаты сканеров и удаляет дубликаты по fingerprint.", config: {} } },
   { id: "gate", type: "workflow", position: { x: 1120, y: 285 }, data: { label: "Security Gate", nodeType: "ci.gate", category: "CI", description: "Блокирует workflow при CRITICAL/HIGH находках; пороги настраиваются в конфигурации.", config: { block_on: ["CRITICAL", "HIGH"], warn_on: ["MEDIUM", "LOW", "INFO"] } } },
+  { id: "ai-explain", type: "workflow", position: { x: 1120, y: 70 }, data: { label: "AI explanation", nodeType: "ai.explain", category: "AI", description: "Объясняет подтверждённые находки: причина, влияние и рекомендации. Требует LLM-настройки в корневом .env.", config: { language: "ru", max_findings: 20 } } },
 ];
 const seedEdges: Edge[] = [
   { id: "e1", source: "trigger", target: "source", animated: true, label: "запуск" },
@@ -55,6 +56,7 @@ const seedEdges: Edge[] = [
   { id: "e6", source: "sca", target: "merge", animated: true },
   { id: "e7", source: "sast", target: "merge", animated: true },
   { id: "e8", source: "merge", target: "gate", animated: true, label: "policy" },
+  { id: "e9", source: "merge", target: "ai-explain", animated: true, label: "объяснение" },
 ];
 
 function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
@@ -389,7 +391,16 @@ export default function App() {
           <div className="section-caption">РЕДАКТИРОВАНИЕ БЛОКА</div>
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
           <label className="field-label">Заменить тип блока<select value={selectedNode.data.nodeType} onChange={event => replaceSelectedNode(event.target.value)}><option value={selectedNode.data.nodeType}>{selectedNode.data.nodeType}</option>{manifests.filter(item => item.type !== selectedNode.data.nodeType).map(item => <option key={item.type} value={item.type}>{item.title} · {item.type}</option>)}</select></label>
-          <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
+          {selectedNode.data.nodeType === "ai.explain" ? <>
+            <div className="ai-node-guide"><div><Bot size={16}/><b>AI-АНАЛИЗАТОР ПОДКЛЮЧЁН К ГРАФУ</b></div><p>Получает находки из блока Merge findings. Ключ API хранится только в корневом .env и не вводится здесь.</p><ol><li>Добавь LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в .env</li><li>Перезапусти api и worker</li><li>Запусти workflow — объяснения появятся в карточках находок</li></ol></div>
+            <label className="field-label">Язык объяснений<select value={String(selectedNode.data.config.language || "ru")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, language: event.target.value } })}><option value="ru">Русский</option><option value="en">English</option></select></label>
+            <label className="field-label">Максимум находок<input type="number" min={1} max={25} value={Number(selectedNode.data.config.max_findings ?? 20)} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, max_findings: Math.max(1, Math.min(25, Number(event.target.value) || 1)) } })}/></label>
+            <p className="edit-hint">AI не меняет severity, не создаёт новые уязвимости и не влияет на Security Gate. Ветка AI независима от проверки политики.</p>
+          </> : <>
+            <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
+            {configError && <p className="config-error">{configError}</p>}
+            <button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>
+          </>}
           {configError && <p className="config-error">{configError}</p>}
           <button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
