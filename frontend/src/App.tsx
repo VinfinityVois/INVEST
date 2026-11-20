@@ -746,15 +746,15 @@ export default function App() {
     } catch { setResult("Не удалось связаться с API. Проверьте backend."); setShowResult(true); }
     finally { setBusy(false); }
   };
-  const runWorkflow = async () => {
+  const runWorkflow = async (selectedNodeIds?: string[]) => {
     setBusy(true); setFindings([]);
     try {
       const id = await persistWorkflow();
-      const response = await fetch("/api/workflows/" + id + "/runs", { method: "POST" });
+      const response = await fetch(selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs", { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds }) } : {}) });
       const queued = await response.json();
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
-      setResult("Задание поставлено в очередь · " + queued.run_id);
+      setResult((selectedNodeIds?.length ? "Выборочный запуск поставлен в очередь · " : "Задание поставлено в очередь · ") + queued.run_id + (selectedNodeIds?.length ? " · зависимости будут выполнены автоматически" : ""));
       setLastRunId(queued.run_id); window.localStorage.setItem("invest.lastRunId", queued.run_id);
 
       setTelemetry({ status: "queued", total_findings: 0, severity: {}, scanners: [], completed_nodes: 0, total_nodes: nodes.length });
@@ -776,7 +776,7 @@ export default function App() {
               if (!response.ok) throw new Error("Не удалось получить телеметрию задания");
               const data: Telemetry = await response.json();
               setTelemetry(data);
-              if (["completed", "partial", "failed"].includes(data.status)) { finish(data); return; }
+              if (["completed", "partial", "failed", "cancelled"].includes(data.status)) { finish(data); return; }
             }
             throw new Error("Превышено время ожидания worker. Задание сохранено в очереди.");
           } catch (error) {
@@ -789,7 +789,7 @@ export default function App() {
             const data: Telemetry = JSON.parse(event.data);
             setTelemetry(data);
             setResult("Выполнение · " + data.completed_nodes + "/" + data.total_nodes + " блоков");
-            if (["completed", "partial", "failed"].includes(data.status)) finish(data);
+            if (["completed", "partial", "failed", "cancelled"].includes(data.status)) finish(data);
           } catch { /* Ignore malformed telemetry frame and keep the stream alive. */ }
         };
         stream.onerror = () => { void fallback(); };
@@ -912,7 +912,7 @@ export default function App() {
       <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
-        <button className="run" disabled={busy} onClick={runWorkflow}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить"}</button>
+        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button>
       </div>
     </header>
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
