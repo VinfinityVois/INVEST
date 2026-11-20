@@ -15,6 +15,7 @@ import {
 type Manifest = { type: string; title: string; category: string; description: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string } };
 type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type SourcePreview = { path: string; finding_line: number | null; start_line: number; end_line: number; total_lines: number; redacted: boolean; lines: Array<{ line: number; text: string; is_finding: boolean }> };
 type Telemetry = {
   run_id?: string; status: string; source?: string; queued_at?: string; started_at?: string;
   finished_at?: string; duration_ms?: number | null; total_findings: number;
@@ -91,6 +92,10 @@ export default function App() {
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
+  const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
+  const [sourcePreviewError, setSourcePreviewError] = useState("");
+  const [sourceWindowStart, setSourceWindowStart] = useState(1);
   const [findingStates, setFindingStates] = useState<Record<string, FindingLifecycle>>({});
   const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
   const [findingQuery, setFindingQuery] = useState("");
@@ -149,6 +154,19 @@ export default function App() {
       .catch(() => undefined);
     return () => { active = false; };
   }, [lastRunId]);
+
+  useEffect(() => {
+    if (!selectedFinding?.fingerprint || !lastRunId) { setSourcePreview(null); setSourcePreviewError(""); return; }
+    const controller = new AbortController();
+    setSourcePreviewLoading(true); setSourcePreviewError("");
+    const params = new URLSearchParams({ start_line: String(sourceWindowStart), end_line: String(sourceWindowStart + 99) });
+    fetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
+      .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Не удалось открыть исходник"); return data as SourcePreview; })
+      .then(data => { setSourcePreview(data); setSourcePreviewError(""); })
+      .catch(error => { if (error.name !== "AbortError") { setSourcePreview(null); setSourcePreviewError(String(error.message || error)); } })
+      .finally(() => { if (!controller.signal.aborted) setSourcePreviewLoading(false); });
+    return () => controller.abort();
+  }, [selectedFinding?.fingerprint, lastRunId, sourceWindowStart]);
 
   useEffect(() => {
     if (!telemetry) return;
@@ -387,7 +405,11 @@ export default function App() {
   }, [findings, findingQuery, findingSeverity]);
   const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
   const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
-  const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) setSelectedFinding(next); };
+  const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) { setSelectedFinding(next); setSourceWindowStart(Math.max(1, (next.line || 1) - 40)); } };
+  const toggleFindingSource = (finding: Finding) => {
+    if (selectedFinding?.fingerprint === finding.fingerprint) { setSelectedFinding(null); return; }
+    setSelectedFinding(finding); setSourceWindowStart(Math.max(1, (finding.line || 1) - 40));
+  };
   const aiNode = nodes.find(node => node.data.nodeType === "ai.explain");
   const aiNodeResult = aiNode ? telemetry?.node_results?.[aiNode.id] : undefined;
 
@@ -544,11 +566,14 @@ export default function App() {
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
             <button className="source-preview-toggle" onClick={() => setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding)}>
-              <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть фрагмент" : "Показать место в коде"}
+              <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть исходник" : "Открыть исходник"}
             </button>
             {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
               <div className="source-code-head"><span>{finding.path}</span><div className="source-code-nav"><button disabled={selectedFindingIndex <= 0} onClick={() => selectAdjacentFinding(-1)} title="Предыдущая находка">←</button><b>{selectedFindingIndex >= 0 ? `${selectedFindingIndex + 1} / ${orderedVisibleFindings.length}` : `СТРОКА ${finding.line || "—"}`}</b><button disabled={selectedFindingIndex < 0 || selectedFindingIndex >= orderedVisibleFindings.length - 1} onClick={() => selectAdjacentFinding(1)} title="Следующая находка">→</button></div></div>
-              {finding.code_context_redacted && <p className="source-redacted-note">Строки исходника скрыты целиком: этот фрагмент содержит секретные данные.</p>}{finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : <p>Фрагмент недоступен. Откройте файл проекта по указанному пути.</p>}
+              {sourcePreviewLoading && <p className="source-loading">Загружаю проверенный фрагмент файла…</p>}
+              {sourcePreviewError && <p className="source-preview-error">{sourcePreviewError}</p>}
+              {sourcePreview?.redacted && <p className="source-redacted-note">Файл содержит секретную находку: содержимое строк полностью скрыто.</p>}
+              {sourcePreview?.lines?.length ? <><div className="source-window-nav"><span>СТРОКИ {sourcePreview.start_line}–{sourcePreview.end_line} ИЗ {sourcePreview.total_lines}</span><div><button disabled={sourcePreview.start_line <= 1 || sourcePreviewLoading} onClick={() => setSourceWindowStart(Math.max(1, sourcePreview.start_line - 100))}>← 100</button><button disabled={sourcePreview.end_line >= sourcePreview.total_lines || sourcePreviewLoading} onClick={() => setSourceWindowStart(sourcePreview.end_line + 1)}>100 →</button></div></div><pre>{sourcePreview.lines.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre></> : !sourcePreviewLoading && !sourcePreviewError && finding.code_context?.length ? <pre>{finding.code_context.map(row => <span key={row.line} className={row.is_finding ? "code-line code-line-hit" : "code-line"}><i>{row.line}</i><code>{row.text || " "}</code></span>)}</pre> : null}
             </div>}
             {finding.fingerprint && <div className="finding-lifecycle">
               <label>Статус
