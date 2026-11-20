@@ -33,7 +33,9 @@ def _canonical_https_url(value: str) -> str:
             raise GitSourceError("Repository URL must include an owner and repository")
         path = parsed.path.rstrip("/")
         parts = [part for part in path.split("/") if part]
-        if len(parts) != 2 or any(part in {".", ".."} for part in parts):
+        if len(parts) == 2 and parts[1].endswith(".git"):
+            parts[1] = parts[1][:-4]
+        if len(parts) != 2 or any(part in {"", ".", ".."} for part in parts):
             raise GitSourceError("Repository URL must point to one owner/repository")
         return f"https://{parsed.hostname.lower()}/{parts[0]}/{parts[1]}"
     except ValueError as exc:
@@ -128,8 +130,10 @@ def clone_allowed_repository(
             "ref": safe_ref,
         }
     except subprocess.TimeoutExpired as exc:
+        shutil.rmtree(destination, ignore_errors=True)
         raise GitSourceError("Git clone exceeded the 120-second time limit") from exc
     except OSError as exc:
+        shutil.rmtree(destination, ignore_errors=True)
         raise GitSourceError("Git executable is unavailable or could not start") from exc
     except Exception:
         shutil.rmtree(destination, ignore_errors=True)
