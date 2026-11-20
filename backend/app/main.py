@@ -1235,6 +1235,45 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
     }
 
 
+@app.post("/api/projects/{project_id}/reports/{run_id}", status_code=201)
+def save_run_report_to_project(project_id: UUID, run_id: UUID):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        run = session.get(WorkflowRun, run_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        root = _project_root(project)
+        reports_dir = root / "reports"
+        if reports_dir.is_symlink():
+            raise HTTPException(status_code=400, detail="Report directory is unavailable")
+        reports_dir.mkdir(mode=0o750, exist_ok=True)
+        if reports_dir.resolve(strict=True).parent != root:
+            raise HTTPException(status_code=400, detail="Invalid report directory")
+        report = _build_run_report(session, run)
+        payload = json.dumps(report, ensure_ascii=False, indent=2, default=str)
+        if len(payload.encode("utf-8")) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Report exceeds the 10 MiB project storage limit")
+        filename = f"run-{run_id}.json"
+        destination = reports_dir / filename
+        if destination.is_symlink() or destination.exists():
+            raise HTTPException(status_code=409, detail="A report for this run already exists in the project")
+        try:
+            with destination.open("x", encoding="utf-8") as stream:
+                stream.write(payload)
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail="A report for this run already exists in the project") from exc
+        session.add(AuditLog(
+            action="report_saved",
+            entity="project",
+            entity_id=str(project_id),
+            details={"run_id": str(run_id), "path": f"reports/{filename}", "bytes": len(payload.encode("utf-8"))},
+        ))
+        session.commit()
+        return {"project_id": str(project_id), "run_id": str(run_id), "path": f"reports/{filename}", "bytes": len(payload.encode("utf-8"))}
+
+
 @app.get("/api/runs/{run_id}/report.json")
 def export_run_report_json(run_id: UUID):
     with SessionLocal() as session:
