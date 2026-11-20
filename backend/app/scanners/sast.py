@@ -223,7 +223,7 @@ def _scan_interprocedural_sql_taint(path: str, text: str) -> list[dict]:
                 tainted_variables[index] = variables
                 changed = True
 
-            for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(([^()\n]*)\)", body):
+            for call in re.finditer(r"\b([A-Za-z_]\w*)\s*\(((?:[^()\n]|\([^()\n]*\))*)\)", body):
                 targets = by_name.get(call.group(1), [])
                 if not targets:
                     continue
