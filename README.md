@@ -40,9 +40,9 @@ Endpoint: `POST /api/sources/upload` (multipart field `file`).
 
 ### Git source
 
-Для Git-ноды задайте HTTPS URL и необязательную ветку или тег. Репозиторий должен быть явно внесён в `ALLOWED_TARGETS` в backend environment. Сопоставление выполняется по точному адресу owner/repository; URL с логином, паролем, query, fragment и нестандартным портом отклоняются.
+Для Git-ноды задайте HTTPS URL и необязательную ветку или тег. Репозиторий должен быть явно внесён в `ALLOWED_TARGETS` в корневом `.env`. Сопоставление выполняется по точному адресу owner/repository; URL с логином, паролем, query, fragment и нестандартным портом отклоняются.
 
-Git clone выполняется shallow, без тегов, hooks, LFS smudge и submodules. Используется только HTTPS. Для работы Git-ноды в среде backend должен быть установлен Git. Частные репозитории и credential helper пока не поддерживаются.
+Git clone выполняется shallow, без тегов, hooks, LFS smudge и submodules. Используется только HTTPS. Git устанавливается в backend image автоматически. Частные репозитории и credential helper пока не поддерживаются.
 
 Пример:
 
@@ -57,7 +57,7 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 Добавлена телеметрия последнего запуска: статус, время постановки в очередь/начала/завершения, длительность, общее число находок и распределение по severity, длительность каждого сканера и прогресс узлов. API предоставляет `/api/workflows/{workflow_id}/telemetry/latest`, `/api/runs/{run_id}/telemetry` и SSE-поток `/api/runs/{run_id}/events`. Интерфейс получает прогресс через SSE и использует polling как резервный режим.
 
-Остаются в разработке: полноценный межпроцедурный AST/taint-анализ Kotlin SAST, Spring Boot dependency management, расширение транзитивного SCA, AI gateway и объяснения. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
+Остаются в разработке: полноценный межпроцедурный AST/taint-анализ Kotlin SAST, Spring Boot dependency management и расширение транзитивного SCA. AI Explanation Gateway и объяснения по находкам реализованы как необязательная интеграция. GitHub Actions проверяет backend tests, frontend build и benchmark-наборы.
 
 ## Принципы безопасности
 
@@ -97,7 +97,7 @@ each finding card in the editor.
 
 Security findings include a concise root-cause explanation (`why_it_matters`), a remediation recommendation, CWE/CVE identifiers where available, and a short source excerpt with the affected line highlighted. Source excerpts are path-confined to the scanned workspace and size-limited. For any SECRET finding, the entire surrounding source excerpt is hidden (including private-key material); for other categories, common credential assignments, bearer values, and known token formats are redacted before they are returned to the UI.
 
-The editor shows live workflow node states and an execution timeline from persisted worker events. Secrets, SCA, and SAST scanners report file-level progress (files scanned / total and current relative path); this is real scanner progress, not a simulated animation. Findings can expand an inline source preview with line numbers.
+The editor shows explicit workflow node states (ready, running, completed, blocked, failed, configuration required), explanations for blocked/configuration states, animated active edges, and an execution timeline from persisted worker events. Secrets, SCA, and SAST scanners report file-level progress (files scanned / total and current relative path); this is real scanner progress, not a simulated animation. Findings can expand an inline source preview with line numbers.
 
 
 ## AI Explanation Gateway
@@ -115,3 +115,12 @@ validated, persisted with findings, and displayed separately from deterministic
 scanner explanations. If the provider is not configured, the node reports
 `configuration_required` and the workflow remains partial rather than silently
 pretending that AI analysis ran.
+
+
+### Workspace persistence
+
+ZIP uploads and Git clones are stored in the named Docker volume mounted at
+`/data/workspaces` in both API and worker containers. This shared mount is
+required: the API receives ZIP files, while the worker scans them later.
+The Compose configuration pins `WORKSPACE_ROOT=/data/workspaces` so the two
+containers cannot accidentally use separate temporary directories.
