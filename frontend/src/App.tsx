@@ -10,7 +10,7 @@ import WorkspaceManager from "./WorkspaceManager";
 import DashboardPanel from "./DashboardPanel";
 import FindingCollaboration from "./FindingCollaboration";
 import {
-  Activity, AlertTriangle, Bot, Check, ChevronDown, History, CircleHelp, CirclePlay,
+  Activity, AlertTriangle, Bot, Check, ChevronDown, History, CircleHelp, CirclePlay, Eye, EyeOff, ArrowRight, Mail, ShieldCheck,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2, BarChart3, Clock3, FolderCode, ShieldCheck, GitMerge, Package, ShieldAlert, Webhook,
@@ -244,6 +244,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -334,49 +335,94 @@ export default function App() {
   };
 
   if (checking) {
-    return <main className="auth-screen"><section className="auth-card">
-      <div className="auth-mark">INVEST</div>
-      <h1>Проверка сессии</h1>
-      <p>Защищённое подключение к рабочей области</p>
-      <div className="auth-loader" />
-    </section></main>;
+    return <main className="auth-screen">
+      <div className="auth-atmosphere" aria-hidden="true" />
+      <header className="auth-topbar">
+        <div className="auth-brand"><span className="auth-brand-icon"><ShieldCheck size={19}/></span><span><b>ЦЕНТР-ИНВЕСТ</b><small>AI SECURITY WORKFLOW</small></span></div>
+        <span className="auth-top-status"><i/> ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ</span>
+      </header>
+      <section className="auth-card auth-checking">
+        <div className="auth-loader" />
+        <h1>Проверка сессии</h1>
+        <p>Подготавливаем защищённую рабочую область</p>
+      </section>
+      <footer className="auth-footer"><span>CYBERGARDEN · SECURITY GATEWAY</span><span>INVEST PLATFORM</span></footer>
+    </main>;
   }
 
   if (!user) {
     return <main className="auth-screen">
-      <section className="auth-card">
-        <div className="auth-mark">INVEST <span>／ AI SECURITY WORKFLOW</span></div>
-        <div className="auth-eyebrow">SECURE WORKSPACE</div>
-        <h1>Вход в систему</h1>
-        <p>Введите учётные данные для доступа к рабочей области.</p>
-        <form className="auth-form" onSubmit={handleLogin}>
-          <label htmlFor="invest-auth-email">EMAIL</label>
-          <input
-            id="invest-auth-email"
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={event => setEmail(event.target.value)}
-            maxLength={320}
-            required
-          />
-          <label htmlFor="invest-auth-password">ПАРОЛЬ</label>
-          <input
-            id="invest-auth-password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={event => setPassword(event.target.value)}
-            maxLength={1024}
-            required
-          />
-          {error && <div className="auth-error" role="alert">{error}</div>}
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Проверка…" : "Войти"}
-          </button>
-        </form>
-        <div className="auth-footnote">SESSION PROTECTED  HTTPONLY COOKIE</div>
+      <div className="auth-atmosphere" aria-hidden="true" />
+      <header className="auth-topbar">
+        <div className="auth-brand">
+          <span className="auth-brand-icon"><ShieldCheck size={19}/></span>
+          <span><b>ЦЕНТР-ИНВЕСТ</b><small>AI SECURITY WORKFLOW</small></span>
+        </div>
+        <span className="auth-top-status"><i/> ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ</span>
+      </header>
+      <section className="auth-stage">
+        <div className="auth-decoration auth-decoration-left">
+          <span><i/> ИЗОЛИРОВАННЫЙ КОНТУР</span>
+          <small>NODE // SOC-GATE-04</small>
+        </div>
+        <div className="auth-decoration auth-decoration-right">
+          <span><ShieldCheck size={14}/> ACCESS CONTROL</span>
+          <small>SESSION · HTTPONLY COOKIE</small>
+        </div>
+        <section className="auth-card">
+          <div className="auth-card-top">
+            <span className="auth-mode-label"><LockKeyhole size={13}/> SECURE ACCESS</span>
+            <span className="auth-mode-status">AUTH GATE</span>
+          </div>
+          <div className="auth-eyebrow">АВТОРИЗАЦИЯ ПОЛЬЗОВАТЕЛЯ</div>
+          <h1>Вход в систему</h1>
+          <p className="auth-description">Доступ к платформе анализа безопасности и AI-пайплайнам</p>
+          <form className="auth-form" onSubmit={handleLogin}>
+            <label htmlFor="invest-auth-email">КОРПОРАТИВНЫЙ EMAIL</label>
+            <div className="auth-input-wrap">
+              <Mail size={17} aria-hidden="true"/>
+              <input
+                id="invest-auth-email"
+                type="email"
+                autoComplete="username"
+                placeholder="name@centrinvest.ru"
+                value={email}
+                onChange={event => setEmail(event.target.value)}
+                maxLength={320}
+                required
+              />
+            </div>
+            <div className="auth-password-heading">
+              <label htmlFor="invest-auth-password">ПАРОЛЬ</label>
+            </div>
+            <div className="auth-input-wrap">
+              <LockKeyhole size={17} aria-hidden="true"/>
+              <input
+                id="invest-auth-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="Введите пароль"
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                maxLength={1024}
+                required
+              />
+              <button className="auth-password-toggle" type="button" aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"} onClick={() => setShowPassword(value => !value)}>
+                {showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
+              </button>
+            </div>
+            {error && <div className="auth-error" role="alert"><AlertTriangle size={16}/><span>{error}</span></div>}
+            <button className="auth-submit" type="submit" disabled={submitting}>
+              <span>{submitting ? "Проверка учётных данных…" : "Войти в систему"}</span>
+              {submitting ? <LoaderCircle size={17} className="auth-submit-spinner"/> : <ArrowRight size={18}/>}
+            </button>
+          </form>
+          <div className="auth-divider"><span/> <small>ЗАЩИЩЁННАЯ СЕССИЯ</small> <span/></div>
+          <div className="auth-security-note"><ShieldCheck size={16}/><span>Авторизация защищена серверной сессией. Пароль не сохраняется в браузере.</span></div>
+          <div className="auth-card-bottom"><span>ДОСТУП ТОЛЬКО ДЛЯ АВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ</span><span>SECURITY GATEWAY</span></div>
+        </section>
       </section>
+      <footer className="auth-footer"><span>CYBERGARDEN · SECURITY GATEWAY</span><span>INVEST PLATFORM · SECURE LOGIN</span></footer>
     </main>;
   }
 
