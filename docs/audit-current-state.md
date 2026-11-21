@@ -1,7 +1,7 @@
 # INVEST — актуальный аудит исходников и roadmap
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `8348fc5cad54f64d8bd3309876e179ae65457da9`  
+**Срез исходников:** `02b736fa6c57534cd98629c7ca5528d66d2e8f7c`  
 **Дата:** 2026-11-21  
 **Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
 
@@ -37,7 +37,7 @@
 | Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для single-operator |
 | User management | Admin-only create/list/search/filter/pagination/update email/role/status; self-service profile email/password/session controls; soft deactivation revokes sessions | Реализовано частично; only admin/user, no deletion/recovery |
 | Self-service account | Password change after current-password verification; session list, revoke one/others | Реализовано в API/UI; требует runtime UX check |
-| User audit events | user.created / user.updated / user.password_changed with actor_user_id | Частично; auth and all security/admin events not fully audited |
+| User audit events | user.created / user.updated / user.profile_updated / user.password_changed with actor_user_id | Частично; auth and all security/admin events not fully audited |
 | Authorization / tenancy | No Organization/Workspace/Membership/Role ownership model | Не реализовано |
 | Finding lifecycle | open, accepted_risk, fixed, false_positive; reason, expiry, history | Частично |
 | Audit log | Selected events persisted; no actor identity/full query/export/tamper evidence | Частично |
