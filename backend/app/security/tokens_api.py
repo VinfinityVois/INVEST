@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import ApiToken, AuditLog, User
-from app.security.tenancy import require_active_workspace
+from app.security.tenancy import workspace_role
 
 router = APIRouter(tags=["api-tokens"])
 
@@ -100,8 +100,7 @@ def _actor(request: Request) -> User:
 def list_api_tokens(workspace_id: UUID, request: Request):
     actor = _actor(request)
     with SessionLocal() as db:
-        active, role = require_active_workspace(db, request, allowed_roles={"admin"})
-        if active.id != workspace_id:
+        if workspace_role(db, actor.id, workspace_id) != "admin":
             raise HTTPException(status_code=404, detail="Workspace not found.")
         rows = db.scalars(
             select(ApiToken)
@@ -124,8 +123,7 @@ def list_api_tokens(workspace_id: UUID, request: Request):
 def create_api_token(workspace_id: UUID, payload: ApiTokenCreate, request: Request):
     actor = _actor(request)
     with SessionLocal() as db:
-        active, _ = require_active_workspace(db, request, allowed_roles={"admin"})
-        if active.id != workspace_id:
+        if workspace_role(db, actor.id, workspace_id) != "admin":
             raise HTTPException(status_code=404, detail="Workspace not found.")
         raw_token = "inv_" + secrets.token_urlsafe(36)
         row = ApiToken(
