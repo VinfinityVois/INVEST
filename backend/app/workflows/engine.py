@@ -26,7 +26,7 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.4"
+SCANNER_CACHE_VERSION = "2026-11-21.5"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
