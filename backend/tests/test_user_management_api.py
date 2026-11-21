@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import ApiToken, Organization, OrganizationMembership, Project, User, UserSession, Workflow, WorkflowRun, Workspace, WorkspaceMembership
+from app.models import ApiToken, Finding, Organization, OrganizationMembership, Project, User, UserSession, Workflow, WorkflowRun, Workspace, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
@@ -272,6 +272,7 @@ def test_workspace_membership_isolation_and_switching(user_client):
         admin_workflow = Workflow(
             name="Private admin workflow",
             workspace_id=admin_workspace.id,
+            project_id=admin_project.id,
         )
         db.add(admin_workflow)
         db.flush()
@@ -286,7 +287,24 @@ def test_workspace_membership_isolation_and_switching(user_client):
         db.add(admin_run)
         db.flush()
         admin_run_id = admin_run.id
+        db.add(Finding(
+            run_id=admin_run.id,
+            fingerprint="a" * 64,
+            rule_id="SAST.SQL",
+            severity="critical",
+            path="src/main.kt",
+            line=12,
+            payload={"scanner": "SAST"},
+        ))
 
+    dashboard = client.get("/api/dashboard/summary")
+    assert dashboard.status_code == 200
+    assert dashboard.json()["metrics"]["projects"] == 1
+    assert dashboard.json()["metrics"]["workflows"] == 1
+    assert dashboard.json()["metrics"]["scans"] == 1
+    assert dashboard.json()["metrics"]["findings"] == 1
+    assert dashboard.json()["metrics"]["severity"]["critical"] == 1
+    assert dashboard.json()["metrics"]["scanners"]["SAST"] == 1
     own_workspaces = client.get("/api/workspaces")
     assert own_workspaces.status_code == 200
     assert len(own_workspaces.json()["items"]) == 1
@@ -328,6 +346,12 @@ def test_workspace_membership_isolation_and_switching(user_client):
 
     assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
     assert client.get("/api/projects").json() == []
+    isolated_dashboard = client.get("/api/dashboard/summary")
+    assert isolated_dashboard.status_code == 200
+    assert isolated_dashboard.json()["metrics"]["projects"] == 0
+    assert isolated_dashboard.json()["metrics"]["findings"] == 0
+    project_dashboard = client.get(f"/api/dashboard/summary?project_id={admin_project_id}")
+    assert project_dashboard.status_code == 404
     hidden_project = client.get(f"/api/projects/{admin_project_id}/files")
     assert hidden_project.status_code == 404
     assert client.get("/api/workflows").json() == []
