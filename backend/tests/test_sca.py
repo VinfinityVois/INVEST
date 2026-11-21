@@ -727,7 +727,7 @@ def test_gradle_sca_can_exclude_development_configurations(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
     (project / "build.gradle.kts").write_text(
-        'dependencies { testImplementation("org.apache.commons:commons-text:1.9") }\\n',
+        'dependencies { testImplementation("org.apache.commons:commons-text:1.9") }\n',
         encoding="utf-8",
     )
 
