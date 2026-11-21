@@ -1,116 +1,100 @@
-# План работ: что доделать и что начать с нуля
+# План оставшихся работ — INVEST / Центр-инвест / CyberGarden 2026
 
 **Ветка:** `feat/platform-foundation`  
-**Репозиторий:** [VinfinityVois/INVEST](https://github.com/VinfinityVois/INVEST)  
-**ТЗ:** PDF «AI Security Workflow» · Центр-инвест · CyberGarden 2026  
-**Дата:** 2026-11-20  
+**Актуальный статус:** см. [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md)  
+**Последняя сверка исходников:** 2026-11-21
 
-Уже работает (не трогать без нужды): React Flow, manual trigger, source git/upload, secrets/SCA/SAST базово, merge, logic.if, ai.explain, webhook-нода, ci.gate, SSE, vault, docker-compose, тесты.
+> Этот документ — порядок выполнения, а не утверждение, что все этапы уже пройдены. Реализация, CI и локальная runtime-проверка учитываются раздельно. Не закрывать задачу только по наличию кода.
 
-Ниже — только **дыры** и **недоделки**, в порядке «что делать сейчас».
+## 0. Правила и приоритеты
 
----
+1. Сначала довести пользовательский сценарий и демо до воспроизводимого MVP.
+2. Затем стабилизировать миграции, worker, Docker и обработку ошибок.
+3. После этого закрывать tenant isolation/RBAC и системный security hardening.
+4. В конце — backup/restore, monitoring, deployment и release packaging.
 
-## A. Начать с нуля (функции нет в коде)
+Нельзя откладывать базовую безопасность: не коммитить секреты, не использовать реальные данные в тестах, не отключать allowlist/валидацию/redaction, не запускать исходники проверяемого проекта.
 
-| ID | Что сделать | Зачем по ТЗ | Оценка | Как начать (первые шаги) |
-|----|-------------|-------------|--------|---------------------------|
-| **N1** | Merge / default branch | Жюри видит `main` | 15 мин | PR `feat/platform-foundation` → `main` или Settings → default branch |
-| **N2** | `trigger.schedule` | Задача 2: «по кнопке, **расписанию**» | 1–3 ч | 1) `add("trigger.schedule", …)` в registry 2) config: cron 3) worker/APScheduler или polling job → `POST run` 4) нода на палитре |
-| **N3** | `logic.compare` и/или `logic.regex` | Задача 2: сравнение, regex | 1–2 ч | Нода: вход findings/any → true/false или filter; config field/op/value или pattern |
-| **N4** | Стабильный e2e notify | Задача 2 + техтр. 1 | 1–2 ч | Довести `notify.webhook`: POST JSON (stats + top findings + AI summary) на webhook.site; проверить в UI |
-| **N5** | Demo-скрипт / demo-workflow | Презентация | 30–60 мин | Сохранённый graph JSON + README «5 шагов до findings» |
-| **N6** | CI job для *продукта* (*-2) | Бонус CI/CD | 1 ч | `.github/workflows/security-check.yml`: curl trigger API → ждать run → exit 1 если gate=fail |
-| **N7** | Библиотека шаблонов (*-1) | Бонус | 3–6 ч | Таблица templates, publish/list/clone API, кнопка в UI |
-| **N8** | AI-генерация графа (*-3) | Бонус | 4–8 ч | `POST /ai/generate-workflow` → JSON schema → validate_graph → nodes на холст |
+## 1. P0 — воспроизводимое демо и стабилизация
 
-**Стартовать сегодня (обязательный минимум «нет»):** N1 → N4 → N2 (или явный skip в презентации) → N5.
+| ID | Задача | Текущий статус | Definition of Done |
+|---|---|---|---|
+| P0-1 | Учебный Kotlin/Spring E2E | Код, закреплённый demo graph и script есть; локальный прогон не подтверждён | Один run проходит Git → Secrets/SCA/SAST → Merge → AI → Webhook; trace и findings сохранены |
+| P0-2 | Webhook delivery | Реализация и тесты есть; реальная доставка не подтверждена | Уникальный webhook endpoint получил ожидаемый redacted JSON |
+| P0-3 | AI provider readiness | Код и timeout есть; зависит от LLM credentials/network пользователя | AI completed; explanation содержит scanner evidence; нет configuration_required |
+| P0-4 | Scanner benchmark | CI jobs и ground truth есть | Сохранить precision/recall/F1, FP/FN по каждому анализатору на закреплённом commit |
+| P0-5 | Миграции и queue recovery | Миграции и тесты есть; runtime на текущей БД не подтверждён | Upgrade empty/existing DB; restart worker during run; no duplicate execution |
+| P0-6 | Demo automation | Скрипт обновлён для login/session/logout | Проверить PowerShell-сценарий на чистой машине и описать ожидаемые результаты |
 
----
+## 2. P1 — завершение функционального MVP
 
-## B. Доделать (есть, но не закрывает ТЗ)
+| ID | Задача | Текущий статус | Следующее действие |
+|---|---|---|---|
+| P1-1 | Schedule trigger | Реализован | Проверить cron/timezone и duplicate suppression на нескольких worker |
+| P1-2 | Conditional logic | Compare findings реализован | Отдельный regex оператор — только если он обязателен по ТЗ |
+| P1-3 | Webhook | Реализован | E2E delivery, retry/signature policy при необходимости |
+| P1-4 | Secrets | Реализован | Поднять precision на benchmark: context, placeholders, entropy thresholds |
+| P1-5 | SCA | Реализован для Maven/Gradle | Автообновление advisory feed, provenance/hash, новые экосистемы |
+| P1-6 | Kotlin/Spring SAST | Реализован ограниченный набор правил | Benchmark-driven rules; постепенно улучшать AST/type/data-flow |
+| P1-7 | Typed ports | UI и backend validation есть | Добавить negative tests для всех несовместимых портов и reconnect |
+| P1-8 | Schema-driven forms | Реализованы | Проверить все JSON schema типы/constraints и UX ошибок |
+| P1-9 | Reports | JSON/HTML есть | CSV/SARIF для CI; затем PDF/XLSX при подтверждённой потребности |
+| P1-10 | Finding management | Базовые статусы/причины/expiry/history есть | Assignment, comments, labels, due dates, reopen |
+| P1-11 | UI/UX | CyberGarden design refinement внесён | Проверить реальные ширины, длинные пути, большие списки и состояния loading/error/empty |
 
-| ID | Что доделать | Сейчас | Цель | Как доделать |
-|----|--------------|--------|------|--------------|
-| **D1** | E2E на учебном Kotlin-репо | Run работает, сценарий не зафиксирован | Один репо → 3 сканера → AI → notify без сюрпризов | Залить sample / allowlist URL; прогнать; записать команды в README |
-| **D2** | Secrets | Regex + assignment | Меньше шума, ближе к эталону | Entropy ≥ порога; placeholders; при необходимости git history |
-| **D3** | SCA | Gradle + JSON advisories | Эталонные CVE/версии | `libs.versions.toml`; Spring Boot managed map; semver ranges |
-| **D4** | SAST | Эвристики SQLi/TLS/CORS/IDOR | 2–3+ класса эталона стабильно | Правила под эталон; ideally tree-sitter; не раздувать scope |
-| **D5** | Порты в UI | Backend валидирует | Нельзя соединить findings→source | Проверка data_type при `onConnect`; красная подсветка |
-| **D6** | Формы конфига | Ручные поля | Schema-driven | Рендер из `config_schema` манифеста |
-| **D7** | AI на демо | Код есть, нужен `.env` | Видны объяснения, не «configuration_required» | Прописать LLM_*; показать readiness + completed в UI |
-| **D8** | README поставки | Есть общий | «С нуля до findings за 5 мин» | compose, .env, demo graph, ожидаемые findings |
+## 3. P2 — security hardening и multi-user
 
----
+| ID | Задача | Статус | Definition of Done |
+|---|---|---|---|
+| P2-1 | Authentication | Базовый admin login/session/rate limit есть | Account lifecycle, session management, secure deployment review |
+| P2-2 | Tenant model | Не реализован | Organization/Workspace/Membership/Role и ownership foreign keys |
+| P2-3 | Object-level authorization | Не реализована | Каждый API lookup проверяет tenant и permission; cross-tenant IDOR tests |
+| P2-4 | Audit trail | Частичный AuditLog | Actor identity, полное покрытие событий, query/export и tamper evidence |
+| P2-5 | Secrets/key management | Vault/redaction primitives есть | Rotation, recovery, backup, least privilege и operational runbook |
+| P2-6 | API security | Origin checks и auth middleware есть | CSRF/reverse-proxy/TLS/header/rate-limit review и negative tests |
+| P2-7 | Upload/Git/Webhook | Защитные механизмы и тесты есть | Runtime boundary tests, SSRF/DNS rebinding checks, logs/redaction audit |
 
-## C. Порядок работ на ближайшие сессии
+**Граница безопасности:** до P2-2/P2-3 приложение остаётся single-operator/trusted deployment. Не предоставлять общий доступ нескольким недоверенным пользователям.
 
-### Сессия 1 — поставка и демо-каркас (P0)
+## 4. P3 — release readiness
 
-1. **N1** — merge в `main`  
-2. **D1** — один стабильный учебный проект + полный run  
-3. **N4** — webhook реально уходит (webhook.site)  
-4. **D7** — LLM в `.env`, AI-нода даёт текст  
-5. **N5** + **D8** — README и demo path  
+- Docker Compose clean install и upgrade из предыдущей версии.
+- Backup/restore PostgreSQL и workspace volume с проверкой восстановления.
+- Monitoring API/worker, queue depth, stale runs, provider failures и webhook delivery.
+- Load/soak tests и ограничение ресурсов для архивов, больших репозиториев и длинных workflow.
+- Документация установки, обновления, rollback, bootstrap admin и rotation secrets.
+- Reusable CI workflow проверить из отдельного тестового репозитория; закрепить production usage на release tag или commit SHA.
+- Security review зависимостей backend/frontend и контейнерного образа.
 
-*Результат: можно показывать жюри end-to-end.*
+## 5. Порядок следующих итераций
 
-### Сессия 2 — закрыть дыры задачи 2–3 (P0/P1)
+### Итерация A — demo gate
+P0-1 → P0-2 → P0-3 → P0-4 → P0-5 → P0-6. Никаких новых бонусных функций до подтверждения полного прогона.
 
-6. **N2** — `trigger.schedule` (cron)  
-7. **N3** — хотя бы `logic.regex` или `logic.compare`  
-8. **D2 / D3 / D4** — подгонка сканеров под эталон организаторов (после выдачи репо)  
+### Итерация B — scanner quality
+SCA advisory refresh/provenance → SCA benchmark regression → SAST benchmark/false-positive review → Secrets precision.
 
-### Сессия 3 — UX и бонусы
+### Итерация C — tenancy/security
+Tenant data model → migration strategy → object-level authorization → cross-tenant tests → actor-aware audit → session lifecycle.
 
-9. **D5** — typed ports в UI  
-10. **N6** — CI job (* быстрый бонус)  
-11. **N7 / N8** — только если P0 закрыт  
+### Итерация D — product completion
+Finding workflow → CSV/SARIF → dashboard analytics → integrations → collaboration.
 
----
+### Итерация E — release
+Backup/restore → monitoring → load test → deployment hardening → tagged release.
 
-## D. Чеклист «можно сдавать must-have»
+## 6. Запреты кейса
 
-- [ ] Код в `main` (или default = foundation)  
-- [ ] `docker compose up --build` поднимает стек  
-- [ ] Drag-and-drop: trigger → source → secrets/sca/sast → merge → ai → notify/gate  
-- [ ] Свои сканеры, без Semgrep/Gitleaks/Trivy  
-- [ ] Severity у findings  
-- [ ] AI объясняет, не детектит  
-- [ ] Уведомление уходит (webhook достаточно)  
-- [ ] Статусы нод live (SSE)  
-- [ ] Schedule **есть** или осознанно объяснён gap  
-- [ ] Скан только allowlist / учебный проект  
+- Не использовать Semgrep, Gitleaks, Trivy, detekt или сторонний rule engine вместо собственных анализаторов.
+- Не использовать LLM для детекции; AI только объясняет findings, подтверждённые сканерами.
+- Не использовать n8n/Node-RED как основу.
+- Не сканировать чужие production-системы.
+- Не запускать Gradle/Maven/project scripts проверяемого репозитория.
+- Не помещать API keys, webhook secrets и реальные пользовательские данные в тестовые fixtures или скриншоты.
 
----
+## 7. Документы
 
-## E. Не делать
-
-| Запрет ТЗ | Почему |
-|-----------|--------|
-| Semgrep, Gitleaks, Trivy, detekt (готовые rules) | Прямой запрет |
-| LLM вместо собственных анализаторов | Прямой запрет |
-| n8n / Node-RED как основа | Прямой запрет |
-| Скан чужих prod-систем | Прямой запрет |
-
----
-
-## F. Быстрые победы
-
-| Время | Действие |
-|-------|----------|
-| 15 мин | **N1** Merge → main |
-| 30 мин | Webhook.site + один run → скрин notify |
-| 1 ч | **N2** schedule «каждые 5 мин» для демо |
-| 1 ч | **N6** Actions: trigger + fail on gate |
-| 2–3 ч | Правила SCA/SAST строго под эталонный репо |
-
----
-
-## G. Связанные документы
-
-- [Backlog_Dorabotka.md](./Backlog_Dorabotka.md) — полный бэклог с ID  
-- [Platform_Foundation_Status.md](./Platform_Foundation_Status.md) — что уже реализовано  
-- [Security_Scenario_Engine_Architecture.md](./Security_Scenario_Engine_Architecture.md) — архитектура  
-
-**С чего начать прямо сейчас:** `N1` (merge) → `D1` (e2e на одном репо) → `N4` (notify) → `N2` (schedule).
+- [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md) — актуальный backlog и статусы.
+- [audit-current-state.md](./audit-current-state.md) — подтверждённое состояние исходников и архитектурные ограничения.
+- [demo-runbook.md](./demo-runbook.md) — подготовка и полный сценарий демонстрации.
+- [Rule_Packs_and_Presets.md](./Rule_Packs_and_Presets.md) — packs, presets, policies и ограничения анализаторов.
