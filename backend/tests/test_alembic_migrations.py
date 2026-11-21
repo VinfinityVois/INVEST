@@ -291,7 +291,19 @@ def _assert_workspace_backfill(connection):
     workspace_count = connection.execute(
         "SELECT COUNT(*) FROM workspaces"
     ).fetchone()[0]
-    assert workspace_count == 1
+    assert workspace_count == 2
+    admin_workspace = connection.execute(
+        "SELECT workspace_memberships.workspace_id FROM workspace_memberships "
+        "JOIN organization_memberships ON organization_memberships.organization_id = "
+        "(SELECT organization_id FROM workspaces WHERE id = workspace_memberships.workspace_id) "
+        "WHERE workspace_memberships.user_id = ? AND organization_memberships.role = 'owner'",
+        ("9" * 32,),
+    ).fetchone()
+    assert admin_workspace is not None
+    assert project[0] == admin_workspace[0]
+    assert connection.execute(
+        "SELECT COUNT(*) FROM organization_memberships"
+    ).fetchone()[0] == 2
 
 
 def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
@@ -324,7 +336,18 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
                     f"{table}.{column}: expected one seeded NULL, got {count}"
                 )
 
-    # Upgrade through auth and the new tenant ownership backfill.
+    # Upgrade through auth, seed legacy accounts, then apply tenant backfill.
+    _run_alembic(database_url, "upgrade", "0007_login_rate_limits")
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO users (id, email, password_hash, is_active, is_admin) VALUES (?, ?, ?, ?, ?)",
+            ("9" * 32, "admin@example.test", "test-hash", 1, 1),
+        )
+        connection.execute(
+            "INSERT INTO users (id, email, password_hash, is_active, is_admin) VALUES (?, ?, ?, ?, ?)",
+            ("8" * 32, "member@example.test", "test-hash", 1, 0),
+        )
+        connection.commit()
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
