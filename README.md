@@ -29,6 +29,25 @@ API: http://localhost:8000/docs
 Frontend: http://localhost:5173  
 Health: http://localhost:8000/health
 
+## Локальный запуск без Docker (Windows PowerShell)
+
+Если backend запускается напрямую через Uvicorn, установи зависимости именно в тот Python, которым запускается сервер. В частности, планировщик использует `croniter`, уже включённый в `backend/requirements.txt`:
+
+```powershell
+cd C:\\MYDESK\\HAK\\INVEST\\backend
+py -3.14 -m pip install -r requirements.txt
+py -3.14 -m alembic upgrade head
+py -3.14 -m uvicorn app.main:app --reload --port 8000
+```
+
+Во втором окне PowerShell, из той же папки и с тем же Python, обязательно запусти worker:
+
+```powershell
+py -3.14 -m app.worker
+```
+
+Uvicorn принимает и ставит задания в очередь, но не выполняет их сам. Без отдельного worker кнопка «Запустить всё» сможет поставить запуск в очередь, однако блоки не начнут исполняться. Для полного окружения с API, PostgreSQL, worker и frontend используй `docker compose up --build` из корня репозитория.
+
 ## Источники проектов
 
 ### Библиотека проектов и ZIP upload
