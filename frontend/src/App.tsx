@@ -11,7 +11,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2, Clock3, FolderCode, ShieldCheck, GitMerge, Package, ShieldAlert, Webhook,
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
@@ -106,11 +106,40 @@ const highlightCodeLine = (source: string): React.ReactNode[] => {
 };
 
 
-const categoryMeta: Record<string, { label: string; tone: string }> = {
-  Trigger: { label: "Триггер", tone: "blue" }, Source: { label: "Источник", tone: "cyan" },
-  Security: { label: "Security", tone: "violet" }, Logic: { label: "Логика", tone: "amber" },
-  AI: { label: "AI", tone: "pink" }, Notify: { label: "Уведомления", tone: "green" },
-  CI: { label: "CI / Gate", tone: "green" },
+const categoryMeta: Record<string, { label: string; eyebrow: string; tone: string; color: string }> = {
+  Trigger: { label: "Триггеры", eyebrow: "TRIGGERS", tone: "amber", color: "#F59E0B" },
+  Source: { label: "Источники", eyebrow: "SOURCES", tone: "sky", color: "#0EA5E9" },
+  Security: { label: "Безопасность", eyebrow: "SECURITY", tone: "emerald", color: "#10B981" },
+  Logic: { label: "Логика и поток", eyebrow: "LOGIC / FLOW", tone: "violet", color: "#8B5CF6" },
+  AI: { label: "AI-анализ", eyebrow: "INTELLIGENCE", tone: "fuchsia", color: "#D946EF" },
+  CI: { label: "CI/CD · Gate", eyebrow: "QUALITY GATES", tone: "rose", color: "#F43F5E" },
+  Notify: { label: "Уведомления", eyebrow: "NOTIFICATIONS", tone: "sky", color: "#0EA5E9" },
+};
+const nodeIcon = (type: string, category: string) => {
+  switch (type) {
+    case "trigger.manual": return <Zap size={15}/>;
+    case "trigger.schedule": return <Clock3 size={15}/>;
+    case "source.upload": return <FolderCode size={15}/>;
+    case "source.git": return <GitBranch size={15}/>;
+    case "scan.secrets": return <ShieldCheck size={15}/>;
+    case "scan.sca": return <Package size={15}/>;
+    case "scan.sast": return <Code2 size={15}/>;
+    case "findings.merge": return <GitMerge size={15}/>;
+    case "ai.explain": return <Sparkles size={15}/>;
+    case "ci.gate": return <ShieldAlert size={15}/>;
+    case "notify.webhook": return <Webhook size={15}/>;
+    default: return category === "Security" ? <ShieldCheck size={15}/> : category === "Source" ? <FolderCode size={15}/> : category === "Trigger" ? <Zap size={15}/> : category === "AI" ? <Sparkles size={15}/> : category === "Logic" ? <GitMerge size={15}/> : category === "CI" ? <ShieldAlert size={15}/> : <Workflow size={15}/>;
+  }
+};
+const categoryColor = (category?: string) => categoryMeta[category || ""]?.color || "#64748B";
+const portColor = (dataType: string) => {
+  const type = dataType.toLowerCase();
+  if (type.includes("event")) return "#F59E0B";
+  if (type.includes("source")) return "#0EA5E9";
+  if (type.includes("finding")) return "#10B981";
+  if (type.includes("report")) return "#D946EF";
+  if (type.includes("gate")) return "#F43F5E";
+  return "#8B5CF6";
 };
 const seedNodes: FlowNode[] = [
   { id: "trigger", type: "workflow", position: { x: 70, y: 190 }, data: { label: "Manual trigger", nodeType: "trigger.manual", category: "Trigger", description: "Ручной запуск проверки по кнопке «Запустить».", config: {} } },
@@ -148,9 +177,9 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "completed" ? "success"
     : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
-    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
+    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: portColor(port.data_type), boxShadow: "0 0 9px " + portColor(port.data_type) + "88" }} />)}
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
-    <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
+    <div className="node-main"><div className="node-symbol">{nodeIcon(data.nodeType, data.category)}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <details className="node-description-details nodrag"><summary>О БЛОКЕ <ChevronDown size={10} /></summary><p>{data.description}</p></details>
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
@@ -1789,10 +1818,19 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           </button>
           {componentsFolderOpen && <div className="palette-folder-body">
           <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
-        {filtered.map(manifest => <article className="library-item" key={manifest.type}>
-          <div className="library-main"><div className={"library-icon tone-" + (categoryMeta[manifest.category] || {tone:"slate"}).tone}><Code2 size={15} /></div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
-          <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{categoryMeta[manifest.category]?.label || manifest.category} · тип: {manifest.type}</span></details>
-        </article>)}
+        {(["Trigger","Source","Security","Logic","AI","CI","Notify"]).map(groupKey => {
+          const group = categoryMeta[groupKey];
+          const items = filtered.filter(item => item.category === groupKey);
+          const total = manifests.filter(item => item.category === groupKey).length;
+          if (!items.length) return null;
+          return <section className={"node-family node-family-" + group.tone} key={groupKey}>
+            <div className="node-family-heading"><span><i/>{group.label}<small>// {group.eyebrow}</small></span><b>{total} БЛОК{total === 1 ? "" : total < 5 ? "А" : "ОВ"}</b></div>
+            {items.map(manifest => <article className={"library-item tone-" + group.tone} key={manifest.type}>
+              <div className="library-main"><div className={"library-icon tone-" + group.tone}>{nodeIcon(manifest.type, manifest.category)}</div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
+              <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{group.label} · тип: {manifest.type}</span></details>
+            </article>)}
+          </section>;
+        })}
         {!manifests.length && <div className="empty-library">Загружаем реестр компонентов API…</div>}
         {manifests.length > 0 && filtered.length === 0 && <div className="empty-library">Ничего не найдено.</div>}
         <div className="palette-note"><LockKeyhole size={14} /><span>Код репозитория анализируется как данные, без запуска его скриптов.</span></div>
@@ -1804,13 +1842,13 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       <section className="editor">
         <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
-        <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, style: { ...edge.style, stroke: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), strokeWidth: 2.2, filter: "drop-shadow(0 0 4px " + categoryColor(nodes.find(node => node.id === edge.source)?.data.category) + "66)" } }))} nodeTypes={nodeTypes}
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
           edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
-          <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.data?.category === "Security" ? (theme === "light" ? "#157A44" : "#3BB56F") : node.data?.category === "AI" ? "#6B7682" : theme === "light" ? "#8B95A1" : "#4F5863"} /><Controls />
+          <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
         </ReactFlow></div>
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
           <div className="workflow-bottom-drawer-head">
