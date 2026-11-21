@@ -135,6 +135,7 @@ from app.security.api import router as auth_router, SESSION_COOKIE
 from app.security.users_api import router as users_router
 from app.security.workspaces_api import router as workspaces_router
 from app.security.tokens_api import router as tokens_router, require_workspace_api_token
+from app.security.dashboard_api import router as dashboard_router
 from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
 
@@ -142,6 +143,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(workspaces_router)
 app.include_router(tokens_router)
+app.include_router(dashboard_router)
 
 
 def _project_in_active_workspace(session, request: Request, project_id: UUID, *, write: bool = False):
