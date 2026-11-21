@@ -2296,7 +2296,7 @@ def list_finding_states(workflow_id: UUID, request: Request):
                 "state": row.state,
                 "reason": row.reason,
                 "expires_at": row.expires_at,
-                "assigned_to_user_id": str(row.assigned_to_user_id) if row.assigned_to_user_id else None,
+                "assigned_to_user_id": str(getattr(row, "assigned_to_user_id", None)) if getattr(row, "assigned_to_user_id", None) else None,
             }
             for row in rows
         ]
