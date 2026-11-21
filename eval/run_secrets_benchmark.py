@@ -42,7 +42,7 @@ def main() -> int:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered + "\n", encoding="utf-8")
-    return 1 if missed or control_hits else 0
+    return 1 if missed or false_positive > 0 or control_hits else 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
