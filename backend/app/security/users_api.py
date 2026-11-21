@@ -214,12 +214,16 @@ def list_my_sessions(request: Request):
             .order_by(UserSession.created_at.desc())
         ).all()
         now = datetime.now(timezone.utc)
+        def expired(value: datetime) -> bool:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value <= now
         return {"items": [{
             "id": str(item.id),
             "created_at": item.created_at.isoformat() if item.created_at else None,
             "last_seen_at": item.last_seen_at.isoformat() if item.last_seen_at else None,
             "expires_at": item.expires_at.isoformat(),
-            "revoked": item.revoked_at is not None or item.expires_at <= now,
+            "revoked": item.revoked_at is not None or expired(item.expires_at),
             "current": item.token_hash == current_hash,
         } for item in sessions]}
 
