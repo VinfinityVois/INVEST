@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 from typing import Any
 
@@ -152,6 +153,14 @@ class RulePackRegistry:
             resolved.append(pack)
         return resolved
 
+    def _catalog_count(self, relative_path: str, key: str) -> int:
+        try:
+            payload = json.loads((self.root.parent / relative_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return 0
+        values = payload.get(key, [])
+        return len(values) if isinstance(values, list) else 0
+
     def list(self, analyzer: str | None = None) -> list[dict[str, Any]]:
         result = []
         for pack_id, raw in sorted(self._packs.items()):
@@ -172,6 +181,8 @@ class RulePackRegistry:
                     "starter_pack": resolved.get("starter_pack", "none"),
                     "include_dev": resolved.get("include_dev", True),
                     "use_lockfile": resolved.get("use_lockfile", True),
+                    "advisory_count": self._catalog_count("data/maven-advisories.json", "vulnerabilities"),
+                    "starter_count": self._catalog_count("data/spring-boot-starters.json", "starters") if resolved.get("starter_pack") == "spring-boot-starters" else 0,
                 } if raw["analyzer"] == "sca" else {}),
             })
         return result
