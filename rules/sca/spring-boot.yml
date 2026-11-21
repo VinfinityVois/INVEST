@@ -1,0 +1,14 @@
+pack_id: sca-spring-boot
+title: Spring Boot dependencies
+description: Maven and Gradle dependency analysis with the curated Spring Boot starter catalog and managed-version snapshot.
+version: 1
+analyzer: sca
+extends:
+  - sca-maven-core
+ecosystems:
+  - Maven
+  - Gradle
+advisory_db: maven-advisories
+starter_pack: spring-boot-starters
+include_dev: true
+use_lockfile: true
