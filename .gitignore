@@ -13,3 +13,8 @@ coverage/
 **/.pytest-tmp-*/
 *.bak
 *.bak-*
+# Local databases, generated API snapshots, and manual scanner fixtures
+*.db
+*-local.json
+/test-secrets.*
+/auth-p1-backup-*/
