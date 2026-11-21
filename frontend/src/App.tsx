@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls, MiniMap, Handle, Position, addEdge, reconnectEdge,
+  ReactFlow, Background, Controls, MiniMap, Handle, Position, BaseEdge, getBezierPath, addEdge, reconnectEdge,
   useEdgesState, useNodesState,
   type Connection, type Edge, type Node, type NodeProps,
 } from "@xyflow/react";
@@ -204,7 +204,19 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
   </div>;
 }
+function CategoryEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style }: import("@xyflow/react").EdgeProps<Edge<{ sourceColor?: string; targetColor?: string }>>) {
+  const [edgePath] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  const gradientId = "workflow-edge-" + id.replace(/[^a-zA-Z0-9_-]/g, "-");
+  return <>
+    <defs><linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor={data?.sourceColor || "#64748B"}/>
+      <stop offset="100%" stopColor={data?.targetColor || "#64748B"}/>
+    </linearGradient></defs>
+    <BaseEdge path={edgePath} style={{ ...style, stroke: "url(#" + gradientId + ")", strokeWidth: 2.2, filter: "drop-shadow(0 0 4px " + (data?.sourceColor || "#64748B") + "55)" }}/>
+  </>;
+}
 const nodeTypes = { workflow: memo(WorkflowNode) };
+const edgeTypes = { category: memo(CategoryEdge) };
 
 type AuthUser = { id: string; email: string; is_admin: boolean };
 
@@ -1842,7 +1854,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       <section className="editor">
         <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
-        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, style: { ...edge.style, stroke: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), strokeWidth: 2.2, filter: "drop-shadow(0 0 4px " + categoryColor(nodes.find(node => node.id === edge.source)?.data.category) + "66)" } }))} nodeTypes={nodeTypes}
+        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, type: "category", data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
