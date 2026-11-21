@@ -24,14 +24,26 @@ def _run_alembic(database_url, *args):
     env = os.environ.copy()
     env["DATABASE_URL"] = database_url
 
-    return subprocess.run(
-        [sys.executable, "-m", "alembic", *args],
+    command = [sys.executable, "-m", "alembic", *args]
+    result = subprocess.run(
+        command,
         cwd=BACKEND_DIR,
         env=env,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if result.returncode:
+        if args and args[0] == "upgrade":
+            pytest.fail(
+                "Alembic upgrade failed.\n"
+                f"stdout:\n{result.stdout}\n"
+                f"stderr:\n{result.stderr}"
+            )
+        raise subprocess.CalledProcessError(
+            result.returncode, command, output=result.stdout, stderr=result.stderr
+        )
+    return result
 
 
 def _assert_revision(connection, expected):
