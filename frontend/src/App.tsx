@@ -2355,8 +2355,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
               </button>
               <small>Только SAST/SCA · секреты не отправляются модели · без автоматического применения</small>
             </div>}
-            {aiFixError?.fingerprint === finding.fingerprint && <div className="ai-fix-error">{aiFixError.message}</div>}
-            {aiFixProposal?.fingerprint === finding.fingerprint && <div className="ai-fix-preview">
+            {aiFixError && aiFixError.fingerprint === finding.fingerprint && <div className="ai-fix-error">{aiFixError.message}</div>}
+            {aiFixProposal && aiFixProposal.fingerprint === finding.fingerprint && <div className="ai-fix-preview">
               <div className="ai-fix-preview-heading"><b>AI FIX · ПРЕДЛОЖЕНИЕ</b><span>{aiFixProposal.model || "LLM"}</span></div>
               <p>{aiFixProposal.summary}</p>
               <div className="ai-fix-diff-label">DIFF · {aiFixProposal.path}</div>
