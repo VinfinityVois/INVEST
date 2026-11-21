@@ -75,6 +75,7 @@ def test_finding_risk_expiry_requires_timezone_and_future_date():
                 reason="Temporary exception",
                 expires_at=datetime(2030, 1, 1),
             ),
+            None,
         )
     assert naive_error.value.status_code == 422
 
@@ -87,6 +88,7 @@ def test_finding_risk_expiry_requires_timezone_and_future_date():
                 reason="Temporary exception",
                 expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
             ),
+            None,
         )
     assert past_error.value.status_code == 422
 
@@ -136,9 +138,10 @@ def test_listing_finding_states_expires_risk_and_writes_audit(monkeypatch):
 
     session = FakeSession()
     monkeypatch.setattr(main, "SessionLocal", lambda: session)
+    monkeypatch.setattr(main, "_workflow_in_active_workspace", lambda _session, _request, _id, **kwargs: object())
     monkeypatch.setattr(main, "_lock_workflow_for_version_write", lambda _session, _id: object())
 
-    result = main.list_finding_states(workflow_id)
+    result = main.list_finding_states(workflow_id, None)
 
     assert result[0]["state"] == "open"
     assert result[0]["expires_at"] is None
@@ -181,8 +184,10 @@ def test_finding_state_history_query_is_bounded():
     from app import main
     original = main.SessionLocal
     main.SessionLocal = lambda: session
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    monkeypatch.setattr(main, "_workflow_in_active_workspace", lambda _session, _request, _id, **kwargs: object())
     try:
-        assert finding_state_history(workflow_id, "a" * 64, limit=25, offset=50) == []
+        assert finding_state_history(workflow_id, "a" * 64, None, limit=25, offset=50) == []
     finally:
         main.SessionLocal = original
 
