@@ -25,6 +25,7 @@ from croniter import croniter
 
 from app.config import settings
 from app.ai.explanations import provider_configuration
+from app.ai.fixes import AIFixError, generate_fix_proposal
 from app.ai.workflow_generation import WorkflowGenerationError, generate_workflow_graph
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
@@ -2311,6 +2312,169 @@ def get_finding_source(
             "redacted": redact_entire_file,
             "lines": window,
         }
+
+
+@app.post("/api/runs/{run_id}/findings/{fingerprint}/fix-preview")
+def preview_ai_finding_fix(run_id: UUID, fingerprint: str, request: Request):
+    """Generate a bounded AI proposal for a safe project file; never apply it."""
+    if not fingerprint or len(fingerprint) > 64:
+        raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
+
+    with SessionLocal() as session:
+        run = _run_in_active_workspace(session, request, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        finding = session.scalar(
+            select(Finding).where(
+                Finding.run_id == run_id,
+                Finding.fingerprint == fingerprint,
+            ).limit(1)
+        )
+        if finding is None:
+            raise HTTPException(status_code=404, detail="Finding not found in this run")
+        finding_payload = finding.payload if isinstance(finding.payload, dict) else {}
+        category = str(finding_payload.get("category", "")).upper()
+        if category not in {"SAST", "SCA"}:
+            raise HTTPException(
+                status_code=403,
+                detail="AI Fix доступен только для находок SAST и SCA. Секреты автоматически не исправляются.",
+            )
+
+        result = run.result if isinstance(run.result, dict) else {}
+        outputs = result.get("outputs", {}) if isinstance(result.get("outputs"), dict) else {}
+        graph = run.graph_snapshot if isinstance(run.graph_snapshot, dict) else {}
+        ready_sources = []
+        for node in graph.get("nodes", []):
+            if not isinstance(node, dict) or node.get("type") != "source.upload":
+                continue
+            output = outputs.get(node.get("id"), {})
+            if isinstance(output, dict) and output.get("status") == "ready":
+                ready_sources.append(output)
+        if len(ready_sources) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="AI Fix доступен только для запуска с одним источником проекта из рабочей области.",
+            )
+        source_output = ready_sources[0]
+        source_path = source_output.get("path")
+        workflow = session.get(Workflow, run.workflow_id) if run.workflow_id else None
+        if not isinstance(source_path, str) or workflow is None:
+            raise HTTPException(status_code=409, detail="Не удалось связать запуск с проектом рабочей области.")
+        project = session.scalar(
+            select(Project).where(
+                Project.workspace_id == workflow.workspace_id,
+                Project.workspace_path == source_path,
+            )
+        )
+        if project is None:
+            raise HTTPException(
+                status_code=409,
+                detail="AI Fix доступен только для файлов проекта, сохранённого в рабочей области.",
+            )
+
+        canonical_path = _canonical_finding_path(run, finding.path)
+        finding_relative = PurePosixPath(canonical_path)
+        if (
+            finding_relative.is_absolute()
+            or not finding_relative.parts
+            or any(part in {"", ".", ".."} for part in finding_relative.parts)
+        ):
+            raise HTTPException(status_code=400, detail="Invalid finding source path")
+        subdirectory_value = source_output.get("project_subdirectory")
+        if subdirectory_value:
+            subdirectory = PurePosixPath(subdirectory_value)
+            if (
+                subdirectory.is_absolute()
+                or not subdirectory.parts
+                or any(part in {"", ".", ".."} for part in subdirectory.parts)
+            ):
+                raise HTTPException(status_code=400, detail="Invalid project subdirectory")
+            project_relative = subdirectory / finding_relative
+        else:
+            project_relative = finding_relative
+
+        editable_suffixes = {
+            ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
+            ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml",
+            ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1",
+        }
+        if project_relative.suffix.lower() not in editable_suffixes or _project_path_is_sensitive(project_relative):
+            raise HTTPException(status_code=403, detail="Этот файл нельзя передавать AI Fix или редактировать.")
+        root = _project_root(project)
+        candidate = root.joinpath(*project_relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            run_source = resolve_run_source_file(
+                settings.workspace_root, run.graph_snapshot, run.result or {}, finding.path
+            ).resolve(strict=True)
+            if (
+                not resolved.is_relative_to(root)
+                or not resolved.is_file()
+                or resolved != run_source
+                or resolved.stat().st_size > 32 * 1024
+            ):
+                raise OSError("File is unavailable, mismatched, or too large for AI Fix")
+            source_content = resolved.read_text(encoding="utf-8")
+        except (RunSourceFileError, OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Исходный файл недоступен для безопасного AI Fix.") from exc
+        if not _project_content_is_safe(source_content):
+            raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и не может передаваться AI Fix.")
+        proposal_context = {
+            "project_id": str(project.id),
+            "path": project_relative.as_posix(),
+            "content": source_content,
+            "sha256": sha256_text(source_content),
+            "finding": {
+                **finding_payload,
+                "fingerprint": finding.fingerprint,
+                "rule_id": finding.rule_id,
+                "severity": finding.severity,
+                "path": canonical_path,
+                "line": finding.line,
+            },
+        }
+
+    try:
+        proposal = generate_fix_proposal(
+            proposal_context["finding"],
+            proposal_context["content"],
+            proposal_context["path"],
+        )
+    except AIFixError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with SessionLocal() as session:
+        session.add(AuditLog(
+            action="project.ai_fix_proposed",
+            entity="project",
+            entity_id=proposal_context["project_id"],
+            details={
+                "run_id": str(run_id),
+                "fingerprint": fingerprint,
+                "path": proposal_context["path"],
+                "original_sha256": proposal_context["sha256"],
+                "proposed_sha256": sha256_text(proposal["proposed_content"]),
+                "diff_sha256": hashlib.sha256(proposal["diff"].encode("utf-8")).hexdigest(),
+                "model": proposal.get("model"),
+            },
+        ))
+        session.commit()
+
+    return {
+        "project_id": proposal_context["project_id"],
+        "run_id": str(run_id),
+        "fingerprint": fingerprint,
+        "path": proposal_context["path"],
+        "original_sha256": proposal_context["sha256"],
+        **proposal,
+        "auto_applied": False,
+        "apply_requires_confirmation": True,
+    }
 
 
 @app.post("/api/workflows/run")
