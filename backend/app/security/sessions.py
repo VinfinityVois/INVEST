@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import User, UserSession
+from app.models import User, UserSession, Workspace, WorkspaceMembership
 
 
 DEFAULT_SESSION_LIFETIME = timedelta(hours=12)
@@ -38,8 +38,19 @@ def create_session(
     token = secrets.token_urlsafe(32)
     now = _utc_now()
 
+    default_workspace_id = db.scalar(
+        select(Workspace.id)
+        .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
+        .where(
+            WorkspaceMembership.user_id == user_id,
+            Workspace.deleted_at.is_(None),
+        )
+        .order_by(Workspace.is_default.desc(), Workspace.created_at.asc(), Workspace.id)
+        .limit(1)
+    )
     session = UserSession(
         user_id=user_id,
+        current_workspace_id=default_workspace_id,
         token_hash=_hash_token(token),
         expires_at=now + lifetime,
         last_seen_at=now,
