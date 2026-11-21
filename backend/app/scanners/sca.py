@@ -708,7 +708,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 if not include_dev and _is_dev_configuration(configuration):
                     continue
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
-                accessor = alias_match.group(2) or alias_match.group(4)
+                accessor = alias_match.group(2) or alias_match.group(5)
                 normalized = _catalog_alias_key(accessor.lstrip("."))
                 catalog = catalogs.get(catalog_name, {})
                 candidates = [entry for key, entry in catalog.items() if key == normalized]
