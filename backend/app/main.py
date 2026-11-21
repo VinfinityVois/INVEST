@@ -1,4 +1,4 @@
-import json
+﻿import json
 import time
 import shutil
 import re
@@ -14,7 +14,8 @@ from zoneinfo import ZoneInfo
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.background import BackgroundTask
@@ -104,6 +105,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+from app.security.api import router as auth_router, SESSION_COOKIE
+from app.security.sessions import get_user_for_session
+
+app.include_router(auth_router)
+
+
+@app.middleware("http")
+async def authentication_middleware(request: Request, call_next):
+    path = request.url.path
+    method = request.method.upper()
+
+    if not path.startswith("/api/") or method == "OPTIONS":
+        return await call_next(request)
+
+    # CI and template publishing use their own dedicated tokens.
+    if path.startswith("/api/ci/") or path == "/api/templates/publish":
+        return await call_next(request)
+
+    if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin != "http://localhost:5173":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Invalid or missing Origin"},
+            )
+
+    if path == "/api/auth/login":
+        return await call_next(request)
+
+    token = request.cookies.get(SESSION_COOKIE)
+    try:
+        with SessionLocal() as db:
+            user = get_user_for_session(db, token)
+            if user is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Authentication required"},
+                )
+            request.state.user = user
+            db.commit()
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Authentication service unavailable"},
+        )
+
+    return await call_next(request)
 
 @app.get("/api/ai/status")
 def ai_provider_status():
@@ -2292,3 +2341,6 @@ def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest):
                              details={"template_id": str(template.id)}))
         session.commit()
         return {"id": str(workflow.id), "name": workflow.name, "version": 1, "executed": False}
+
+
+

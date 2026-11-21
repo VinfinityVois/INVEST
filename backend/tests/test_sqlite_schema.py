@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, inspect
+﻿from sqlalchemy import create_engine, inspect
 
 from app.db import Base
 import app.models  # noqa: F401
@@ -20,6 +20,9 @@ def test_all_persisted_models_create_on_sqlite():
             "projects",
             "workflow_schedules",
             "workflow_templates",
+            "users",
+            "user_sessions",
         }.issubset(tables)
     finally:
         engine.dispose()
+

@@ -1,0 +1,189 @@
+{
+  "dataset": "training",
+  "category": "SCA",
+  "expected": 5,
+  "detected": 5,
+  "missed": [],
+  "false_positives": 0,
+  "controls_triggered": [],
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "findings": [
+    {
+      "rule_id": "sca.maven.org.apache.commons.commons-text.GHSA-599f-7c49-w659",
+      "class": "dependency-vulnerability",
+      "category": "SCA",
+      "ecosystem": "Gradle",
+      "path": "build.gradle.kts",
+      "line": 31,
+      "severity": "CRITICAL",
+      "confidence": 0.99,
+      "message": "org.apache.commons:commons-text:1.9 попадает в опубликованный диапазон GHSA-599f-7c49-w659.",
+      "group": "org.apache.commons",
+      "artifact": "commons-text",
+      "version": "1.9",
+      "advisory_id": "GHSA-599f-7c49-w659",
+      "cve": "CVE-2022-42889",
+      "aliases": [
+        "CVE-2022-42889"
+      ],
+      "fixed_versions": [
+        "1.10.0"
+      ],
+      "affected_ranges": [
+        {
+          "lower": "1.5",
+          "lowerInclusive": true,
+          "upper": "1.10.0",
+          "upperInclusive": false
+        }
+      ],
+      "sources": [
+        "https://github.com/advisories/GHSA-599f-7c49-w659",
+        "https://osv.dev/vulnerability/GHSA-599f-7c49-w659"
+      ],
+      "fingerprint": "f665c79edf8ac90458bf2ae6cf9a2f973ce97e4f79b94433cce239c8989ef138"
+    },
+    {
+      "rule_id": "sca.maven.org.jsoup.jsoup.GHSA-m72m-mhq2-9p6c",
+      "class": "dependency-vulnerability",
+      "category": "SCA",
+      "ecosystem": "Gradle",
+      "path": "build.gradle.kts",
+      "line": 32,
+      "severity": "HIGH",
+      "confidence": 0.99,
+      "message": "org.jsoup:jsoup:1.14.1 попадает в опубликованный диапазон GHSA-m72m-mhq2-9p6c.",
+      "group": "org.jsoup",
+      "artifact": "jsoup",
+      "version": "1.14.1",
+      "advisory_id": "GHSA-m72m-mhq2-9p6c",
+      "cve": "CVE-2021-37714",
+      "aliases": [
+        "CVE-2021-37714"
+      ],
+      "fixed_versions": [
+        "1.14.2"
+      ],
+      "affected_ranges": [
+        {
+          "lower": null,
+          "lowerInclusive": false,
+          "upper": "1.14.2",
+          "upperInclusive": false
+        }
+      ],
+      "sources": [
+        "https://github.com/advisories/GHSA-m72m-mhq2-9p6c",
+        "https://osv.dev/vulnerability/GHSA-m72m-mhq2-9p6c"
+      ],
+      "fingerprint": "a3351ad8ab3c3ee8a0be2e9e9d51f7b57602d612a32ead846975c75eed9821d2"
+    },
+    {
+      "rule_id": "sca.maven.org.apache.commons.commons-compress.GHSA-4g9r-vxhx-9pgx",
+      "class": "dependency-vulnerability",
+      "category": "SCA",
+      "ecosystem": "Gradle",
+      "path": "build.gradle.kts",
+      "line": 33,
+      "severity": "MEDIUM",
+      "confidence": 0.99,
+      "message": "org.apache.commons:commons-compress:1.25.0 попадает в опубликованный диапазон GHSA-4g9r-vxhx-9pgx.",
+      "group": "org.apache.commons",
+      "artifact": "commons-compress",
+      "version": "1.25.0",
+      "advisory_id": "GHSA-4g9r-vxhx-9pgx",
+      "cve": "CVE-2024-25710",
+      "aliases": [
+        "CVE-2024-25710"
+      ],
+      "fixed_versions": [
+        "1.26.0"
+      ],
+      "affected_ranges": [
+        {
+          "lower": "1.3",
+          "lowerInclusive": true,
+          "upper": "1.26.0",
+          "upperInclusive": false
+        }
+      ],
+      "sources": [
+        "https://github.com/advisories/GHSA-4g9r-vxhx-9pgx",
+        "https://osv.dev/vulnerability/GHSA-4g9r-vxhx-9pgx"
+      ],
+      "fingerprint": "2875ef32f7d43b091b198c19d6d2ae6f866c8bb451aa75539bb62138100762f0"
+    },
+    {
+      "rule_id": "sca.maven.commons-net.commons-net.GHSA-cgp8-4m63-fhh5",
+      "class": "dependency-vulnerability",
+      "category": "SCA",
+      "ecosystem": "Gradle",
+      "path": "build.gradle.kts",
+      "line": 36,
+      "severity": "MEDIUM",
+      "confidence": 0.99,
+      "message": "commons-net:commons-net:3.8.0 попадает в опубликованный диапазон GHSA-cgp8-4m63-fhh5.",
+      "group": "commons-net",
+      "artifact": "commons-net",
+      "version": "3.8.0",
+      "advisory_id": "GHSA-cgp8-4m63-fhh5",
+      "cve": "CVE-2021-37533",
+      "aliases": [
+        "CVE-2021-37533"
+      ],
+      "fixed_versions": [
+        "3.9.0"
+      ],
+      "affected_ranges": [
+        {
+          "lower": null,
+          "lowerInclusive": false,
+          "upper": "3.9.0",
+          "upperInclusive": false
+        }
+      ],
+      "sources": [
+        "https://github.com/advisories/GHSA-cgp8-4m63-fhh5",
+        "https://osv.dev/vulnerability/GHSA-cgp8-4m63-fhh5"
+      ],
+      "fingerprint": "ee59e6f4474f4b38d7e68c1b4095505f17efce8ccae16d74db41a9d97f137d0c"
+    },
+    {
+      "rule_id": "sca.maven.org.json.json.GHSA-4jq9-2xhw-jpx7",
+      "class": "dependency-vulnerability",
+      "category": "SCA",
+      "ecosystem": "Gradle",
+      "path": "build.gradle.kts",
+      "line": 38,
+      "severity": "HIGH",
+      "confidence": 0.99,
+      "message": "org.json:json:20230227 попадает в опубликованный диапазон GHSA-4jq9-2xhw-jpx7.",
+      "group": "org.json",
+      "artifact": "json",
+      "version": "20230227",
+      "advisory_id": "GHSA-4jq9-2xhw-jpx7",
+      "cve": "CVE-2023-5072",
+      "aliases": [
+        "CVE-2023-5072"
+      ],
+      "fixed_versions": [
+        "20231013"
+      ],
+      "affected_ranges": [
+        {
+          "lower": null,
+          "lowerInclusive": false,
+          "upper": "20230618",
+          "upperInclusive": true
+        }
+      ],
+      "sources": [
+        "https://github.com/advisories/GHSA-4jq9-2xhw-jpx7",
+        "https://osv.dev/vulnerability/GHSA-4jq9-2xhw-jpx7"
+      ],
+      "fingerprint": "6c851fe418b7e5a51debfc74af69a897f561972420e92cce07b5472d47c658c5"
+    }
+  ]
+}
