@@ -1970,7 +1970,7 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
 def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request):
     with SessionLocal() as session:
         project = _project_in_active_workspace(session, request, project_id, write=True)
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if run is None:
@@ -2008,7 +2008,7 @@ def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request)
 @app.get("/api/runs/{run_id}/report.json")
 def export_run_report_json(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return _build_run_report(session, run)
@@ -2017,7 +2017,7 @@ def export_run_report_json(run_id: UUID, request: Request):
 @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
 def export_run_report_html(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         report = _build_run_report(session, run)
@@ -2037,7 +2037,7 @@ main{{max-width:1100px;margin:auto}}h1{{font-size:22px}}.meta{{color:#8ea5b9}}pr
 @app.get("/api/runs/{run_id}/telemetry")
 def get_run_telemetry(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return _run_telemetry(session, run)
@@ -2049,7 +2049,7 @@ def stream_run_events(run_id: UUID, request: Request):
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
             with SessionLocal() as session:
-                run = session.get(WorkflowRun, run_id)
+                run = _run_in_active_workspace(session, request, run_id)
                 if run is None:
                     payload = {"status": "not_found", "run_id": str(run_id)}
                     yield "event: error\ndata: " + json.dumps(payload) + "\n\n"
@@ -2070,7 +2070,7 @@ def stream_run_events(run_id: UUID, request: Request):
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return {
@@ -2125,7 +2125,7 @@ def get_finding_source(
         raise HTTPException(status_code=422, detail="Source window is limited to 300 lines")
 
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         finding = session.scalar(
