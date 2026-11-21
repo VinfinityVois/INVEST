@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Integer, BigInteger, String, Text, UniqueConstraint, func, Uuid, JSON
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, BigInteger, String, Text, UniqueConstraint, func, Uuid, JSON
 from sqlalchemy.dialects import postgresql
 
 UUID = Uuid(as_uuid=True)
@@ -13,8 +13,8 @@ class Workflow(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 class WorkflowVersion(Base):
     __tablename__ = "workflow_versions"
@@ -22,7 +22,7 @@ class WorkflowVersion(Base):
     workflow_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     graph: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     __table_args__ = (UniqueConstraint("workflow_id", "version"),)
 
 class WorkflowRun(Base):
@@ -34,7 +34,7 @@ class WorkflowRun(Base):
     graph_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
     result: Mapped[dict | None] = mapped_column(JSONB)
     error: Mapped[str | None] = mapped_column(Text)
-    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_by: Mapped[str | None] = mapped_column(String(120))
@@ -70,7 +70,7 @@ class Credential(Base):
     ciphertext: Mapped[bytes] = mapped_column(nullable=False)
     nonce: Mapped[bytes] = mapped_column(nullable=False)
     key_id: Mapped[str] = mapped_column(String(80), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
@@ -79,7 +79,7 @@ class AuditLog(Base):
     entity: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_id: Mapped[str | None] = mapped_column(String(120))
     details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class Project(Base):
@@ -90,8 +90,8 @@ class Project(Base):
     original_filename: Mapped[str | None] = mapped_column(String(255))
     file_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     expanded_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
 class WorkflowSchedule(Base):
@@ -103,9 +103,9 @@ class WorkflowSchedule(Base):
     enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    __table_args__ = (Index("ix_workflow_schedules_due", "enabled", "next_run_at"),)
 
 
 class WorkflowTemplate(Base):
@@ -116,5 +116,6 @@ class WorkflowTemplate(Base):
     category: Mapped[str] = mapped_column(String(60), nullable=False, default="general")
     graph: Mapped[dict] = mapped_column(JSONB, nullable=False)
     published: Mapped[bool] = mapped_column(default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    __table_args__ = (Index("ix_workflow_templates_published_category", "published", "category"),)
