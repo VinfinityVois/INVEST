@@ -33,8 +33,12 @@ def _config_schema_errors(value, schema, path="config"):
             errors.append(f"{path}: значение больше максимума {schema['maximum']}.")
     if isinstance(value, str):
         if schema.get("format") == "uri":
-            parsed = urlsplit(value)
-            if not parsed.scheme or any(character.isspace() for character in value):
+            try:
+                parsed = urlsplit(value)
+                valid_uri = bool(parsed.scheme) and not any(character.isspace() for character in value)
+            except ValueError:
+                valid_uri = False
+            if not valid_uri:
                 errors.append(f"{path}: ожидается корректный URI.")
         if "minLength" in schema and len(value) < schema["minLength"]:
             errors.append(f"{path}: строка короче {schema['minLength']} символов.")
