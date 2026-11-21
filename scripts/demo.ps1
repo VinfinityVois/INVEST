@@ -11,6 +11,18 @@ $ApiBaseUrl = $ApiBaseUrl.TrimEnd("/")
 $graphPath = Join-Path $PSScriptRoot "..\examples\demo-workflow.json"
 $graph = Get-Content -Raw -Path $graphPath | ConvertFrom-Json
 
+# Authenticate using a bootstrapped operator account. Credentials are read from
+# this process environment and are never written to the workflow or command line.
+$demoEmail = $env:INVEST_DEMO_EMAIL
+$demoPassword = $env:INVEST_DEMO_PASSWORD
+if ([string]::IsNullOrWhiteSpace($demoEmail) -or [string]::IsNullOrEmpty($demoPassword)) {
+    throw "Set INVEST_DEMO_EMAIL and INVEST_DEMO_PASSWORD in this PowerShell session before running the demo."
+}
+$webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+$apiHeaders = @{ Origin = $FrontendOrigin }
+Write-Host "Authenticating demo operator..." -ForegroundColor Cyan
+$null = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/auth/login" -ContentType "application/json" -Headers $apiHeaders -WebSession $webSession -Body (@{ email = $demoEmail; password = $demoPassword } | ConvertTo-Json)
+
 $notifyNode = $graph.nodes | Where-Object { $_.id -eq "notify" } | Select-Object -First 1
 if (-not $notifyNode) { throw "Demo graph has no notify node." }
 $notifyNode.config.url = $WebhookUrl
