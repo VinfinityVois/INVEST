@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.scanners.sca import _affected, scan_gradle_project, scan_maven_project, scan_project
+from app.rules_loader import RulePackRegistry
 
 
 def test_scans_gradle_kotlin_literals_constants_and_gradle_properties(tmp_path):
@@ -710,3 +711,38 @@ def test_maven_reactor_modules_use_root_maven_config(tmp_path):
     findings = scan_maven_project(project)
 
     assert any(item["artifact"] == "gson" and item["version"] == "2.8.8" for item in findings)
+
+
+def test_builtin_sca_packs_are_registered_and_inherit():
+    packs = {item["id"]: item for item in RulePackRegistry().list(analyzer="sca")}
+
+    assert {"sca-maven-core", "sca-spring-boot"} <= set(packs)
+    assert packs["sca-spring-boot"]["extends"] == ["sca-maven-core"]
+    assert packs["sca-spring-boot"]["ecosystems"] == ["Maven", "Gradle"]
+    assert packs["sca-spring-boot"]["advisory_db"] == "maven-advisories"
+    assert packs["sca-spring-boot"]["starter_pack"] == "spring-boot-starters"
+
+
+def test_gradle_sca_can_exclude_development_configurations(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text(
+        'dependencies { testImplementation("org.apache.commons:commons-text:1.9") }\\n',
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project)
+    assert scan_gradle_project(project, include_dev=False) == []
+
+
+def test_gradle_sca_can_disable_lockfile_resolution(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "build.gradle.kts").write_text("dependencies { }\\n", encoding="utf-8")
+    (project / "gradle.lockfile").write_text(
+        "org.apache.commons:commons-text:1.9=runtimeClasspath\\n",
+        encoding="utf-8",
+    )
+
+    assert scan_gradle_project(project)
+    assert scan_gradle_project(project, use_lockfile=False) == []
