@@ -1017,6 +1017,7 @@ def get_workflow(workflow_id: UUID, request: Request):
         workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "workflow:run")
         version = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
@@ -1220,18 +1221,9 @@ def execute_saved_workflow(workflow_id: UUID, request: Request, force_full_scan:
         }
 
 
-def _require_ci_token(provided_token: str) -> None:
-    configured_token = settings.ci_trigger_token
-    if not configured_token:
-        raise HTTPException(status_code=503, detail="CI trigger is not configured")
-    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
-        raise HTTPException(status_code=401, detail="Invalid CI token")
-
-
 @app.post("/api/ci/workflows/{workflow_id}/runs", status_code=202)
 def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
     """Queue a saved workflow for CI; requires a dedicated secret and an explicit Security Gate."""
-    _require_ci_token(x_ci_token)
     with SessionLocal() as session:
         workflow = session.get(Workflow, workflow_id)
         if workflow is None:
@@ -1248,6 +1240,7 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         gate_nodes = [node for node in graph.nodes if node.type == "ci.gate"]
         if len(gate_nodes) != 1:
             raise HTTPException(status_code=422, detail="CI workflow must contain exactly one Security Gate node")
@@ -1290,11 +1283,18 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
 @app.get("/api/ci/runs/{run_id}")
 def get_ci_run(run_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
     """Return a minimal CI polling contract without exposing findings or source excerpts."""
-    _require_ci_token(x_ci_token)
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = session.scalar(
+            select(WorkflowRun)
+            .join(Workflow, Workflow.id == WorkflowRun.workflow_id)
+            .where(WorkflowRun.id == run_id)
+        )
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
+        workflow = session.get(Workflow, run.workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "run:read")
         result = run.result if isinstance(run.result, dict) else {}
         gate = result.get("security_gate") if isinstance(result, dict) else None
         return {
