@@ -10,7 +10,7 @@ type SessionItem = {
   expires_at: string; revoked: boolean; current: boolean;
 };
 
-type Props = { isAdmin: boolean; currentUserId: string; onClose: () => void };
+type Props = { isAdmin: boolean; currentUserId: string; currentEmail: string; onClose: () => void };
 
 async function request(path: string, init?: RequestInit) {
   const response = await fetch(path, {
@@ -25,7 +25,7 @@ async function request(path: string, init?: RequestInit) {
   return response;
 }
 
-export default function UserManagement({ isAdmin, currentUserId, onClose }: Props) {
+export default function UserManagement({ isAdmin, currentUserId, currentEmail, onClose }: Props) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [query, setQuery] = useState("");
@@ -38,6 +38,8 @@ export default function UserManagement({ isAdmin, currentUserId, onClose }: Prop
   const [newPassword, setNewPassword] = useState("");
   const [newAdmin, setNewAdmin] = useState(false);
   const [editing, setEditing] = useState<Record<string, string>>({});
+  const [profileEmail, setProfileEmail] = useState(currentEmail);
+  const [profilePassword, setProfilePassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [error, setError] = useState("");
@@ -76,6 +78,7 @@ export default function UserManagement({ isAdmin, currentUserId, onClose }: Prop
   }, []);
 
   useEffect(() => { void loadUsers(); }, [loadUsers]);
+  useEffect(() => { setProfileEmail(currentEmail); }, [currentEmail]);
   useEffect(() => { void loadSessions(); }, [loadSessions]);
 
   const mutateUser = async (id: string, changes: Record<string, unknown>) => {
@@ -108,6 +111,21 @@ export default function UserManagement({ isAdmin, currentUserId, onClose }: Prop
       await loadUsers();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка создания.");
+    } finally { setSaving(false); }
+  };
+
+  const updateProfile = async (event: React.FormEvent) => {
+    event.preventDefault(); setSaving(true); setError(""); setNotice("");
+    try {
+      const response = await request("/api/auth/profile", {
+        method: "PATCH", body: JSON.stringify({ email: profileEmail, current_password: profilePassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось обновить профиль.");
+      setProfileEmail(data.email); setProfilePassword("");
+      setNotice("Email профиля обновлён.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Ошибка обновления профиля.");
     } finally { setSaving(false); }
   };
 
@@ -186,6 +204,14 @@ export default function UserManagement({ isAdmin, currentUserId, onClose }: Prop
             <p className="user-policy-note">Удаление аккаунта пока намеренно отключено: до внедрения владения данными применяется обратимая блокировка с отзывом всех его сессий.</p>
           </section>
         </>}
+        <section className="user-management-section">
+          <div className="user-section-heading"><div><Shield size={15}/><b>Профиль</b></div></div>
+          <form className="user-password-form" onSubmit={updateProfile}>
+            <input type="email" required maxLength={320} value={profileEmail} onChange={event => setProfileEmail(event.target.value)} placeholder="Email аккаунта"/>
+            <input type="password" required maxLength={1024} autoComplete="current-password" value={profilePassword} onChange={event => setProfilePassword(event.target.value)} placeholder="Подтвердите текущим паролем"/>
+            <button className="template-card-clone" disabled={saving || profileEmail.trim().toLowerCase() === currentEmail.toLowerCase()}><Check size={13}/> Сохранить профиль</button>
+          </form>
+        </section>
         <section className="user-management-section">
           <div className="user-section-heading"><div><Lock size={15}/><b>Активные сессии</b><small>{sessions.filter(item => !item.revoked).length} действующих</small></div><button className="ghost" disabled={saving} onClick={() => void revokeOthers()}>Завершить остальные</button></div>
           <div className="user-session-list">
