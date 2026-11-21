@@ -177,6 +177,8 @@ def update_user(user_id: UUID, payload: UserUpdate, request: Request):
             raise HTTPException(status_code=422, detail="No changes supplied.")
         if "email" in changes and changes["email"] is None:
             raise HTTPException(status_code=422, detail="Email cannot be null.")
+        if any(key in changes and changes[key] is None for key in ("is_admin", "is_active")):
+            raise HTTPException(status_code=422, detail="Role and account status cannot be null.")
         if "email" in changes and db.scalar(
             select(User.id).where(User.email == changes["email"], User.id != user.id)
         ):
