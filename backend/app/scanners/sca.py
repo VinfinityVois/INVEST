@@ -620,9 +620,51 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
     return sorted(findings.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
-def scan_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
-    combined = scan_gradle_project(root, advisories_path=advisories_path, on_progress=on_progress)
-    combined.extend(scan_maven_project(root, advisories_path=advisories_path, on_progress=on_progress))
+@lru_cache(maxsize=1)
+def _load_spring_boot_starters() -> dict[str, dict]:
+    try:
+        payload = json.loads(SPRING_BOOT_STARTERS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if payload.get("formatVersion") != 1 or payload.get("ecosystem") != "Maven":
+        return {}
+    return {
+        item["artifact"]: item
+        for item in payload.get("starters", [])
+        if isinstance(item, dict) and isinstance(item.get("artifact"), str)
+    }
+
+
+def scan_project(
+    root: str | Path,
+    advisories_path: Path | None = None,
+    on_progress=None,
+    include_dev: bool = True,
+    use_lockfile: bool = True,
+    ecosystems: list[str] | None = None,
+    starter_pack: str = "none",
+) -> list[dict]:
+    selected = set(ecosystems or ["Maven", "Gradle"])
+    combined = []
+    if "Gradle" in selected:
+        combined.extend(scan_gradle_project(
+            root, advisories_path=advisories_path, on_progress=on_progress,
+            include_dev=include_dev, use_lockfile=use_lockfile,
+        ))
+    if "Maven" in selected:
+        combined.extend(scan_maven_project(
+            root, advisories_path=advisories_path, on_progress=on_progress,
+            include_dev=include_dev,
+        ))
+    if starter_pack == "spring-boot-starters":
+        catalog = _load_spring_boot_starters()
+        for finding in combined:
+            if finding.get("group") == "org.springframework.boot" and finding.get("artifact") in catalog:
+                starter = catalog[finding["artifact"]]
+                finding["starter"] = {
+                    "title": starter.get("title", finding["artifact"]),
+                    "category": starter.get("category", "other"),
+                }
     return sorted({x["fingerprint"]: x for x in combined}.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
