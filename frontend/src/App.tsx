@@ -15,6 +15,7 @@ import {
 type PortManifest = { name: string; data_type: string };
 type ConfigSchemaProperty = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number; minLength?: number; maxLength?: number; minItems?: number; maxItems?: number; pattern?: string; items?: ConfigSchemaProperty; format?: string; properties?: Record<string, ConfigSchemaProperty>; required?: string[] };
 type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { type?: string; title?: string; description?: string; required?: string[]; properties?: Record<string, ConfigSchemaProperty>; [key: string]: unknown } };
+type RulePack = { id: string; title: string; analyzer: string; version: number; rule_count: number; extends: string[] };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
@@ -179,6 +180,7 @@ export default function App() {
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
+  const [rulePacks, setRulePacks] = useState<RulePack[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Подключение к API…");
   const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
@@ -284,6 +286,13 @@ export default function App() {
       .catch(() => { if (active) setScheduleStatus(null); });
     return () => { active = false; };
   }, [workflowId]);
+
+  useEffect(() => {
+    fetch("/api/rule-packs")
+      .then(response => response.ok ? response.json() : [])
+      .then((data: RulePack[]) => setRulePacks(data))
+      .catch(() => setRulePacks([]));
+  }, []);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -688,6 +697,13 @@ export default function App() {
             const parsed = Number(event.target.value);
             if (Number.isFinite(parsed) && (field.type !== "integer" || Number.isInteger(parsed))) setField(key, parsed);
           }}/>
+          : field.type === "array" && key === "rule_packs" && rulePacks.some(pack => pack.analyzer === (selectedNode.data.nodeType === "scan.secrets" ? "secrets" : selectedNode.data.nodeType === "scan.sast" ? "sast" : "sca")) ? <div className="schema-array-options">{rulePacks.filter(pack => pack.analyzer === (selectedNode.data.nodeType === "scan.secrets" ? "secrets" : selectedNode.data.nodeType === "scan.sast" ? "sast" : "sca")).map(pack => {
+            const selected = Array.isArray(value) && value.includes(pack.id);
+            return <label key={pack.id} title={pack.extends.length ? "Наследует: " + pack.extends.join(", ") : undefined}><input type="checkbox" checked={selected} onChange={event => {
+              const current = Array.isArray(value) ? value.filter(item => typeof item === "string") as string[] : [];
+              setField(key, event.target.checked ? [...current, pack.id] : current.filter(item => item !== pack.id));
+            }}/><span>{pack.title} <small>({pack.rule_count})</small></span></label>;
+          })}</div>
           : field.type === "array" && field.items?.enum ? <div className="schema-array-options">{field.items.enum.map((option, index) => {
             const selected = Array.isArray(value) && value.some(item => Object.is(item, option));
             return <label key={index}><input type="checkbox" checked={selected} onChange={event => {
