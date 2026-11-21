@@ -27,6 +27,7 @@ type WorkflowVersionDiff = { from_version: number; to_version: number; name_chan
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowSchedule = { id: string; cron_expression: string; timezone: string; enabled: boolean; next_run_at: string; last_run_at?: string | null; last_run_id?: string | null };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
+type WorkflowSummary = { id: string; name: string; description?: string | null; updated_at: string };
 type SecurityTrend = {
   points: Array<{ run_id: string; status: string; queued_at?: string | null; finished_at?: string | null; duration_ms?: number | null; total_findings: number; severity: Record<string, number>; security_gate?: { decision?: "PASS" | "WARN" | "BLOCK"; blocked?: boolean } | null }>;
   summary: { runs: number; latest_findings: number; previous_findings: number | null; delta: number | null };
@@ -157,6 +158,8 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [workflowChoices, setWorkflowChoices] = useState<WorkflowSummary[]>([]);
+  const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowSchedules, setWorkflowSchedules] = useState<WorkflowSchedule[]>([]);
   const [scheduleCron, setScheduleCron] = useState("0 9 * * 1-5");
   const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
@@ -237,6 +240,13 @@ export default function App() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [projectFolderOpen, setProjectFolderOpen] = useState(true);
   const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/workflows")
+      .then(response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then((data: WorkflowSummary[]) => setWorkflowChoices(data.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21")))
+      .catch(() => setResult("Не удалось загрузить список сохранённых workflow."));
+  }, []);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -865,13 +875,51 @@ export default function App() {
     } catch (error) { setResult("Ошибка загрузки ZIP: " + String(error)); }
     finally { setUploading(false); }
   };
+  const loadWorkflow = async (id: string) => {
+    if (id === "3a55ed41-111c-4c7e-a6e0-70370bfc2c21") {
+      setResult("Исходный workflow защищён от изменений и не может быть открыт в редакторе.");
+      return;
+    }
+    setWorkflowLoading(true);
+    try {
+      const response = await fetch("/api/workflows/" + id);
+      const data = await response.json();
+      if (!response.ok || !data.graph) throw new Error(data.detail || "Не удалось загрузить workflow");
+      const graphData = data.graph as { name?: string; nodes?: Array<{ id: string; type: string; position?: { x?: number; y?: number }; config?: Record<string, unknown> }>; edges?: Array<{ id: string; source: string; target: string; source_handle?: string | null; target_handle?: string | null }> };
+      const loadedNodes: FlowNode[] = (graphData.nodes || []).map(item => {
+        const manifest = manifests.find(entry => entry.type === item.type);
+        const category = manifest?.category || (item.type.startsWith("scan.") ? "Security" : item.type.startsWith("ai.") ? "AI" : item.type.startsWith("trigger.") ? "Trigger" : item.type.startsWith("source.") ? "Source" : "Logic");
+        return {
+          id: item.id,
+          type: "workflow",
+          position: { x: item.position?.x ?? 0, y: item.position?.y ?? 0 },
+          data: { label: manifest?.title || item.type, nodeType: item.type, category, description: manifest?.description || "", config: item.config || {}, executionStatus: "idle" },
+        };
+      });
+      const loadedEdges: Edge[] = (graphData.edges || []).map(item => ({
+        id: item.id, source: item.source, target: item.target, sourceHandle: item.source_handle || undefined, targetHandle: item.target_handle || undefined,
+        type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 },
+      }));
+      setNodes(loadedNodes);
+      setEdges(loadedEdges);
+      setWorkflowId(data.id);
+      setActiveProject(null);
+      setSelectedNodeId(loadedNodes.find(node => node.data.category === "Source")?.id || loadedNodes[0]?.id || null);
+      setSelectedEdgeId(null);
+      setResult("Загружен workflow · " + (graphData.name || data.name) + " · версия " + data.version);
+    } catch (error) {
+      setResult("Ошибка загрузки workflow: " + String(error));
+    } finally { setWorkflowLoading(false); }
+  };
   const persistWorkflow = async () => {
     const response = await fetch(workflowId ? "/api/workflows/" + workflowId : "/api/workflows", {
       method: workflowId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(JSON.stringify(data));
-    setWorkflowId(data.id); return data.id as string;
+    setWorkflowId(data.id);
+    fetch("/api/workflows").then(response => response.ok ? response.json() : []).then((rows: WorkflowSummary[]) => setWorkflowChoices(rows.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21"))).catch(() => undefined);
+    return data.id as string;
   };
   const refreshWorkflowSchedules = async (id: string) => {
     const response = await fetch("/api/workflows/" + id + "/schedules");
@@ -1137,7 +1185,11 @@ export default function App() {
     <header className="topbar">
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
-      <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
+      <div className="actions"><span className="revision"><GitBranch size={13} /> feat / complete-security-workflow</span>
+        <select aria-label="Выбрать сохранённый workflow" title="Открыть сохранённый workflow" className="workflow-picker" value={workflowId || ""} disabled={busy || workflowLoading} onChange={event => { if (event.target.value) void loadWorkflow(event.target.value); }}>
+          <option value="">{workflowLoading ? "Загрузка…" : "Выбрать workflow…"}</option>
+          {workflowChoices.map(item => <option key={item.id} value={item.id}>{item.name} · {new Date(item.updated_at).toLocaleDateString("ru-RU")}</option>)}
+        </select>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
         <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
