@@ -1702,7 +1702,9 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         </select>
         {workspaceSwitching && <i className="workspace-spinner" />}
       </div>
-      <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Доступы</button>
+      <button className="ghost account-profile-trigger" type="button" onClick={() => { setUserManagementTab("profile"); setUserManagementOpen(true); }} title="Личный профиль, пароль и сессии"><Shield size={13}/> Мой профиль</button>
+      {user?.is_admin && <button className="ghost account-users-trigger" type="button" onClick={() => { setUserManagementTab("users"); setUserManagementOpen(true); }} title="Управление пользователями"><Users size={13}/> Пользователи</button>}
+      <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Workspace</button>
       <div className="actions">
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
