@@ -462,7 +462,7 @@ def update_project_archive(project_id: UUID, request: Request, file: UploadFile 
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
@@ -507,7 +507,7 @@ def update_project_archive(project_id: UUID, request: Request, file: UploadFile 
 @app.patch("/api/projects/{project_id}")
 def rename_project(project_id: UUID, payload: ProjectRename, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         previous = project.name
@@ -523,7 +523,7 @@ def rename_project(project_id: UUID, payload: ProjectRename, request: Request):
 @app.delete("/api/projects/{project_id}", status_code=204)
 def delete_project(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
@@ -542,7 +542,7 @@ def delete_project(project_id: UUID, request: Request):
 @app.get("/api/projects/{project_id}/history")
 def project_history(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         rows = session.scalars(
@@ -564,7 +564,7 @@ def project_history(project_id: UUID, request: Request):
 @app.get("/api/projects/{project_id}/files")
 def list_project_files(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -597,13 +597,13 @@ def preview_project_file(
     project_id: UUID,
     path: str = Query(min_length=1, max_length=1000),
     start_line: int = Query(default=1, ge=1),
-    request: Request = None,
+    request: Request,
 ):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -643,7 +643,7 @@ def download_project_archive(project_id: UUID, request: Request):
     max_archive_bytes = 1024 * 1024 * 1024
     temporary_path = None
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -720,7 +720,7 @@ def download_project_file(project_id: UUID, request: Request, path: str = Query(
     if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=404, detail="Project file is unavailable")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -764,6 +764,7 @@ def download_project_file(project_id: UUID, request: Request, path: str = Query(
 @app.api_route("/api/projects/{project_id}/preview", methods=["GET", "HEAD"])
 def preview_project_asset(
     project_id: UUID,
+    request: Request,
     path: str = Query(min_length=1, max_length=1000),
 ):
     relative = PurePosixPath(path)
@@ -783,7 +784,7 @@ def preview_project_asset(
     if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=404, detail="Project file is unavailable")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -818,7 +819,7 @@ def preview_project_asset(
 
 
 @app.put("/api/projects/{project_id}/file")
-def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str = Query(min_length=1, max_length=1000)):
+def update_project_file(project_id: UUID, request: Request, payload: ProjectFileUpdate, path: str = Query(min_length=1, max_length=1000)):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
@@ -831,7 +832,7 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
     if not _project_content_is_safe(payload.content):
         raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
@@ -873,13 +874,13 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
 
 
 @app.get("/api/projects/{project_id}/search")
-def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_length=100)):
+def search_project_contents(project_id: UUID, request: Request, q: str = Query(min_length=2, max_length=100)):
     needle = q.casefold()
     text_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
     results = []
     scanned = 0
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -1958,7 +1959,7 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
 @app.post("/api/projects/{project_id}/reports/{run_id}", status_code=201)
 def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         run = session.get(WorkflowRun, run_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
