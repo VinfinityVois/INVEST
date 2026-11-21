@@ -738,9 +738,9 @@ def test_gradle_sca_can_exclude_development_configurations(tmp_path):
 def test_gradle_sca_can_disable_lockfile_resolution(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
-    (project / "build.gradle.kts").write_text("dependencies { }\\n", encoding="utf-8")
+    (project / "build.gradle.kts").write_text("dependencies { }\n", encoding="utf-8")
     (project / "gradle.lockfile").write_text(
-        "org.apache.commons:commons-text:1.9=runtimeClasspath\\n",
+        "org.apache.commons:commons-text:1.9=runtimeClasspath\n",
         encoding="utf-8",
     )
 
