@@ -186,7 +186,7 @@ def test_bootstrap_claims_unassigned_legacy_workspace(db):
         is_default=True,
     )
     db.add(legacy_workspace)
-    db.flush()
+    db.commit()
 
     with db.begin():
         user = create_bootstrap_admin(
