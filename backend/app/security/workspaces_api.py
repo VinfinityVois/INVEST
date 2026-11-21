@@ -501,16 +501,21 @@ def transfer_organization_ownership(organization_id: UUID, payload: OwnershipTra
         if current is None or current.role != "owner":
             raise HTTPException(status_code=403, detail="Only the current organization owner can transfer ownership.")
         target = db.scalar(
-            select(OrganizationMembership).where(
+            select(OrganizationMembership)
+            .join(User, User.id == OrganizationMembership.user_id)
+            .where(
                 OrganizationMembership.organization_id == organization_id,
                 OrganizationMembership.user_id == payload.new_owner_user_id,
-            ).with_for_update()
+                User.is_active.is_(True),
+            )
+            .with_for_update()
         )
         if target is None:
             raise HTTPException(status_code=404, detail="New owner must already be an organization member.")
         if target.user_id == actor.id:
             raise HTTPException(status_code=422, detail="Choose another organization member.")
-        current.role = "admin"
+        current.role = "member"
+        db.flush()
         target.role = "owner"
         _audit(db, actor, "organization.ownership_transferred", "organization", organization_id, {
             "previous_owner_user_id": str(actor.id),
