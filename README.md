@@ -245,19 +245,19 @@ The entropy threshold is a confidence signal, not proof that a value is live. Th
 
 ### Настройка API
 
-1. Сгенерируйте отдельный случайный секрет длиной не менее 32 байт и задайте его как \`CI_TRIGGER_TOKEN\` в корневом \`.env\` платформы. Не используйте \`APP_SECRET_KEY\`, \`LLM_API_KEY\` или webhook URL в качестве CI-токена.
-2. Перезапустите API после изменения \`.env\`.
+1. В UI откройте «Доступы», выберите Workspace, в блоке «API Tokens / CI» создайте токен со scopes \`workflow:run\` и \`run:read\`. При необходимости задайте срок действия.
+2. Скопируйте секрет сразу после создания: он показывается один раз, в базе хранится только SHA-256 hash. Токен привязан к выбранному Workspace.
 3. В настройках GitHub repository → Settings → Secrets and variables → Actions добавьте:
    - \`INVEST_API_BASE_URL\` — публичный HTTPS URL API, доступный GitHub-hosted runner;
-   - \`INVEST_CI_TOKEN\` — то же значение, что \`CI_TRIGGER_TOKEN\`.
-4. В интерфейсе INVEST сохраните workflow, содержащий ровно одну ноду \`CI security gate\`. В демонстрационном \`examples/demo-workflow.json\` эта нода уже добавлена. Источник должен быть разрешён через \`ALLOWED_TARGETS\`.
+   - \`INVEST_CI_TOKEN\` — созданный workspace-scoped API token.
+4. В интерфейсе INVEST сохраните workflow в том же Workspace, содержащий ровно одну ноду \`CI security gate\`. Источник должен быть разрешён через \`ALLOWED_TARGETS\`.
 5. Скопируйте UUID workflow и запустите GitHub Actions → **INVEST security check** → Run workflow, передав UUID.
 
 CI API:
 - \`POST /api/ci/workflows/{workflow_id}/runs\` — защищённый запуск сохранённого workflow; требует \`X-CI-Token\` и ровно одну Security Gate ноду;
 - \`GET /api/ci/runs/{run_id}\` — защищённый минимальный polling endpoint; возвращает статус и решение gate без исходных findings или source excerpts.
 
-Если \`CI_TRIGGER_TOKEN\` не задан, оба endpoint закрыты ответом \`503\`. Неверный/отсутствующий токен получает \`401\`. Секрет передаётся только в заголовке и сравнивается constant-time. Не публикуйте API без HTTPS и сетевого ограничения доступа. GitHub-hosted runner не может обращаться к \`localhost\`; API должен быть доступен из runner либо используйте self-hosted runner в доверенной сети.
+Неизвестный, отозванный или истёкший токен получает \`401\`; токен без нужного scope — \`403\`. Токен другой рабочей области не может запускать workflow или читать run. Секрет передаётся только в заголовке; в БД хранится только hash. Не публикуйте API без HTTPS и сетевого ограничения доступа. GitHub-hosted runner не может обращаться к \`localhost\`; API должен быть доступен из runner либо используйте self-hosted runner в доверенной сети.
 
 ## Security Gate
 
