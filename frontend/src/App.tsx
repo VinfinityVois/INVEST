@@ -1702,7 +1702,11 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         stream.onerror = () => { void fallback(); };
       });
       const findingsResponse = await apiFetch("/api/runs/" + queued.run_id + "/findings");
-      if (findingsResponse.ok) setFindings(await findingsResponse.json());
+      let latestFindings: Finding[] = [];
+      if (findingsResponse.ok) {
+        latestFindings = await findingsResponse.json() as Finding[];
+        setFindings(latestFindings);
+      }
       const telemetryResponse = await apiFetch("/api/runs/" + queued.run_id + "/telemetry");
       if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
       if (completed.status === "failed") {
@@ -1718,7 +1722,12 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
       }
       await refreshWorkflowRuns(id);
-    } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
+      return { telemetry: completed, findings: latestFindings };
+    } catch (error) {
+      setResult("Запуск не выполнен: " + String(error));
+      setShowResult(true);
+      return null;
+    }
     finally { setBusy(false); }
   };
   const generateAiFix = async (finding: Finding) => {
@@ -1794,8 +1803,28 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const rescanAfterAiFix = async () => {
     if (!aiFixApplied || busy) return;
     if (!window.confirm("Запустить повторное сканирование текущего workflow, чтобы проверить результат исправления?")) return;
+    // Keep the applied-fix context until a complete scan confirms the fingerprint disappeared.
+    const applied = aiFixApplied;
+    const outcome = await runWorkflow();
+    if (!outcome) {
+      setResult("Повторное сканирование не завершилось. Исправление сохранено, но результат пока не подтверждён; можно повторить проверку.");
+      setShowResult(true);
+      return;
+    }
+    if (outcome.telemetry.status !== "completed") {
+      setResult("Повторное сканирование завершилось со статусом " + outcome.telemetry.status + ". Результат AI Fix не подтверждён; исходная находка не считается устранённой.");
+      setShowResult(true);
+      return;
+    }
+    const stillPresent = outcome.findings.some(item => item.fingerprint === applied.fingerprint);
+    if (stillPresent) {
+      setResult("Повторное сканирование завершено, но исходная находка всё ещё присутствует. AI Fix не подтвердил устранение; проверь результат и создай новое предложение при необходимости.");
+      setShowResult(true);
+      return;
+    }
     setAiFixApplied(null);
-    await runWorkflow();
+    setResult("Проверка AI Fix пройдена: повторное сканирование завершено, исходная находка больше не обнаружена.");
+    setShowResult(true);
   };
 
   const refreshFindingStates = async () => {
