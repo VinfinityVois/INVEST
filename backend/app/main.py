@@ -2049,8 +2049,9 @@ def stream_run_events(run_id: UUID, request: Request):
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
             with SessionLocal() as session:
-                run = _run_in_active_workspace(session, request, run_id)
-                if run is None:
+                try:
+                    run = _run_in_active_workspace(session, request, run_id)
+                except HTTPException:
                     payload = {"status": "not_found", "run_id": str(run_id)}
                     yield "event: error\ndata: " + json.dumps(payload) + "\n\n"
                     return
