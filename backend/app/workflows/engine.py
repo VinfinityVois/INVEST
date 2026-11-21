@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from time import perf_counter
 
 from app.config import settings
+from app.rules_loader import rule_packs
 from app.ai.explanations import explain_findings
 from app.notifications.webhook import WebhookDeliveryError, build_notification_payload, deliver_webhook
 from app.policies.security_gate import evaluate_security_gate
@@ -26,7 +27,7 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.6"
+SCANNER_CACHE_VERSION = "2026-11-21.7"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -43,6 +44,14 @@ def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -
     if minimum < 0 or minimum > 1:
         minimum = 0.0
     test_markers = {"test", "tests", "androidtest", "testfixtures"}
+    rule_metadata = {}
+    if scanner == "sast" and "rule_packs" in config:
+        packs = rule_packs.resolve(config.get("rule_packs"), analyzer="sast")
+        rule_metadata = {
+            item["id"]: item
+            for pack in packs
+            for item in pack.get("rules", [])
+        }
     filtered = []
     for finding in findings:
         if float(finding.get("confidence", 1.0) if finding.get("confidence") is not None else 1.0) < minimum:
@@ -51,6 +60,16 @@ def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -
             parts = {part.lower() for part in PurePosixPath(str(finding.get("path", ""))).parts}
             if parts & test_markers:
                 continue
+        if scanner == "sast" and rule_metadata:
+            metadata = rule_metadata.get(finding.get("rule_id"))
+            if metadata is None:
+                continue
+            finding = {
+                **finding,
+                "severity": metadata.get("severity", finding.get("severity")),
+                "confidence": metadata.get("confidence", finding.get("confidence")),
+                "cwe": metadata.get("cwe", finding.get("cwe")),
+            }
         filtered.append(finding)
     return filtered
 
