@@ -11,6 +11,8 @@ from app.db import Base
 class Workflow(Base):
     __tablename__ = "workflows"
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(UUID, ForeignKey("projects.id", ondelete="SET NULL"), index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -64,7 +66,7 @@ class FindingState(Base):
 class Credential(Base):
     __tablename__ = "credentials"
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     ciphertext: Mapped[bytes] = mapped_column(nullable=False)
@@ -85,6 +87,7 @@ class AuditLog(Base):
 class Project(Base):
     __tablename__ = "projects"
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workspaces.id", ondelete="RESTRICT"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     workspace_path: Mapped[str] = mapped_column(String(260), nullable=False, unique=True)
     original_filename: Mapped[str | None] = mapped_column(String(255))
@@ -145,10 +148,63 @@ class User(Base):
     )
 
 
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False, default="personal")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    __table_args__ = (CheckConstraint("kind IN ('personal', 'organization')", name="ck_organizations_kind"),)
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    __table_args__ = (UniqueConstraint("organization_id", "name"), Index("ix_workspaces_org_default", "organization_id", "is_default"))
+
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id"),
+        CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_org_membership_role"),
+    )
+
+
+class WorkspaceMembership(Base):
+    __tablename__ = "workspace_memberships"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id"),
+        CheckConstraint("role IN ('admin', 'editor', 'analyst', 'viewer')", name="ck_workspace_membership_role"),
+    )
+
+
 class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    current_workspace_id: Mapped[uuid.UUID | None] = mapped_column(UUID, ForeignKey("workspaces.id", ondelete="SET NULL"), index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
