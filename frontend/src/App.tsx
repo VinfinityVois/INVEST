@@ -245,7 +245,10 @@ export default function App() {
   useEffect(() => {
     fetch("/api/workflows")
       .then(response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then((data: WorkflowSummary[]) => setWorkflowChoices(data.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21")))
+      .then((data: WorkflowSummary[] | { value?: WorkflowSummary[] }) => {
+        const rows = Array.isArray(data) ? data : data.value || [];
+        setWorkflowChoices(rows.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21"));
+      })
       .catch(() => setResult("Не удалось загрузить список сохранённых workflow."));
   }, []);
 
@@ -921,7 +924,7 @@ export default function App() {
     if (!response.ok) throw new Error(JSON.stringify(data));
     setWorkflowId(data.id);
     setActiveWorkflowName(graph.name);
-    fetch("/api/workflows").then(response => response.ok ? response.json() : []).then((rows: WorkflowSummary[]) => setWorkflowChoices(rows.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21"))).catch(() => undefined);
+    fetch("/api/workflows").then(response => response.ok ? response.json() : []).then((data: WorkflowSummary[] | { value?: WorkflowSummary[] }) => { const rows = Array.isArray(data) ? data : data.value || []; setWorkflowChoices(rows.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21")); }).catch(() => undefined);
     return data.id as string;
   };
   const refreshWorkflowSchedules = async (id: string) => {
