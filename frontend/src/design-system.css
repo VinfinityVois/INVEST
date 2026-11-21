@@ -2517,3 +2517,8 @@
 .workspace-issued-token b { color:var(--accent-text);font-size:10px; }
 .workspace-issued-token code { overflow-wrap:anywhere;color:var(--text);font:10px "JetBrains Mono",monospace; }
 .workspace-issued-token button { justify-self:start; }
+
+.workspace-token-expiry { display:grid;gap:5px;color:var(--muted);font-size:9px; }
+@media(prefers-reduced-motion:reduce) {
+  .workspace-spinner,.workspace-manager-backdrop { animation:none !important; }
+}
