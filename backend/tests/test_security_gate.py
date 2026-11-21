@@ -91,3 +91,16 @@ def test_builtin_policy_packs_expose_expected_gate_thresholds():
     assert startup["block_on"] == ["CRITICAL"]
     assert secrets["block_on"] == ["CRITICAL", "HIGH", "MEDIUM"]
     assert bank["fail_on_unfixed"] is True
+
+
+def test_fail_on_unfixed_policy_ignores_findings_marked_fixed():
+    from app.policies.security_gate import evaluate_security_gate
+
+    finding = {"fingerprint": "fp-fixed", "rule_id": "test.rule", "severity": "HIGH"}
+    result = evaluate_security_gate(
+        [finding],
+        {"block_on": ["HIGH"], "warn_on": [], "fail_on_unfixed": True},
+        {"fp-fixed": {"state": "fixed"}},
+    )
+    assert result["decision"] == "PASS"
+    assert result["counts"]["HIGH"] == 0
