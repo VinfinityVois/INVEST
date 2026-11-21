@@ -76,6 +76,6 @@ def test_workflow_graph_rejects_excessive_edge_count():
 def test_workflow_graph_rejects_oversized_node_configuration():
     with pytest.raises(ValidationError):
         WorkflowGraph(
-            nodes=[{"id": "source", "type": "source.git", "config": {f"option-{index}": index for index in range(101)}],
+            nodes=[{"id": "source", "type": "source.git", "config": {f"option-{index}": index for index in range(101)}}],
             edges=[],
         )
