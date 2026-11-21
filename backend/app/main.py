@@ -595,9 +595,9 @@ class ProjectFileUpdate(BaseModel):
 @app.get("/api/projects/{project_id}/file")
 def preview_project_file(
     project_id: UUID,
+    request: Request,
     path: str = Query(min_length=1, max_length=1000),
     start_line: int = Query(default=1, ge=1),
-    request: Request,
 ):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
