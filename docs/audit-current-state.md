@@ -66,7 +66,11 @@ Remaining security boundary:
 
 Do not expose this branch as a multi-user production service until tenant ownership and backend authorization are implemented and tested against IDOR/cross-tenant cases.
 
-## 3. Confirmed technical limits
+## 3. Workspace architecture decision
+
+The target Organization → Workspace → Project model and membership/role matrix are documented in [ADR-0001](./adr/0001-workspace-tenancy-model.md). This is a design decision, not an implemented tenancy boundary. Current APIs still expose global project/workflow/run data to any authenticated account; do not enable untrusted multi-user access until the migration, session workspace context, endpoint scoping and cross-workspace IDOR tests are complete.
+
+## 4. Confirmed technical limits
 
 ### SCA
 - Maven advisory snapshot is a bounded benchmark-oriented dataset (41 advisories in snapshot dated 2026-11-16; see `data/README.md`).
@@ -84,7 +88,7 @@ Do not expose this branch as a multi-user production service until tenant owners
 - CSV, SARIF, PDF and XLSX were not confirmed.
 - Finding states and history exist, but assignment, comments, labels, due dates and a complete reopen/approval process are not implemented.
 
-## 4. Runtime verification still required
+## 5. Runtime verification still required
 
 The new account-management screens and APIs are covered by CI tests/build, but have not yet been exercised in the user's local Docker/browser session. Verify admin-only access, user create/update/deactivate, session revocation and password change against a migrated database.
 
@@ -100,7 +104,7 @@ Source code and CI cannot prove these against the user's current environment:
 
 The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO_PASSWORD` in the current PowerShell process and now authenticates through `/api/auth/login`. See `docs/demo-runbook.md`.
 
-## 5. Roadmap state
+## 6. Roadmap state
 
 | Stage | Current assessment | Next action |
 |---|---|---|
@@ -120,7 +124,7 @@ The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO
 | P13 UX/UI | Workflow editor and refreshed CyberGarden design exist | Usability test on realistic screen sizes and data volumes |
 | P14 API/integrations | REST and reusable CI workflow exist | Scoped API tokens, versioning, external integration validation |
 
-## 6. Recommended order
+## 7. Recommended order
 
 1. Complete local demo E2E and runtime stabilization; close P0 only with recorded evidence.
 2. Implement tenant ownership and object-level authorization before inviting multiple users.
@@ -128,7 +132,7 @@ The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO
 4. Complete findings lifecycle, audit trail and export formats.
 5. Finish backup/restore, monitoring, load validation and deployment documentation.
 
-## 7. Case guardrails
+## 8. Case guardrails
 
 - Detection must remain in INVEST's own analyzers/rules; do not substitute Semgrep, Gitleaks, Trivy or detekt.
 - LLM is explanatory only. It must not discover findings or alter scanner/Gate decisions.
