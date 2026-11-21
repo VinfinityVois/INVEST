@@ -11,6 +11,7 @@ from app.db import SessionLocal
 from app.models import AuditLog, User, UserSession
 from app.security.auth import normalize_email
 from app.security.passwords import hash_password, verify_password
+from app.security.tenancy import create_personal_workspace
 
 router = APIRouter(tags=["user management"])
 
@@ -158,6 +159,7 @@ def create_user(payload: UserCreate, request: Request):
         )
         db.add(user)
         db.flush()
+        create_personal_workspace(db, user)
         _audit(db, actor, "user.created", user, {"is_admin": user.is_admin})
         db.commit()
         db.refresh(user)
