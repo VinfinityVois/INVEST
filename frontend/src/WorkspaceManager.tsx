@@ -95,12 +95,14 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   };
 
   const createOrganization = () => run(async () => {
-    await api("/api/organizations", { method: "POST", body: JSON.stringify({ name: newOrganization }) });
+    const created = await api("/api/organizations", { method: "POST", body: JSON.stringify({ name: newOrganization }) });
+    setOrganizationId(created.id);
     setNewOrganization("");
   }, "Организация создана.");
 
   const createWorkspace = () => run(async () => {
-    await api("/api/workspaces", { method: "POST", body: JSON.stringify({ organization_id: organizationId, name: newWorkspace }) });
+    const created = await api("/api/workspaces", { method: "POST", body: JSON.stringify({ organization_id: organizationId, name: newWorkspace }) });
+    setWorkspaceId(created.id);
     setNewWorkspace("");
   }, "Рабочая область создана.");
 
