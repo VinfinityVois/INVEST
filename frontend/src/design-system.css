@@ -3774,3 +3774,24 @@
 @media(prefers-reduced-motion:reduce) {
   .shell .react-flow__edge-path,.shell .topbar .icon-button { transition:none!important; }
 }
+
+
+/* Sidebar expansion states keep the graph fluid instead of constraining panels to rail width */
+.shell .layout:not(.left-collapsed):not(.right-collapsed) {
+  grid-template-columns:minmax(230px,260px) minmax(0,1fr) minmax(300px,340px);
+}
+.shell .layout:not(.left-collapsed).right-collapsed {
+  grid-template-columns:minmax(230px,260px) minmax(0,1fr) 34px;
+}
+.shell .layout.left-collapsed:not(.right-collapsed) {
+  grid-template-columns:34px minmax(0,1fr) minmax(300px,340px);
+}
+@media(max-width:1023px) {
+  .shell .layout:not(.left-collapsed):not(.right-collapsed) {
+    grid-template-columns:32px minmax(0,1fr) 32px;
+  }
+  .shell .layout:not(.left-collapsed).right-collapsed,
+  .shell .layout.left-collapsed:not(.right-collapsed) {
+    grid-template-columns:32px minmax(0,1fr) 32px;
+  }
+}
