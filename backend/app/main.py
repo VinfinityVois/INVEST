@@ -2153,22 +2153,36 @@ def get_run(run_id: UUID, request: Request):
 @app.get("/api/runs/{run_id}/findings")
 def list_run_findings(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        _run_in_active_workspace(session, request, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
         rows = session.scalars(
             select(Finding).where(Finding.run_id == run_id).order_by(Finding.severity, Finding.path, Finding.line)
         ).all()
-        return [
-            {
+        run_result = run.result if isinstance(run.result, dict) else {}
+        outputs = run_result.get("outputs", {}) if isinstance(run_result.get("outputs"), dict) else {}
+        ai_output = outputs.get("ai-explain", {}) if isinstance(outputs.get("ai-explain"), dict) else {}
+        explanations = ai_output.get("explanations", []) if isinstance(ai_output.get("explanations"), list) else []
+        explanation_by_fingerprint = {
+            str(item.get("fingerprint")): item
+            for item in explanations
+            if isinstance(item, dict) and item.get("fingerprint")
+        }
+        result = []
+        for item in rows:
+            payload = item.payload if isinstance(item.payload, dict) else {}
+            explanation = explanation_by_fingerprint.get(item.fingerprint)
+            result.append({
                 "id": str(item.id),
                 "fingerprint": item.fingerprint,
                 "rule_id": item.rule_id,
                 "severity": item.severity,
                 "path": item.path,
                 "line": item.line,
-                **item.payload,
-            }
-            for item in rows
-        ]
+                **payload,
+                **({"ai_explanation": explanation} if explanation else {}),
+            })
+        return result
 
 
 @app.get("/api/runs/{run_id}/findings/{fingerprint}/source")
