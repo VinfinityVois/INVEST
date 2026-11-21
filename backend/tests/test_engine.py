@@ -486,3 +486,27 @@ def test_scanner_cache_expires_after_ttl_and_rescans(tmp_path, monkeypatch):
     assert expired["trace"][-1]["cached"] is False
     assert expired["trace"][-1]["cache_bypass_reason"] == "Срок действия кэша истёк"
     assert expired["cache_metadata"]["scan"]["cached_at"] != expired_metadata["scan"]["cached_at"]
+
+
+def test_missing_workspace_root_is_created_and_missing_upload_is_actionable(tmp_path, monkeypatch):
+    workspace = tmp_path / "data" / "workspaces"
+    monkeypatch.setattr(settings, "workspace_root", str(workspace))
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "projects/project-missing"}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert workspace.is_dir()
+    assert result["status"] == "failed"
+    assert result["outputs"]["source"]["status"] == "failed"
+    assert "API and worker share the same WORKSPACE_ROOT volume" in result["outputs"]["source"]["message"]
+    assert result["outputs"]["scan"]["status"] == "blocked"
