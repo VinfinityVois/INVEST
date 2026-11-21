@@ -1,116 +1,132 @@
-# INVEST — source audit and roadmap status
+# INVEST — актуальный аудит исходников и roadmap
 
-**Branch:** `feat/platform-foundation`  
-**Audited revision:** `b9c1d8a561f786be58eef9f4bba612c0eca30f72`  
-**Audit date:** 2026-11-21  
-**Scope:** source-level review of the current backend, frontend, persistence, migrations, tests and CI. This is not a penetration test and does not replace runtime verification against the local Docker environment.
+**Ветка:** `feat/platform-foundation`  
+**Срез исходников:** `c63c6a60a394df3c5af9ed7acd5e116bd4ca8904`  
+**Дата:** 2026-11-21  
+**Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
+
+> Этот документ заменяет более раннюю оценку, в которой аутентификация ошибочно отмечалась как отсутствующая. В текущей ветке уже есть базовая single-operator authentication.
 
 ## Executive summary
 
-The repository already contains a substantial single-workspace workflow MVP: a React Flow editor, typed node registry and graph validation, persistent projects/workflows/runs, a PostgreSQL-backed worker queue, SAST/SCA/secrets scanners, rule packs and presets, AI explanations/workflow generation, run telemetry and comparisons, JSON/HTML reports, finding-state updates, webhook delivery and workflow templates.
+Платформа содержит функциональный workflow MVP: React Flow editor, typed node registry, schema-driven config, graph validation, durable PostgreSQL worker queue, ZIP/Git sources, custom Secrets/SCA/SAST, rule packs/presets/templates, schedule trigger, compare logic, AI explanations/workflow drafts, webhook, CI gate, SSE telemetry, finding state history, run comparison и JSON/HTML reports.
 
-The most important product/security gap is that the current application has **no user authentication or tenant authorization layer**. The API exposes project, workflow, run, finding and report operations without a user/session dependency. The current data model has no User, Organization, Membership, Workspace or Role tables. The current application must therefore be treated as a trusted local/single-operator MVP, not exposed as a multi-user service to an untrusted network.
+Добавлены bootstrap первого администратора, Argon2id password hashing, server-side sessions, HttpOnly cookie, logout/revocation, Origin validation и database-backed login rate limits.
 
-## 1. Confirmed implementation map
+**Критическое ограничение:** authentication не равна authorization. У моделей Project/Workflow/Run/Finding нет tenant ownership и в API нет object-level permission checks. Любой вошедший пользователь потенциально видит общие данные workspace. Сейчас это single-operator/trusted environment, а не multi-tenant сервис.
 
-| Area | Source evidence | Status |
+## 1. Реализация по слоям
+
+| Область | Подтверждение в коде | Оценка |
 |---|---|---|
-| FastAPI backend | `backend/app/main.py`, `backend/app/config.py` | Implemented |
-| React/Vite frontend and React Flow editor | `frontend/src/App.tsx`, `frontend/src/main.tsx` | Implemented |
-| Typed workflow node registry and config schemas | `backend/app/workflows/registry.py`, `schemas.py`, frontend schema-driven controls | Implemented |
-| Workflow graph validation and execution | `backend/app/workflows/validator.py`, `engine.py` | Implemented |
-| Durable worker queue | `backend/app/queue.py`, `worker.py`; PostgreSQL row locking, heartbeat and stale-run recovery logic | Implemented; runtime recovery still needs verification |
-| Persistent projects and workflow versions | `Project`, `Workflow`, `WorkflowVersion` models and API routes | Implemented |
-| Finding persistence and basic states | `Finding`, `FindingState`; open, accepted_risk, fixed, false_positive | Partial lifecycle |
-| Scanner implementations | `backend/app/scanners/secrets.py`, `sca.py`, `sast.py` | Implemented; coverage/precision need benchmarks |
-| Rule packs and presets | `backend/app/rules_loader.py`, `backend/app/workflows/presets.py`, `rules/`, `presets/` | Implemented |
-| AI explanations and workflow draft generation | `backend/app/ai/` | Implemented; provider outage degrades run to partial |
-| Run telemetry, trends and run comparison | API routes in `backend/app/main.py` | Implemented |
-| Reports | JSON and HTML export endpoints | Partial; PDF/CSV/XLSX/SARIF not confirmed |
-| Workflow schedules | `WorkflowSchedule`, schedule API and queue scheduling | Implemented |
-| Workflow templates | sanitized publish/list/clone flow | Implemented |
-| Webhook notifications | `backend/app/notifications/webhook.py` | Implemented; delivery security tests exist |
-| Audit log storage | `AuditLog` model and selected write events | Partial; no complete audit query/API or actor identity |
-| Credential vault and redaction | `backend/app/security/vault.py`, `redaction.py` | Implemented; operational key management needs review |
+| Frontend | React, Vite, TypeScript, React Flow, design-system.css | Реализовано |
+| Backend | FastAPI, Pydantic, SQLAlchemy, PostgreSQL | Реализовано |
+| Workflow graph | Registry, typed ports, schema config, validator, versioning | Реализовано |
+| Queue / worker | PostgreSQL locking, heartbeat, stale-run recovery logic | Реализовано; recovery требует runtime test |
+| Sources | ZIP archive validation, HTTPS Git allowlist, no project execution | Реализовано |
+| Secrets | Custom rules, context checks, entropy heuristics, redaction | Реализовано; precision/recall зависят от benchmark |
+| SCA | Maven/Gradle parsing, advisory ranges, Spring Boot managed versions | Реализовано частично; snapshot ограничен |
+| SAST | Kotlin/Spring rules and bounded interprocedural taint propagation | Реализовано частично; lexical/heuristic limits |
+| AI | Explanation of scanner findings, provider readiness, workflow draft generation | Реализовано; provider E2E required |
+| Schedule | Cron trigger, IANA timezone, DB schedule dispatcher | Реализовано |
+| Logic | Merge and Compare findings; equals/contains/numeric operators | Реализовано; dedicated regex operator/node отсутствует |
+| Notifications | HTTPS webhook with allowlist, DNS checks, no redirects/proxy trust | Реализовано; actual delivery needs demo |
+| Security Gate | Named policy packs and deterministic decision | Реализовано |
+| Rule packs/presets/templates | YAML inheritance, built-in preset, sanitized template publish/clone | Реализовано |
+| CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Реализовано; external consumer repository setup unverified |
+| Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для single-operator |
+| Authorization / tenancy | No Organization/Workspace/Membership/Role ownership model | Не реализовано |
+| Finding lifecycle | open, accepted_risk, fixed, false_positive; reason, expiry, history | Частично |
+| Audit log | Selected events persisted; no actor identity/full query/export/tamper evidence | Частично |
+| Reports | JSON and HTML endpoints; JSON can be saved to project | Частично; CSV/SARIF/PDF/XLSX not confirmed |
+| Release operations | Docker compose and CI exist | Partial; backup/restore, monitoring and load tests open |
 
-## 2. P0 — stabilization findings
+## 2. Authentication and security boundary
 
-### Confirmed by source inspection
+Current authentication components:
+- `backend/app/security/passwords.py` — Argon2id password hashing;
+- `backend/app/security/bootstrap.py` and `backend/app/bootstrap_admin.py` — one-time first-admin bootstrap;
+- `backend/app/security/sessions.py` — opaque random session token, SHA-256 token hash in DB, expiration and revocation;
+- `backend/app/security/api.py` — login, current user, logout;
+- `backend/app/security/rate_limit.py` — persistent HMAC-keyed counters, 5 attempts per email and 30 per IP per 15-minute window;
+- migrations `0006_user_auth` and `0007_login_rate_limits`.
 
-- Four Alembic revisions exist: `0001_initial` through `0004_workflow_templates`.
-- Backend tests cover workflow execution/validation, queue behavior, SQLite schema compatibility, archive validation, Git source allowlisting, webhook SSRF controls, vault behavior, redaction, scanners, presets and AI provider degradation.
-- CI has backend pytest, frontend TypeScript/Vite build, three scanner benchmark jobs and a Docker image build.
-- ZIP extraction has explicit size/count/ratio and path validation limits in the archive implementation and associated tests.
-- Git source requires HTTPS and an exact allowlisted repository; tests cover unsafe URL/ref rejection.
-- Webhook delivery validates allowed hosts and public DNS resolution, disables redirects and environment proxy trust; tests cover these cases.
-- Existing `AuditLog` writes cover selected project/report/workflow events, but this is not a complete security audit trail.
+The frontend now uses the authenticated session. Demo automation was updated to log in, keep the cookie in process memory and call logout.
 
-### Critical gaps confirmed by source inspection
+Remaining security boundary:
+1. no tenant isolation or object-level access checks;
+2. `is_admin` exists but is not a complete RBAC system;
+3. no self-service account lifecycle, password reset, MFA or all-session revocation UI;
+4. selected audit events do not yet form a complete actor-aware trail;
+5. operational key rotation, backup/restore and reverse-proxy/TLS deployment need review.
 
-1. **No authentication:** no registration/login/logout/session/refresh-token endpoints or user model were found.
-2. **No backend authorization:** API route handlers do not use a current-user dependency or object-level permission checks. CORS is not an authorization control.
-3. **No tenant model:** there are no Organization, Membership, Workspace or Role entities and no tenant foreign keys on projects/workflows/runs/findings.
-4. **No account security controls:** no password hashing, email verification, password reset, MFA, session revocation or login rate limiting were found.
-5. **Audit coverage is incomplete:** no actor identity, comprehensive event coverage, audit query API or tamper-evidence mechanism was found.
-6. **Report formats are incomplete:** JSON and HTML are present; PDF, CSV, XLSX and SARIF export were not found in the reviewed API.
-7. **Findings lifecycle is partial:** current persisted states are open, accepted_risk, fixed and false_positive. Assignment, comments, labels, due dates, state-transition history and explicit reopen handling are not yet a complete workflow.
+Do not expose this branch as a multi-user production service until tenant ownership and backend authorization are implemented and tested against IDOR/cross-tenant cases.
 
-**Deployment warning:** until authentication and object-level authorization are implemented, do not expose the API/UI to an untrusted network or treat the current service as a multi-user/production deployment.
+## 3. Confirmed technical limits
 
-### Runtime checks still required
+### SCA
+- Maven advisory snapshot is a bounded benchmark-oriented dataset (41 advisories in snapshot dated 2026-11-16; see `data/README.md`).
+- It is not a complete or automatically refreshed vulnerability feed.
+- Spring Boot managed-version coverage is a curated subset, not a complete BOM for all releases.
+- Unknown/unresolved versions must remain unknown; do not infer affected status.
 
-These cannot be proven from static source review alone and remain open:
+### SAST
+- Kotlin/Spring analysis covers selected SQL injection, TLS hostname verification, credentialed CORS, public sensitive routes and IDOR/BAC patterns.
+- Taint propagation is bounded and lexical; it is not Kotlin PSI/AST, full type resolution, a complete call graph or flow-sensitive analysis.
+- Keep benchmark evidence and limitations visible; do not market it as compiler-grade static analysis.
 
-- clean Docker Compose startup from an empty environment;
-- Alembic upgrade from an empty database and upgrade of an existing database snapshot;
-- worker restart during a running job, stale lock recovery and duplicate execution/idempotency behavior;
-- actual ZIP boundary tests at configured limits;
-- end-to-end verification of Git allowlist and webhook SSRF protections in the deployed container/network;
-- confirmation that secrets are absent from application logs, API responses and generated reports under realistic inputs;
-- full local backend tests, frontend build and benchmark execution in the user's current checkout.
+### Reports and findings
+- JSON and HTML report exports exist.
+- CSV, SARIF, PDF and XLSX were not confirmed.
+- Finding states and history exist, but assignment, comments, labels, due dates and a complete reopen/approval process are not implemented.
 
-## 3. CI status at audited revision
+## 4. Runtime verification still required
 
-GitHub Actions reported the CI workflow as **completed / success** for revision `b9c1d8a561f786be58eef9f4bba612c0eca30f72` on 2026-11-21. The workflow contains backend tests, frontend build, scanner benchmarks and container build.
+Source code and CI cannot prove these against the user's current environment:
+- clean Docker Compose startup and health of API, DB, frontend and worker;
+- Alembic upgrade from empty DB and from the user's existing DB;
+- worker restart during an active run, stale lease recovery and duplicate-execution/idempotency behavior;
+- full demo on the pinned Kotlin training repository: all three scanners, AI, webhook and Security Gate;
+- actual webhook payload received by the unique endpoint;
+- AI provider availability, timeout behavior and evidence-grounded explanation;
+- secrets absence from logs, API responses, reports and webhook payload under realistic inputs;
+- backup/restore of PostgreSQL and workspace volume.
 
-This CI result does not prove local Docker runtime behavior, production security, database upgrade safety or the user's current local configuration.
+The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO_PASSWORD` in the current PowerShell process and now authenticates through `/api/auth/login`. See `docs/demo-runbook.md`.
 
-## 4. Roadmap state
+## 5. Roadmap state
 
-| Roadmap stage | Current assessment | Next action |
+| Stage | Current assessment | Next action |
 |---|---|---|
-| P0 Audit & stabilization | Source audit completed; runtime checks remain open | Run local integration checklist and close any regressions |
-| P1 Authentication | Not implemented | Design and implement secure accounts, sessions and recovery |
-| P2 Organizations & RBAC | Not implemented | Add tenant model and enforce backend object-level permissions |
-| P3 Dashboard | Partial workflow/run telemetry exists; organization-wide dashboard not confirmed | Build aggregate APIs after tenancy foundation |
-| P4 Analytics & Reports | Workflow trend and JSON/HTML reports exist | Add aggregate metrics and export formats |
-| P5 Findings Management | Basic state updates exist | Add lifecycle history, assignment, comments and risk expiry |
-| P6 AI Remediation | Not confirmed | Design patch proposal/approval pipeline with human control |
-| P7 SAST expansion | Existing Kotlin SAST and rule packs | Improve AST/data-flow coverage against benchmarks |
-| P8 SCA expansion | Existing Maven/Gradle support and local advisory data | Improve resolution/advisory freshness and add ecosystems |
-| P9 Collaboration | Not implemented | Build on organizations, membership and notifications |
-| P10 Notifications | Webhook exists | Add signed delivery, retries and additional channels |
-| P11 Audit & Security | Partial audit and security primitives exist | Complete actor-aware audit trail and security controls |
-| P12 Production readiness | Partial CI/worker health mechanisms | Add monitoring, backup/restore, deployment and load validation |
-| P13 UX/UI | Workflow editor and CyberGarden design exist | Add product pages as backend capabilities land |
-| P14 API & integrations | REST API and webhook exist | Add scoped API tokens, integrations and versioning |
+| P0 Audit/stabilization | Source review refreshed; local runtime still open | E2E + migrations + worker recovery |
+| P1 Authentication | Single-operator auth baseline implemented | Account lifecycle, session controls, security review |
+| P2 Organizations/RBAC | Not implemented | Tenant schema, object-level authorization, IDOR tests |
+| P3 Dashboard | Workflow telemetry exists; organization aggregate dashboard absent | Build after tenancy |
+| P4 Analytics/reports | Run trends, comparison, JSON/HTML exist | CSV/SARIF, aggregate metrics |
+| P5 Findings management | Basic lifecycle/history exists | Assignment, comments, labels, due dates, reopen |
+| P6 AI remediation | Not confirmed | Human-approved patch proposal and diff review |
+| P7 SAST | Custom Kotlin/Spring rules exist | Benchmark-driven coverage and AST/type-aware analysis |
+| P8 SCA | Maven/Gradle and local snapshot exist | Upstream refresh, provenance, more ecosystems |
+| P9 Collaboration | Not implemented | Membership, comments and shared workflows |
+| P10 Notifications | Webhook exists | Retries, signatures, delivery audit, more channels |
+| P11 Audit/security | Primitives and selected events exist | Actor-aware complete audit and key lifecycle |
+| P12 Production readiness | Docker/CI/worker mechanisms exist | Backup, monitoring, restore, load and deployment tests |
+| P13 UX/UI | Workflow editor and refreshed CyberGarden design exist | Usability test on realistic screen sizes and data volumes |
+| P14 API/integrations | REST and reusable CI workflow exist | Scoped API tokens, versioning, external integration validation |
 
-## 5. Recommended implementation sequence
+## 6. Recommended order
 
-1. Close P0 runtime verification and address any regressions.
-2. Implement P1 authentication before exposing the service to multiple users.
-3. Implement P2 organizations, memberships and backend RBAC before aggregate dashboards.
-4. Build P3 dashboard and P5 findings management on tenant-scoped data.
-5. Expand P4 reports and analytics.
-6. Implement AI remediation with diff review and explicit human approval.
-7. Continue SAST/SCA coverage improvements using reproducible benchmark gates.
-8. Complete collaboration, notifications, audit and production readiness.
+1. Complete local demo E2E and runtime stabilization; close P0 only with recorded evidence.
+2. Implement tenant ownership and object-level authorization before inviting multiple users.
+3. Expand SCA feed freshness and SAST/Secrets accuracy behind regression benchmarks.
+4. Complete findings lifecycle, audit trail and export formats.
+5. Finish backup/restore, monitoring, load validation and deployment documentation.
 
-## 6. Architectural guardrails for the next milestones
+## 7. Case guardrails
 
-- Every tenant-owned record must be scoped on the backend; never rely on frontend filtering.
-- Every object lookup must verify membership/permission to prevent IDOR and cross-tenant access.
-- Add migrations with upgrade/downgrade tests and preserve existing SQLite compatibility where supported.
-- Keep AI-generated content advisory; scanner evidence and security-gate decisions remain deterministic and independently auditable.
-- Treat code, findings, repository metadata and webhook responses as untrusted input.
-- Do not mark a milestone complete until automated tests and a local end-to-end verification pass.
+- Detection must remain in INVEST's own analyzers/rules; do not substitute Semgrep, Gitleaks, Trivy or detekt.
+- LLM is explanatory only. It must not discover findings or alter scanner/Gate decisions.
+- Do not use n8n/Node-RED as the platform foundation.
+- Scan only owned or explicitly authorized training targets.
+- Do not execute Gradle, Maven or project scripts during analysis.
+- Never use production data or real secrets in tests.
