@@ -794,3 +794,47 @@ def test_sast_rule_pack_filters_findings_to_selected_rule_ids():
     assert [item["rule_id"] for item in filtered] == ["kotlin.jdbc.sql-injection"]
     assert filtered[0]["severity"] == "HIGH"
     assert filtered[0]["cwe"] == ["CWE-89"]
+
+
+
+def test_ai_provider_failure_keeps_scanner_results_and_marks_run_partial(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "application.yml").write_text("spring: {}\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [
+        {"fingerprint": "finding-1", "rule_id": "TEST_SECRET", "severity": "HIGH", "path": "application.yml", "line": 1}
+    ])
+    monkeypatch.setattr(engine, "explain_findings", lambda findings, _config: {
+        "status": "failed",
+        "message": "AI provider timeout",
+        "findings": findings,
+        "explanations": [],
+        "analyzed_count": len(findings),
+        "explained_count": 0,
+    })
+
+    graph = WorkflowGraph(
+        name="AI provider outage",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "ai", "type": "ai.explain"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "ai"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "partial"
+    assert result["outputs"]["scan"]["summary"]["total"] == 1
+    assert result["outputs"]["ai"]["status"] == "failed"
+    assert result["outputs"]["ai"]["findings"][0]["fingerprint"] == "finding-1"
+    assert result["trace"][-1]["diagnostic_level"] == "error"
