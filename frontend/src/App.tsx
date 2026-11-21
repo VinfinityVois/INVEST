@@ -10,7 +10,7 @@ import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle,
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
