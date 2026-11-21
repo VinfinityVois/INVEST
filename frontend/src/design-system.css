@@ -1813,3 +1813,52 @@
     grid-template-columns:minmax(0,1fr);
   }
 }
+
+
+/* Horizontal reading structure is shared by both themes. */
+.shell .finding-detail {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;
+  gap:10px;
+}
+.shell .finding-detail > .finding-detail-heading,
+.shell .finding-detail > .finding-location,
+.shell .finding-detail > .finding-identifiers,
+.shell .finding-detail > .finding-ai-explanation {
+  grid-column:1/-1;
+}
+.shell .finding-detail > .finding-explanation,
+.shell .finding-detail > .finding-remediation {
+  min-width:0;
+  margin:0;
+  height:100%;
+}
+.shell .finding-detail > .finding-ai-explanation {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px 12px;
+  min-width:0;
+}
+.shell .finding-detail > .finding-ai-explanation > div:first-child,
+.shell .finding-detail > .finding-ai-explanation > .ai-source-evidence,
+.shell .finding-detail > .finding-ai-explanation > small {
+  grid-column:1/-1;
+}
+.shell .finding-detail > .finding-ai-explanation > p {
+  min-width:0;
+  margin:0;
+  overflow-wrap:anywhere;
+}
+@media (max-width:1280px) {
+  .shell .finding-detail > .finding-ai-explanation {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media (max-width:980px) {
+  .shell .finding-detail { grid-template-columns:minmax(0,1fr); }
+  .shell .finding-detail > .finding-explanation,
+  .shell .finding-detail > .finding-remediation,
+  .shell .finding-detail > .finding-ai-explanation { grid-column:1; }
+  .shell .finding-detail > .finding-ai-explanation { grid-template-columns:minmax(0,1fr); }
+}
