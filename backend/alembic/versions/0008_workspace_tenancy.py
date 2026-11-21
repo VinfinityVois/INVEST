@@ -54,6 +54,15 @@ def upgrade():
     op.create_index("ix_organization_memberships_organization_id", "organization_memberships", ["organization_id"])
     op.create_index("ix_organization_memberships_user_id", "organization_memberships", ["user_id"])
 
+    op.create_index(
+        "uq_organization_single_owner",
+        "organization_memberships",
+        ["organization_id"],
+        unique=True,
+        sqlite_where=sa.text("role = 'owner'"),
+        postgresql_where=sa.text("role = 'owner'"),
+    )
+
     op.create_table(
         "workspace_memberships",
         sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
