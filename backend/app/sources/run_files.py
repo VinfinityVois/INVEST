@@ -63,7 +63,26 @@ def resolve_run_source_file(
     if not source_root.is_relative_to(workspace) or not source_root.is_dir():
         raise RunSourceFileError("Run source artifact is outside the workspace")
 
-    candidate = source_root
+    if project_subdirectory is not None:
+        if not isinstance(project_subdirectory, str) or not project_subdirectory:
+            raise RunSourceFileError("Invalid project subdirectory")
+        subdirectory = PurePosixPath(project_subdirectory)
+        if subdirectory.is_absolute() or any(part in {"", ".", ".."} for part in subdirectory.parts):
+            raise RunSourceFileError("Invalid project subdirectory")
+        project_root = source_root.joinpath(*subdirectory.parts)
+    else:
+        project_root = detect_project_root(source_root)
+
+    if project_root.is_symlink():
+        raise RunSourceFileError("Symlink project roots are not allowed")
+    try:
+        project_root = project_root.resolve(strict=True)
+    except OSError as exc:
+        raise RunSourceFileError("Project root is unavailable") from exc
+    if not project_root.is_relative_to(source_root) or not project_root.is_dir():
+        raise RunSourceFileError("Project root is outside the run workspace")
+
+    candidate = project_root
     for part in relative.parts:
         candidate = candidate / part
         if candidate.is_symlink():
