@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 from sqlalchemy import select
 
 from app.db import SessionLocal
@@ -28,6 +29,28 @@ class FindingCommentCreate(BaseModel):
 
 class FindingAssigneeUpdate(BaseModel):
     user_id: UUID | None = None
+
+
+class FindingBulkUpdate(BaseModel):
+    fingerprints: list[str] = Field(min_length=1, max_length=100)
+    state: Literal["open", "in_progress", "resolved", "accepted_risk", "false_positive"]
+    reason: str = Field(min_length=3, max_length=2000)
+
+    @field_validator("fingerprints")
+    @classmethod
+    def unique_fingerprints(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip() for value in values))
+        if any(not value or len(value) > 64 for value in normalized):
+            raise ValueError("Invalid finding fingerprint.")
+        return normalized
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("A reason is required.")
+        return value
 
 
 def _actor(request: Request) -> User:
@@ -191,3 +214,63 @@ def update_finding_assignee(workflow_id: UUID, fingerprint: str, payload: Findin
             "assigned_to_user_id": str(payload.user_id) if payload.user_id else None,
             "assigned_to_email": assignee.email if assignee else None,
         }
+
+
+@router.post("/api/workflows/{workflow_id}/findings/bulk")
+def bulk_update_finding_states(workflow_id: UUID, payload: FindingBulkUpdate, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        _workflow, _ = _workflow_and_finding(
+            db, request, workflow_id, payload.fingerprints[0], roles={"admin", "editor", "analyst"}
+        )
+        existing = set(db.scalars(
+            select(Finding.fingerprint)
+            .join(WorkflowRun, Finding.run_id == WorkflowRun.id)
+            .where(
+                WorkflowRun.workflow_id == workflow_id,
+                Finding.fingerprint.in_(payload.fingerprints),
+            )
+            .distinct()
+        ).all())
+        missing = sorted(set(payload.fingerprints) - existing)
+        if missing:
+            raise HTTPException(status_code=404, detail={"message": "Some findings are not in this workflow.", "missing": missing})
+        rows = db.scalars(
+            select(FindingState).where(
+                FindingState.workflow_id == workflow_id,
+                FindingState.fingerprint.in_(payload.fingerprints),
+            ).with_for_update()
+        ).all()
+        by_fingerprint = {row.fingerprint: row for row in rows}
+        updated = []
+        for fingerprint in payload.fingerprints:
+            row = by_fingerprint.get(fingerprint)
+            previous_state = row.state if row else None
+            if row is None:
+                row = FindingState(
+                    workflow_id=workflow_id,
+                    fingerprint=fingerprint,
+                    state=payload.state,
+                    reason=payload.reason,
+                )
+                db.add(row)
+            else:
+                row.state = payload.state
+                row.reason = payload.reason
+                row.expires_at = None
+            db.add(AuditLog(
+                action="finding.state.bulk_changed",
+                entity="finding_state",
+                entity_id=f"{workflow_id}:{fingerprint}",
+                details={
+                    "actor_user_id": str(actor.id),
+                    "workflow_id": str(workflow_id),
+                    "fingerprint": fingerprint,
+                    "previous_state": previous_state,
+                    "new_state": payload.state,
+                    "reason": payload.reason,
+                },
+            ))
+            updated.append(fingerprint)
+        db.commit()
+        return {"updated": len(updated), "fingerprints": updated, "state": payload.state}
