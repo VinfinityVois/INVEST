@@ -128,3 +128,28 @@ def test_valid_node_configuration_is_accepted():
         edges=[],
     )
     assert validate_graph(graph, registry).valid
+
+
+def test_union_types_accept_boolean_condition_values():
+    graph = WorkflowGraph(
+        nodes=[{"id": "condition", "type": "logic.if", "config": {"field": "finding_count", "operator": "eq", "value": True}}],
+        edges=[],
+    )
+    assert validate_graph(graph, registry).valid
+
+
+def test_union_types_reject_objects_for_condition_values():
+    graph = WorkflowGraph(
+        nodes=[{"id": "condition", "type": "logic.if", "config": {"field": "finding_count", "operator": "eq", "value": {"unexpected": "object"}}}],
+        edges=[],
+    )
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "invalid_node_config" for issue in result.issues)
+
+
+def test_webhook_uri_format_is_validated():
+    graph = WorkflowGraph(nodes=[{"id": "hook", "type": "notify.webhook", "config": {"url": "not a uri"}}], edges=[])
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "invalid_node_config" and "URI" in issue.message for issue in result.issues)
