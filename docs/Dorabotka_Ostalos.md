@@ -28,7 +28,7 @@
 | Rule packs / presets / templates | YAML packs, preset-каталог, публикация/поиск/clone templates | Реализовано |
 | CI/CD | Reusable security-check workflow и CI job в проекте | Реализовано; подключение из внешнего репозитория требует проверки |
 | Аутентификация | Bootstrap admin, Argon2id, server-side sessions, HttpOnly cookie, Origin check, rate limit | Реализовано; single-operator boundary сохраняется |
-| Пользователи / аккаунты | Admin UI: создание, поиск, фильтры, пагинация, изменение email/роли, блокировка; self-service password change и session list/revoke | Частично; только admin/user, нет reset flow и удаления |
+| Пользователи / аккаунты | Admin UI: создание, поиск, фильтры, пагинация, изменение email/роли, блокировка; self-service profile email, password change и session list/revoke | Частично; только admin/user, нет reset flow и удаления |
 | Session lifecycle | Просмотр сессий, завершение одной/остальных; смена пароля отзывает остальные; блокировка пользователя отзывает все сессии | Реализовано в API/UI; требуется runtime UX-проверка |
 | User audit | user.created / user.updated / user.password_changed с actor_user_id | Частично; login/logout и все административные события ещё не покрыты |
 | Отчёты | JSON и HTML export; сохранение JSON в библиотеку проекта | Реализовано частично |
@@ -44,7 +44,7 @@
 2. **SCA freshness и coverage.** Maven advisory snapshot — 41 запись на 2026-11-16, не полный live feed; Spring Boot managed-version catalog ограничен выбранными версиями. Нужны безопасное обновление из upstream, проверка происхождения/хэша, diff-review и регрессионные benchmark-gates.
 3. **SAST coverage.** Текущий Kotlin/Spring анализ остаётся ограниченным лексическим/эвристическим анализом с ограниченным межфайловым taint propagation; полноценные Kotlin AST/PSI, type resolution, call graph и flow-sensitive анализ отсутствуют. Не выдавать его за эквивалент промышленного компиляционного анализатора.
 4. **Secrets precision.** Дальше улучшать контекст, placeholder suppression и entropy только по измерениям FP/FN; не расширять regex-набор вслепую.
-5. **Users and account lifecycle.** UI/API для admin/user и сессий добавлены; остаются password reset/recovery, policy удаления/передачи данных, расширенная RBAC matrix и tenant ownership. До tenancy не считать multi-user изоляцию реализованной.
+5. **Users and account lifecycle.** UI/API для admin/user, profile email и сессий добавлены; остаются password reset/recovery, policy удаления/передачи данных и внедрение RBAC/tenant model по ADR-0001. До tenancy не считать multi-user изоляцию реализованной.
 5. **Reports.** Добавить CSV/SARIF в первую очередь для интеграции с CI/другими security-инструментами; PDF/XLSX — после уточнения формата, нужного жюри.
 6. **Finding management.** Не хватает назначения ответственного, комментариев, labels, due date и полноценной истории переходов/повторного открытия.
 7. **Audit log.** Сейчас события пишутся выборочно; нет полноценного actor-aware аудита, поиска/экспорта и tamper-evident хранения.
