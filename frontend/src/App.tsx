@@ -158,6 +158,7 @@ export default function App() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [activeWorkflowName, setActiveWorkflowName] = useState<string | null>(null);
   const [workflowChoices, setWorkflowChoices] = useState<WorkflowSummary[]>([]);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowSchedules, setWorkflowSchedules] = useState<WorkflowSchedule[]>([]);
@@ -587,10 +588,10 @@ export default function App() {
   };
 
   const graph = useMemo(() => ({
-    name: activeProject?.name || "Security pipeline",
+    name: activeProject?.name || activeWorkflowName || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
-  }), [nodes, edges, activeProject?.name]);
+  }), [nodes, edges, activeProject?.name, activeWorkflowName]);
 
 
   const refreshProjects = async () => {
@@ -903,6 +904,7 @@ export default function App() {
       setNodes(loadedNodes);
       setEdges(loadedEdges);
       setWorkflowId(data.id);
+      setActiveWorkflowName(graphData.name || data.name || "Security pipeline");
       setActiveProject(null);
       setSelectedNodeId(loadedNodes.find(node => node.data.category === "Source")?.id || loadedNodes[0]?.id || null);
       setSelectedEdgeId(null);
@@ -918,6 +920,7 @@ export default function App() {
     const data = await response.json();
     if (!response.ok) throw new Error(JSON.stringify(data));
     setWorkflowId(data.id);
+    setActiveWorkflowName(graph.name);
     fetch("/api/workflows").then(response => response.ok ? response.json() : []).then((rows: WorkflowSummary[]) => setWorkflowChoices(rows.filter(item => item.id !== "3a55ed41-111c-4c7e-a6e0-70370bfc2c21"))).catch(() => undefined);
     return data.id as string;
   };
