@@ -8,6 +8,7 @@ import "@xyflow/react/dist/style.css";
 import UserManagement from "./UserManagement";
 import WorkspaceManager from "./WorkspaceManager";
 import DashboardPanel from "./DashboardPanel";
+import FindingCollaboration from "./FindingCollaboration";
 import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
@@ -29,7 +30,7 @@ type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" }
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
-type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type FindingLifecycle = { state: "open" | "in_progress" | "resolved" | "accepted_risk" | "false_positive"; reason: string; expires_at?: string | null; assigned_to_user_id?: string | null };
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
@@ -1632,6 +1633,16 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
+  const refreshFindingStates = async () => {
+    if (!workflowId) return;
+    try {
+      const response = await apiFetch("/api/workflows/" + workflowId + "/finding-states");
+      if (!response.ok) return;
+      const rows = await response.json() as Array<FindingLifecycle & { fingerprint: string }>;
+      setFindingStates(Object.fromEntries(rows.map(row => [row.fingerprint, row])));
+    } catch { /* Keep the last known lifecycle state if refresh fails. */ }
+  };
+
   const updateFindingLifecycle = async (finding: Finding, state: FindingLifecycle["state"]) => {
     if (!workflowId || !finding.fingerprint) return;
     const reason = window.prompt("Причина изменения статуса уязвимости:", state === "open" ? "Повторная проверка" : "");
@@ -1670,7 +1681,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       const lifecycleMatch = findingLifecycleFilter === "Все"
         || (findingLifecycleFilter === "Открытые" && lifecycle === "open")
         || (findingLifecycleFilter === "Принятый риск" && lifecycle === "accepted_risk")
-        || (findingLifecycleFilter === "Исправленные" && lifecycle === "fixed")
+        || (findingLifecycleFilter === "Исправленные" && lifecycle === "resolved")
         || (findingLifecycleFilter === "Ложные срабатывания" && lifecycle === "false_positive");
       return lifecycleMatch
         && (findingSeverity === "Все" || item.severity.toUpperCase() === findingSeverity)
@@ -2157,7 +2168,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           <div className="finding-lifecycle-summary" aria-label="Распределение находок по статусам">
             <span className="is-open">{findingLifecycleCounts.open || 0} открыто</span>
             <span className="is-risk">{findingLifecycleCounts.accepted_risk || 0} риск</span>
-            <span className="is-fixed">{findingLifecycleCounts.fixed || 0} исправлено</span>
+            <span className="is-in-progress">{findingLifecycleCounts.in_progress || 0} в работе</span>
+            <span className="is-fixed">{findingLifecycleCounts.resolved || 0} исправлено</span>
             <span className="is-false">{findingLifecycleCounts.false_positive || 0} FP</span>
           </div>
         </div>}
@@ -2210,12 +2222,19 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
             {finding.fingerprint && <div className="finding-lifecycle">
               <label>Статус
                 <select value={findingStates[finding.fingerprint]?.state || "open"} onChange={event => void updateFindingLifecycle(finding, event.target.value as FindingLifecycle["state"])}>
-                  <option value="open">Открыта</option><option value="accepted_risk">Принятый риск</option><option value="fixed">Исправлена</option><option value="false_positive">Ложное срабатывание</option>
+                  <option value="open">Открыта</option><option value="in_progress">В работе</option><option value="resolved">Исправлена</option><option value="accepted_risk">Принятый риск</option><option value="false_positive">Ложное срабатывание</option>
                 </select>
               </label>
               <button className="history-button" onClick={() => void loadFindingHistory(finding.fingerprint!)}>История</button>
               {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
             </div>}
+            {finding.fingerprint && workflowId && <FindingCollaboration
+              workflowId={workflowId}
+              fingerprint={finding.fingerprint}
+              currentUserId={user.id}
+              assignedToUserId={findingStates[finding.fingerprint]?.assigned_to_user_id}
+              onAssignedChange={() => { void refreshFindingStates(); }}
+            />}
             </div>}
           </article>)}
           </section>)}
