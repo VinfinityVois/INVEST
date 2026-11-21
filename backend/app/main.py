@@ -157,8 +157,8 @@ def _project_in_active_workspace(session, request: Request, project_id: UUID, *,
     return project
 
 
-def _workflow_in_active_workspace(session, request: Request, workflow_id: UUID, *, write: bool = False):
-    roles = {"admin", "editor"} if write else None
+def _workflow_in_active_workspace(session, request: Request, workflow_id: UUID, *, write: bool = False, allowed_roles=None):
+    roles = allowed_roles if allowed_roles is not None else ({"admin", "editor"} if write else None)
     workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
     workflow = session.scalar(
         select(Workflow).where(
@@ -2184,7 +2184,7 @@ def run_workflow(graph: WorkflowGraph):
 @app.get("/api/workflows/{workflow_id}/finding-states")
 def list_finding_states(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        _workflow_in_active_workspace(session, request, workflow_id)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -2249,7 +2249,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
         if expiry <= datetime.now(timezone.utc):
             raise HTTPException(status_code=422, detail="Срок принятого риска должен быть в будущем.")
     with SessionLocal() as session:
-        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        _workflow_in_active_workspace(session, request, workflow_id, allowed_roles={"admin", "editor", "analyst"})
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
