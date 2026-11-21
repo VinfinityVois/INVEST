@@ -331,3 +331,83 @@ def test_workspace_membership_isolation_and_switching(user_client):
         headers={"Origin": "http://localhost:5173"},
     )
     assert denied.status_code == 404
+
+
+def test_workspace_membership_role_changes_removal_and_owner_transfer(user_client):
+    client, _, member_id = user_client
+    assert login(client).status_code == 200
+
+    organization = client.post(
+        "/api/organizations",
+        json={"name": "Platform Team"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert organization.status_code == 201
+    organization_id = organization.json()["id"]
+    workspace_id = organization.json()["default_workspace_id"]
+
+    added = client.post(
+        f"/api/organizations/{organization_id}/members",
+        json={
+            "email": "member@example.test",
+            "workspace_id": workspace_id,
+            "workspace_role": "viewer",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert added.status_code == 201
+
+    members = client.get(f"/api/workspaces/{workspace_id}/members")
+    assert members.status_code == 200
+    assert any(item["user_id"] == str(member_id) and item["role"] == "viewer" for item in members.json()["items"])
+
+    updated = client.patch(
+        f"/api/workspaces/{workspace_id}/members/{member_id}",
+        json={"role": "analyst"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["role"] == "analyst"
+
+    removed_workspace = client.delete(
+        f"/api/workspaces/{workspace_id}/members/{member_id}",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert removed_workspace.status_code == 200
+
+    readded_workspace = client.post(
+        f"/api/workspaces/{workspace_id}/members",
+        json={"email": "member@example.test", "role": "editor"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert readded_workspace.status_code == 201
+
+    transferred = client.post(
+        f"/api/organizations/{organization_id}/transfer-ownership",
+        json={"new_owner_user_id": str(member_id), "confirm": True},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert transferred.status_code == 200
+    assert transferred.json()["owner_user_id"] == str(member_id)
+
+    with TestingSession() as db:
+        old_owner = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == uuid.UUID(organization_id),
+                OrganizationMembership.user_id == db.scalar(select(User.id).where(User.email == "admin@example.test")),
+            )
+        )
+        new_owner = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == uuid.UUID(organization_id),
+                OrganizationMembership.user_id == member_id,
+            )
+        )
+        assert old_owner.role == "admin"
+        assert new_owner.role == "owner"
+
+    cannot_remove_owner = client.delete(
+        f"/api/organizations/{organization_id}/members/{member_id}",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert cannot_remove_owner.status_code == 409
