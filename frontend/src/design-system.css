@@ -3795,3 +3795,12 @@
     grid-template-columns:32px minmax(0,1fr) 32px;
   }
 }
+
+.shell[data-theme="light"] .layout.left-collapsed.right-collapsed {
+  grid-template-columns:34px minmax(0,1fr) 34px;
+}
+@media(max-width:1023px) {
+  .shell[data-theme="light"] .layout.left-collapsed.right-collapsed {
+    grid-template-columns:32px minmax(0,1fr) 32px;
+  }
+}
