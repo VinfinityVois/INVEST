@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1400
     notify_webhook_allowed_hosts: str = "webhook.site"
     webhook_allowed_hosts: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_allowed_chat_ids: str = ""
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_use_tls: bool = True
+    smtp_allowed_hosts: str = ""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
@@ -91,6 +100,7 @@ class Settings(BaseSettings):
             raise ValueError("ALLOWED_ORIGINS must not be empty")
 
         return origins
+
     @model_validator(mode="after")
     def validate_production_settings(self):
         origins = self.allowed_origin_list
@@ -141,6 +151,22 @@ class Settings(BaseSettings):
     @property
     def allowed_target_list(self) -> set[str]:
         return {x.strip().rstrip("/") for x in self.allowed_targets.split(",") if x.strip()}
+
+    @property
+    def telegram_allowed_chat_id_set(self) -> set[str]:
+        return {
+            item.strip()
+            for item in (self.telegram_allowed_chat_ids or "").split(",")
+            if item.strip()
+        }
+
+    @property
+    def smtp_allowed_host_set(self) -> set[str]:
+        return {
+            host.strip().lower().rstrip(".")
+            for host in (self.smtp_allowed_hosts or "").split(",")
+            if host.strip()
+        }
 
 
 settings = Settings()
