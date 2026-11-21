@@ -945,3 +945,34 @@
 .auth-loader{width:26px;height:26px;margin:22px auto 0;border:2px solid #29445d;border-top-color:#7ebde4;border-radius:50%;animation:auth-spin .8s linear infinite}
 @keyframes auth-spin{to{transform:rotate(360deg)}}
 @media(max-width:480px){.auth-card{padding:25px 21px}}
+
+/* Account & access control — profile and user administration are separate destinations */
+.user-access-header{padding-bottom:17px;background:linear-gradient(110deg,rgba(14,30,43,.98),rgba(10,18,30,.98))}
+.user-access-header h2{display:flex;align-items:center;gap:9px;color:#e8f2fb;font-size:16px;letter-spacing:.01em}
+.user-access-header h2 svg{color:#55d6a0}
+.user-access-header .eyebrow{color:#5ecce0}
+.user-access-tabs{display:flex;align-items:stretch;gap:5px;padding:0 24px;border-bottom:1px solid #26394d;background:#0b1420}
+.user-access-tabs button{display:flex;align-items:center;gap:9px;padding:12px 15px;border:0;border-bottom:2px solid transparent;background:transparent;color:#8295a9;font-size:10px;cursor:pointer;transition:color .16s,border-color .16s,background .16s}
+.user-access-tabs button:hover{color:#d8e8f5;background:rgba(76,130,165,.08)}
+.user-access-tabs button.active{border-bottom-color:#10b981;background:rgba(16,185,129,.055);color:#63d9a9;font-weight:700}
+.user-access-tabs button span{padding:3px 6px;border:1px solid rgba(65,180,153,.24);border-radius:3px;background:rgba(16,185,129,.08);color:#6ec9ad;font:7px 'DM Mono';letter-spacing:.08em}
+.user-management-content{gap:12px}
+.user-profile-banner{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid rgba(16,185,129,.25);border-radius:7px;background:linear-gradient(105deg,rgba(13,35,37,.8),rgba(12,23,36,.9))}
+.user-profile-avatar{display:grid;place-items:center;width:52px;height:52px;flex-shrink:0;border:1px solid rgba(16,185,129,.55);border-radius:50%;background:#071b1a;color:#66ddb0;font:700 15px 'DM Mono';box-shadow:0 0 18px rgba(16,185,129,.12)}
+.user-profile-banner>div:nth-child(2){display:grid;gap:4px;min-width:0}
+.user-profile-banner>div:nth-child(2) b{overflow-wrap:anywhere;color:#e3edf6;font-size:13px}
+.user-profile-banner>div:nth-child(2) small{color:#77958f;font:7px 'DM Mono';letter-spacing:.08em}
+.user-profile-online{display:flex;align-items:center;gap:6px;margin-left:auto;color:#68d9a8;font:8px 'DM Mono'}
+.user-profile-online i{width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 9px #10b981}
+.user-profile-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.85fr);align-items:start;gap:12px}
+.user-profile-security{display:grid;gap:12px;min-width:0}
+.user-profile-panel .user-password-form{grid-template-columns:minmax(0,1fr)}
+.user-profile-panel .user-password-form input{max-width:100%}
+.user-profile-panel .user-password-form button{justify-self:start}
+.user-profile-panel .user-section-heading>small{color:#66849b;font:7px 'DM Mono';letter-spacing:.08em}
+.user-profile-security .user-management-section{min-width:0}
+.user-admin-intro p{margin:8px 0 0;color:#8197ab;font-size:9px;line-height:1.5}
+.account-profile-trigger{border-color:rgba(16,185,129,.38)!important;color:#9be5c4!important;background:rgba(16,185,129,.08)!important}
+.account-users-trigger{border-color:rgba(6,182,212,.35)!important;color:#8dddea!important;background:rgba(6,182,212,.07)!important}
+@media(max-width:850px){.user-profile-grid{grid-template-columns:1fr}.user-access-tabs{padding:0 12px}.user-access-tabs button{padding:11px 9px;font-size:9px}}
+@media(max-width:520px){.user-access-tabs{gap:0}.user-access-tabs button{flex:1;justify-content:center;flex-wrap:wrap;padding:10px 5px}.user-access-tabs button span{display:none}.user-profile-banner{align-items:flex-start}.user-profile-online{font-size:7px}}
