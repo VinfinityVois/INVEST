@@ -721,6 +721,8 @@ def test_builtin_sca_packs_are_registered_and_inherit():
     assert packs["sca-spring-boot"]["ecosystems"] == ["Maven", "Gradle"]
     assert packs["sca-spring-boot"]["advisory_db"] == "maven-advisories"
     assert packs["sca-spring-boot"]["starter_pack"] == "spring-boot-starters"
+    assert packs["sca-spring-boot"]["advisory_count"] > 0
+    assert packs["sca-spring-boot"]["starter_count"] > 0
 
 
 def test_gradle_sca_can_exclude_development_configurations(tmp_path):
