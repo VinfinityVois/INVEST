@@ -2436,3 +2436,76 @@
   .user-filter-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
   .user-filter-row>label { grid-column:1/-1; }
 }
+
+
+/* Organization and workspace administration */
+.workspace-manager-backdrop {
+  position:fixed;inset:0;z-index:90;display:grid;place-items:center;
+  padding:22px;background:rgba(3,8,14,.72);backdrop-filter:blur(8px);
+  animation:workspace-modal-in .16s ease-out;
+}
+.workspace-manager {
+  width:min(980px,100%);max-height:min(88vh,900px);overflow:auto;
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  color:var(--text);box-shadow:0 24px 80px rgba(0,0,0,.42);
+}
+.workspace-manager-header {
+  position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;
+  padding:17px 20px;border-bottom:1px solid var(--border);background:var(--surface);
+}
+.workspace-manager-header h2 { display:flex;align-items:center;gap:9px;margin:5px 0 0;font-size:16px; }
+.workspace-manager-grid { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;padding:16px; }
+.workspace-manager-column { display:grid;align-content:start;gap:12px; }
+.workspace-manager-section {
+  display:grid;gap:10px;padding:13px;border:1px solid var(--border);
+  border-radius:7px;background:var(--page);
+}
+.workspace-manager-section h3 {
+  display:flex;align-items:center;gap:7px;margin:0;font-size:11px;font-weight:700;
+}
+.workspace-manager-section input,.workspace-manager-section select {
+  min-width:0;width:100%;height:34px;padding:0 9px;border:1px solid var(--border);
+  border-radius:5px;background:var(--surface);color:var(--text);font:11px Inter,system-ui,sans-serif;
+}
+.workspace-manager-section form { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px; }
+.workspace-manager-section button,.workspace-manager-footer button {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;
+  padding:0 10px;border:1px solid var(--border);border-radius:5px;
+  background:var(--elevated);color:var(--text);font-size:10px;font-weight:600;
+}
+.workspace-manager-section button:hover,.workspace-manager-footer button:hover { border-color:var(--accent-500); }
+.workspace-manager-section button:disabled { opacity:.45;cursor:not-allowed; }
+.workspace-manager-add-member { grid-template-columns:1fr !important; }
+.workspace-manager-add-member small,.workspace-manager-hint {
+  margin:0;color:var(--muted);font-size:10px;line-height:1.5;
+}
+.workspace-manager-members { display:grid;gap:6px; }
+.workspace-manager-member {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  min-width:0;padding:8px 9px;border:1px solid var(--border);border-radius:5px;
+  background:var(--surface);
+}
+.workspace-manager-member > span { display:grid;min-width:0;gap:3px; }
+.workspace-manager-member b { overflow:hidden;color:var(--text);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }
+.workspace-manager-member small { color:var(--muted);font-size:9px; }
+.workspace-manager-member > div { display:flex;align-items:center;gap:5px;flex:none; }
+.workspace-manager-member > div button { width:28px;min-height:27px;padding:0; }
+.workspace-manager-member > div select { width:auto;min-width:88px;height:28px;font-size:9px; }
+.workspace-manager-role { color:var(--muted);font:10px "JetBrains Mono",monospace; }
+.workspace-manager-alert,.workspace-manager-notice {
+  margin:12px 16px 0;padding:9px 11px;border-radius:5px;font-size:10px;
+}
+.workspace-manager-alert { border:1px solid rgba(198,40,40,.35);background:rgba(198,40,40,.08);color:var(--danger); }
+.workspace-manager-notice { border:1px solid rgba(27,154,85,.35);background:rgba(27,154,85,.08);color:var(--accent-600); }
+.shell[data-theme="dark"] .workspace-manager-notice { color:var(--accent-300); }
+.workspace-manager-footer {
+  position:sticky;bottom:0;display:flex;justify-content:space-between;gap:8px;
+  padding:12px 16px;border-top:1px solid var(--border);background:var(--surface);
+}
+.workspace-manager-footer button:last-child { border-color:var(--accent-500);background:var(--accent-600);color:#fff; }
+@keyframes workspace-modal-in { from { opacity:0; } to { opacity:1; } }
+@media(max-width:760px) {
+  .workspace-manager-grid { grid-template-columns:1fr; }
+  .workspace-manager-backdrop { padding:8px; }
+  .workspace-manager { max-height:94vh; }
+}
