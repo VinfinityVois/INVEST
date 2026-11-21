@@ -646,6 +646,7 @@ def list_project_files(project_id: UUID, request: Request):
 
 class ProjectFileUpdate(BaseModel):
     content: str = Field(max_length=1_000_000)
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 @app.get("/api/projects/{project_id}/file")
@@ -687,6 +688,7 @@ def preview_project_file(
             "start_line": first,
             "end_line": last,
             "total_lines": len(lines),
+            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
             "editable": editable,
             "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
@@ -907,6 +909,16 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
             original = resolved.read_text(encoding="utf-8")
             if not _project_content_is_safe(original):
                 raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
+            current_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
+            if current_sha256 != payload.expected_sha256:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "PROJECT_FILE_VERSION_CONFLICT",
+                        "message": "Файл изменился после открытия. Обнови его перед сохранением, чтобы не затереть чужие изменения.",
+                        "current_sha256": current_sha256,
+                    },
+                )
             temp_name = None
             try:
                 with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
@@ -923,7 +935,10 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
         except (OSError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=400, detail="Не удалось сохранить файл. Проверь размер и кодировку UTF-8.") from exc
         session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
-            "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))
+            "path": relative.as_posix(),
+            "bytes": len(payload.content.encode("utf-8")),
+            "previous_sha256": current_sha256,
+            "new_sha256": hashlib.sha256(payload.content.encode("utf-8")).hexdigest(),
         }))
         session.commit()
     return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
