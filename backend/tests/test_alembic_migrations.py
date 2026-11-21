@@ -1,6 +1,7 @@
 ﻿import os
 import sqlite3
 import subprocess
+import pytest
 import sys
 from pathlib import Path
 
@@ -257,6 +258,42 @@ def _assert_existing_rows_preserved(connection):
     ).fetchone() == ("Migration template", '{"nodes": []}')
 
 
+def _assert_workspace_backfill(connection):
+    tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    assert {
+        "organizations",
+        "workspaces",
+        "organization_memberships",
+        "workspace_memberships",
+    }.issubset(tables)
+
+    project = connection.execute(
+        "SELECT workspace_id FROM projects WHERE id = ?",
+        ("f" * 32,),
+    ).fetchone()
+    workflow = connection.execute(
+        "SELECT workspace_id FROM workflows WHERE id = ?",
+        ("a" * 32,),
+    ).fetchone()
+    credential = connection.execute(
+        "SELECT workspace_id FROM credentials WHERE id = ?",
+        ("d" * 32,),
+    ).fetchone()
+    assert project is not None and project[0]
+    assert workflow is not None and workflow[0] == project[0]
+    assert credential is not None and credential[0] == project[0]
+
+    workspace_count = connection.execute(
+        "SELECT COUNT(*) FROM workspaces"
+    ).fetchone()[0]
+    assert workspace_count == 1
+
+
 def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     database_path = tmp_path / "migration-test.db"
     database_url = f"sqlite:///{database_path.as_posix()}"
@@ -287,38 +324,27 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
                     f"{table}.{column}: expected one seeded NULL, got {count}"
                 )
 
-    # Upgrade through 0005 and 0006.
+    # Upgrade through auth and the new tenant ownership backfill.
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0007_login_rate_limits")
+        _assert_revision(connection, "0008_workspace_tenancy")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
         _assert_rate_limit_schema(connection, present=True)
         _assert_timestamps_populated(connection)
         _assert_existing_rows_preserved(connection)
+        _assert_workspace_backfill(connection)
         _assert_foreign_keys(connection)
 
-    # Downgrade back through both migrations.
-    _run_alembic(database_url, "downgrade", "0004_workflow_templates")
+    # Ownership assignment is deliberately non-reversible without a
+    # reviewed export/reconciliation plan; downgrade must fail closed.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_alembic(database_url, "downgrade", "0007_login_rate_limits")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0004_workflow_templates")
-        _assert_timestamp_nullability(connection, nullable=True)
-        _assert_auth_tables(connection, present=False)
-        _assert_rate_limit_schema(connection, present=False)
-        _assert_existing_rows_preserved(connection)
-        _assert_foreign_keys(connection)
-
-    # Ensure a second upgrade also succeeds.
-    _run_alembic(database_url, "upgrade", "head")
-
-    with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0007_login_rate_limits")
-        _assert_timestamp_nullability(connection, nullable=False)
-        _assert_auth_tables(connection, present=True)
-        _assert_rate_limit_schema(connection, present=True)
-        _assert_timestamps_populated(connection)
+        _assert_revision(connection, "0008_workspace_tenancy")
+        _assert_workspace_backfill(connection)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
 
