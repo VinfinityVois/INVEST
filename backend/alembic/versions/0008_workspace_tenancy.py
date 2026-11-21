@@ -108,6 +108,7 @@ def upgrade():
 
     bind.execute(sa.text("UPDATE projects SET workspace_id = :workspace"), {"workspace": legacy_workspace_id})
     bind.execute(sa.text("UPDATE workflows SET workspace_id = :workspace"), {"workspace": legacy_workspace_id})
+    bind.execute(sa.text("UPDATE credentials SET workspace_id = :workspace"), {"workspace": legacy_workspace_id})
 
     with op.batch_alter_table("projects") as batch:
         batch.alter_column("workspace_id", existing_type=sa.Uuid(as_uuid=True), nullable=False)
