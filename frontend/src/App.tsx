@@ -10,7 +10,7 @@ import WorkspaceManager from "./WorkspaceManager";
 import DashboardPanel from "./DashboardPanel";
 import FindingCollaboration from "./FindingCollaboration";
 import {
-  Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
+  Activity, AlertTriangle, Bot, Check, ChevronDown, History, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2, BarChart3, Clock3, FolderCode, ShieldCheck, GitMerge, Package, ShieldAlert, Webhook,
