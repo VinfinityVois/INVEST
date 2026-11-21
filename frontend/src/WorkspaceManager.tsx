@@ -239,8 +239,6 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
                   {[
                     ["workflow:run", "Запуск workflow"],
                     ["run:read", "Статус запусков"],
-                    ["findings:read", "Чтение findings"],
-                    ["reports:read", "Чтение отчётов"],
                     ["template:publish", "Публикация шаблонов"],
                   ].map(([scope, label]) => <label key={scope}><input type="checkbox" checked={tokenScopes.includes(scope)} onChange={event => setTokenScopes(current => event.target.checked ? [...current, scope] : current.filter(item => item !== scope))}/>{label}</label>)}
                 </div>
