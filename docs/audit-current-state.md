@@ -34,7 +34,7 @@
 | Security Gate | Named policy packs and deterministic decision | Реализовано |
 | Rule packs/presets/templates | YAML inheritance, built-in preset, sanitized template publish/clone | Реализовано |
 | CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Реализовано; external consumer repository setup unverified |
-| Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для single-operator |
+| Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для browser account flow |
 | User management | Admin create/list/search/filter/pagination/update email/role/status; profile email/password/session controls; soft deactivation revokes sessions | Реализовано частично; password recovery, MFA and deletion policy open |
 | Self-service account | Password change after current-password verification; session list, revoke one/others | Реализовано в API/UI; требует runtime UX check |
 | User audit events | user.created / user.updated / user.profile_updated / user.password_changed with actor_user_id | Частично; auth and all security/admin events not fully audited |
@@ -52,7 +52,7 @@ Current authentication components:
 - `backend/app/security/sessions.py` — opaque random session token, SHA-256 token hash in DB, expiration and revocation;
 - `backend/app/security/api.py` — login, current user, logout;
 - `backend/app/security/rate_limit.py` — persistent HMAC-keyed counters, 5 attempts per email and 30 per IP per 15-minute window;
-- migrations `0006_user_auth` and `0007_login_rate_limits`.
+- migrations `0006_user_auth`, `0007_login_rate_limits`, `0008_workspace_tenancy` and `0009_workspace_api_tokens`.
 
 The frontend now uses the authenticated session. Demo automation was updated to log in, keep the cookie in process memory and call logout.
 
@@ -75,7 +75,7 @@ Implemented:
 - first bootstrap admin claims the unassigned legacy workspace when no admin existed at migration time;
 - active workspace is selected and stored on the server-side session;
 - Organization and Workspace create/list/switch/rename APIs;
-- direct membership add/list/role update/removal, organization member removal and explicit ownership transfer;
+- direct membership add/list/role update/removal, organization member removal and explicit ownership transfer; membership removal and account deactivation revoke the affected workspace API tokens;
 - frontend workspace selector and access-management dialog;
 - workspace-scoped Project/Workflow/Run/Findings/Report browser APIs;
 - source.upload graph paths must resolve to a Project in the same Workspace;
@@ -136,12 +136,12 @@ The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO
 | P6 AI remediation | Not confirmed | Human-approved patch proposal and diff review |
 | P7 SAST | Custom Kotlin/Spring rules exist | Benchmark-driven coverage and AST/type-aware analysis |
 | P8 SCA | Maven/Gradle and local snapshot exist | Upstream refresh, provenance, more ecosystems |
-| P9 Collaboration | Not implemented | Membership, comments and shared workflows |
+| P9 Collaboration | Organization/workspace membership and shared workspace access implemented; findings collaboration remains partial | Invitations, comments, assignment and collaboration audit |
 | P10 Notifications | Webhook exists | Retries, signatures, delivery audit, more channels |
 | P11 Audit/security | Primitives and selected events exist | Actor-aware complete audit and key lifecycle |
 | P12 Production readiness | Docker/CI/worker mechanisms exist | Backup, monitoring, restore, load and deployment tests |
 | P13 UX/UI | Workflow editor and refreshed CyberGarden design exist | Usability test on realistic screen sizes and data volumes |
-| P14 API/integrations | REST and reusable CI workflow exist | Scoped API tokens, versioning, external integration validation |
+| P14 API/integrations | Workspace-scoped API tokens with scopes/expiry/revocation; CI/template publish use scoped tokens | Usage history, rotation workflow, API versioning and external integration validation |
 
 ## 7. Recommended order
 
