@@ -1,1 +1,0 @@
-<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId><artifactId>grandparent</artifactId><version>1</version><relativePath>grandparent.xml</relativePath></parent><groupId>demo</groupId><artifactId>parent</artifactId><version>1</version></project>

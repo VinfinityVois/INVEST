@@ -1,4 +1,0 @@
-[libraries]
-commons = { module = "org.apache.commons:commons-lang3", version = "3.17.0" }
-[bundles]
-backend = ["commons"]

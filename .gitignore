@@ -18,3 +18,5 @@ coverage/
 *-local.json
 /test-secrets.*
 /auth-p1-backup-*/
+**/.pytest-tmp/
+**/.pytest-tmp/**
