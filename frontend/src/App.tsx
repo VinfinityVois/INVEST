@@ -395,7 +395,11 @@ export default function App() {
                 autoComplete="username"
                 placeholder="name@centrinvest.ru"
                 value={email}
-                onChange={event => setEmail(event.target.value)}
+                onChange={event => {
+                  const value = event.target.value;
+                  setEmail(value);
+                  if (rememberLogin) window.localStorage.setItem("invest.rememberedEmail", value.trim());
+                }}
                 maxLength={320}
                 required
               />
