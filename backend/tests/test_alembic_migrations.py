@@ -296,7 +296,8 @@ def _assert_workspace_backfill(connection):
         "SELECT workspace_memberships.workspace_id FROM workspace_memberships "
         "JOIN organization_memberships ON organization_memberships.organization_id = "
         "(SELECT organization_id FROM workspaces WHERE id = workspace_memberships.workspace_id) "
-        "WHERE workspace_memberships.user_id = ? AND organization_memberships.role = 'owner'",
+        "WHERE workspace_memberships.user_id = ? AND organization_memberships.user_id = workspace_memberships.user_id "
+        "AND organization_memberships.role = 'owner'",
         ("9" * 32,),
     ).fetchone()
     assert admin_workspace is not None
