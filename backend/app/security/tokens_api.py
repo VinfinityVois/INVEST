@@ -18,8 +18,6 @@ router = APIRouter(tags=["api-tokens"])
 ALLOWED_SCOPES = {
     "workflow:run",
     "run:read",
-    "findings:read",
-    "reports:read",
     "template:publish",
 }
 
