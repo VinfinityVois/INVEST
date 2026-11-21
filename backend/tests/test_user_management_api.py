@@ -334,7 +334,7 @@ def test_workspace_membership_isolation_and_switching(user_client):
 
 
 def test_workspace_membership_role_changes_removal_and_owner_transfer(user_client):
-    client, _, member_id = user_client
+    client, TestingSession, member_id = user_client
     assert login(client).status_code == 200
 
     organization = client.post(
