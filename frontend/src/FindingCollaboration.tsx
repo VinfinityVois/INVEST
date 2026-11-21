@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { MessageSquare, Send, Trash2, UserRound } from "lucide-react";
 
 type Member = { user_id: string; email: string; role: string };
@@ -62,7 +63,7 @@ export default function FindingCollaboration({
     } finally { setBusy(false); }
   };
 
-  const addComment = async (event: React.FormEvent) => {
+  const addComment = async (event: FormEvent) => {
     event.preventDefault();
     if (!draft.trim()) return;
     setBusy(true); setError("");
