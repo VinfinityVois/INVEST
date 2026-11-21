@@ -46,8 +46,7 @@ def claim_next_run(worker_id: str) -> str | None:
             update(WorkflowRun)
             .where(
                 WorkflowRun.status == "running",
-                WorkflowRun.heartbeat_at.is_not(None),
-                WorkflowRun.heartbeat_at < now - STALE_AFTER,
+                func.coalesce(WorkflowRun.heartbeat_at, WorkflowRun.started_at) < now - STALE_AFTER,
             )
             .values(status="queued", locked_by=None, started_at=None, heartbeat_at=None)
         )
