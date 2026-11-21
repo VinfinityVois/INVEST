@@ -18,7 +18,7 @@ SPRING_BOOT_BOM_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-bo
 SPRING_BOOT_STARTERS_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-starters.json"
 DEPENDENCY_CALL = re.compile(
     r"(?P<call>\b[A-Za-z_]\w*\s*\(\s*(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
-    r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
+    r"|\badd\s*\(\s*['\"](?P<add_configuration>[^'\"]+)['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
     re.MULTILINE | re.DOTALL,
 )
 COORDINATE = re.compile(r"^([^:\s]+):([^:\s]+)(?::([^:\s]+))?$")
@@ -704,7 +704,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
             )
             for alias_match in alias_pattern.finditer(block):
                 configuration_match = re.search(r"([A-Za-z_]\w*)\s*\(\s*$", block[:alias_match.start()])
-                if not include_dev and configuration_match and _is_dev_configuration(configuration_match.group(1)):
+                configuration = configuration_match.group(1) if configuration_match else alias_match.group("add_configuration")
+                if not include_dev and _is_dev_configuration(configuration):
                     continue
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
                 accessor = alias_match.group(2) or alias_match.group(4)
@@ -727,7 +728,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
 
             for match in DEPENDENCY_CALL.finditer(block):
                 call_name = re.match(r"\s*([A-Za-z_]\w*)", match.group("call") or "")
-                if not include_dev and call_name and _is_dev_configuration(call_name.group(1)):
+                configuration = call_name.group(1) if call_name else match.group("add_configuration")
+                if not include_dev and _is_dev_configuration(configuration):
                     continue
                 coordinate = match.group("coordinate") or match.group("add_coordinate")
                 if not coordinate:
