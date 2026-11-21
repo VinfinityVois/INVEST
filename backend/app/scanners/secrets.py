@@ -138,7 +138,7 @@ def scan_text(text, path, selected_rule_packs=None):
                 add(rule, cls, line_no, value, severity, confidence)
 
         for named in re.finditer(
-            r"(?i)\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*" + QUOTED,
+            r"(?i)\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*" + QUOTED,
             line,
         ):
             if SECRET_NAME.search(named.group(1)):
@@ -160,8 +160,8 @@ def scan_text(text, path, selected_rule_packs=None):
                 )
 
         for bearer in re.finditer(
-            r"(?i)\\b(?:authorization|token)\\b\\s*:\\s*['\"]?"
-            r"Bearer\\s+([A-Za-z0-9._~+/=-]{8,})",
+            r"(?i)\b(?:authorization|token)\b\s*:\s*['\"]?"
+            r"Bearer\s+([A-Za-z0-9._~+/=-]{8,})",
             line,
         ):
             add(
@@ -201,8 +201,8 @@ def scan_text(text, path, selected_rule_packs=None):
                 )
 
         for fallback in re.finditer(
-            r"(?i)(?:getenv|environment\\.getproperty|System\\.getProperty)"
-            r"\\s*\\([^)]*\\)\\s*\\?:\\s*" + QUOTED,
+            r"(?i)(?:getenv|environment\.getproperty|System\.getProperty)"
+            r"\s*\([^)]*\)\s*\?:\s*" + QUOTED,
             line,
         ):
             add(
@@ -215,14 +215,14 @@ def scan_text(text, path, selected_rule_packs=None):
             )
 
     if re.search(
-        r"(?i)setBearerAuth\\s*\\(\\s*\\w+\\s*\\)|"
-        r"set\\s*\\(\\s*['\"]Authorization['\"]",
+        r"(?i)setBearerAuth\s*\(\s*\w+\s*\)|"
+        r"set\s*\(\s*['\"]Authorization['\"]",
         text,
     ):
         declarations = {}
         for line_no, line in enumerate(lines, 1):
             for decl in re.finditer(
-                r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*" + QUOTED,
+                r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*" + QUOTED,
                 line,
             ):
                 declarations[decl.group(1)] = (
@@ -231,8 +231,8 @@ def scan_text(text, path, selected_rule_packs=None):
                 )
 
         concat = re.search(
-            r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*"
-            r"([A-Za-z_]\\w*)\\s*\\+\\s*([A-Za-z_]\\w*)",
+            r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"
+            r"([A-Za-z_]\w*)\s*\+\s*([A-Za-z_]\w*)",
             text,
         )
         if (
