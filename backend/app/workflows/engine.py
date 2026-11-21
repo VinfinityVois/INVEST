@@ -107,6 +107,10 @@ def _cache_age_seconds(cached_at: str) -> float | None:
 def _workspace_source(relative_path: str) -> Path:
     """Resolve an uploaded project directory strictly inside WORKSPACE_ROOT."""
     workspace = Path(settings.workspace_root).resolve()
+    try:
+        workspace.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise WorkflowExecutionError("Workspace directory is unavailable; check WORKSPACE_ROOT and worker volume permissions") from exc
     relative = Path(relative_path)
     if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
         raise WorkflowExecutionError("Source path must be a safe relative path")
@@ -116,7 +120,12 @@ def _workspace_source(relative_path: str) -> Path:
         if current.is_symlink():
             raise WorkflowExecutionError("Symlinks are not allowed in source paths")
         current = current.parent
-    candidate = unresolved.resolve(strict=True)
+    try:
+        candidate = unresolved.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise WorkflowExecutionError(
+            "Uploaded project directory was not found in the worker workspace; verify the project upload and that API and worker share the same WORKSPACE_ROOT volume"
+        ) from exc
     if not candidate.is_relative_to(workspace):
         raise WorkflowExecutionError("Source path is outside the configured workspace")
     if candidate.is_symlink() or not candidate.is_dir():
