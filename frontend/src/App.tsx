@@ -331,10 +331,10 @@ export default function App() {
     </main>;
   }
 
-  return <AuthenticatedApp user={user} onLogout={() => { void handleLogout(); }} />;
+  return <AuthenticatedApp user={user} onUserUpdated={setUser} onLogout={() => { void handleLogout(); }} />;
 }
 
-function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; onUserUpdated: (user: AuthUser) => void; onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
@@ -2180,7 +2180,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
         </div>
       </section>
     </div>}
-    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onClose={() => setUserManagementOpen(false)} />}
+    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onProfileUpdated={onUserUpdated} onClose={() => setUserManagementOpen(false)} />}
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
       <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
         <header className="template-library-header">
