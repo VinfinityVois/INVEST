@@ -80,7 +80,7 @@ def test_workspace_token_updates_last_used_and_returns_token():
         user_id=uuid4(),
         last_used_at=None,
     )
-    db = FakeTokenSession(token, SimpleNamespace(is_active=True))
+    db = FakeTokenSession(token, SimpleNamespace(id=token.user_id, is_active=True))
     resolved = require_workspace_api_token(db, "inv_valid", uuid4(), "workflow:run")
     assert resolved is token
     assert token.last_used_at is not None
