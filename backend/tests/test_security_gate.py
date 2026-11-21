@@ -110,12 +110,9 @@ def test_named_policy_profiles_drive_gate_thresholds():
     from app.rules_loader import rule_packs
     from app.policies.security_gate import evaluate_security_gate
 
-    findings = [
-        {"fingerprint": "high", "severity": "HIGH", "rule_id": "demo.high"},
-        {"fingerprint": "critical", "severity": "CRITICAL", "rule_id": "demo.critical"},
-    ]
+    high_only = [{"fingerprint": "high", "severity": "HIGH", "rule_id": "demo.high"}]
     bank = rule_packs.resolve(["bank-strict"], analyzer="policy")[0]
     startup = rule_packs.resolve(["startup-lenient"], analyzer="policy")[0]
-    assert evaluate_security_gate(findings, bank)["decision"] == "BLOCK"
-    assert evaluate_security_gate(findings, startup)["decision"] == "BLOCK"
+    assert evaluate_security_gate(high_only, bank)["decision"] == "BLOCK"
+    assert evaluate_security_gate(high_only, startup)["decision"] == "WARN"
     assert startup["warn_on"] == ["HIGH", "MEDIUM", "LOW", "INFO"]
