@@ -107,7 +107,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   const addMember = () => run(async () => {
     await api("/api/organizations/" + organizationId + "/members", {
       method: "POST",
-      body: JSON.stringify({ email: memberEmail, workspace_id: workspaceId || null, workspace_role: memberRole }),
+      body: JSON.stringify({ email: memberEmail, workspace_id: workspaces.find(item => item.id === workspaceId)?.organization_id === organizationId ? workspaceId : null, workspace_role: memberRole }),
     });
     setMemberEmail("");
   }, "Участник добавлен.");
