@@ -964,7 +964,7 @@ def create_workflow(graph: WorkflowGraph, request: Request):
 @app.get("/api/workflows/{workflow_id}")
 def get_workflow(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -987,6 +987,8 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
         workflow = _workflow_lock
         if workflow is None:
@@ -1034,7 +1036,7 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
 @app.get("/api/workflows/{workflow_id}/schedule")
 def get_workflow_schedule(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         schedule = session.scalar(
@@ -1055,6 +1057,8 @@ def get_workflow_schedule(workflow_id: UUID, request: Request):
 @app.put("/api/workflows/{workflow_id}/schedule")
 def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate, request: Request):
     with SessionLocal() as session:
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -1130,7 +1134,7 @@ def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate,
 def execute_saved_workflow(workflow_id: UUID, request: Request, force_full_scan: bool = Query(default=False)):
     """Persist a run request; the dedicated worker performs the scan asynchronously."""
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -1179,7 +1183,7 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
     """Queue a saved workflow for CI; requires a dedicated secret and an explicit Security Gate."""
     _require_ci_token(x_ci_token)
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -1256,7 +1260,7 @@ def get_ci_run(run_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-To
 @app.post("/api/workflows/{workflow_id}/runs/selected", status_code=202)
 def execute_selected_workflow(workflow_id: UUID, request: Request, payload: SelectedRunRequest):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -1323,14 +1327,14 @@ def list_workflow_versions(workflow_id: UUID, request: Request):
 @app.get("/api/workflows/{workflow_id}/versions/compare")
 def compare_workflow_versions(
     workflow_id: UUID,
+    request: Request,
     from_version: int = Query(ge=1),
     to_version: int = Query(ge=1),
-    request: Request,
 ):
     if from_version == to_version:
         raise HTTPException(status_code=422, detail="Выберите две разные версии.")
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(select(WorkflowVersion).where(
             WorkflowVersion.workflow_id == workflow_id,
@@ -1381,6 +1385,7 @@ def restore_workflow_version(workflow_id: UUID, version: int, request: Request):
 @app.post("/api/runs/{run_id}/cancel")
 def cancel_workflow_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
+        run = _run_in_active_workspace(session, request, run_id, write=True)
         run = _lock_run_for_update(session, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
@@ -1401,6 +1406,7 @@ def cancel_workflow_run(run_id: UUID, request: Request):
 @app.post("/api/runs/{run_id}/retry", status_code=202)
 def retry_workflow_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
+        _run_in_active_workspace(session, request, run_id, write=True)
         previous = _lock_run_for_update(session, run_id)
         if previous is None:
             raise HTTPException(status_code=404, detail="Run not found")
@@ -1424,7 +1430,7 @@ def retry_workflow_run(run_id: UUID, request: Request):
 @app.get("/api/workflows/{workflow_id}/runs")
 def list_workflow_runs(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(
             select(WorkflowRun).where(WorkflowRun.workflow_id == workflow_id).order_by(WorkflowRun.queued_at.desc())
@@ -1444,12 +1450,12 @@ def list_workflow_runs(workflow_id: UUID, request: Request):
 @app.get("/api/workflows/{workflow_id}/security-trend")
 def workflow_security_trend(
     workflow_id: UUID,
+    request: Request,
     limit: int = Query(default=20, ge=2, le=100),
-    request: Request = None,
 ):
     """Return a bounded chronological security trend for the workflow."""
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(
             select(WorkflowRun)
@@ -1712,15 +1718,15 @@ def _annotate_finding_source_relation(findings: list, source_comparison: dict) -
 @app.get("/api/workflows/{workflow_id}/runs/compare")
 def compare_workflow_runs(
     workflow_id: UUID,
+    request: Request,
     from_run: UUID = Query(...),
     to_run: UUID = Query(...),
-    request: Request = None,
 ):
     if from_run == to_run:
         raise HTTPException(status_code=422, detail="Выберите два разных запуска.")
     terminal = {"completed", "partial", "failed", "cancelled"}
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         before = session.get(WorkflowRun, from_run)
         after = session.get(WorkflowRun, to_run)
@@ -1855,7 +1861,7 @@ def _run_telemetry(session, run: WorkflowRun):
 @app.get("/api/workflows/{workflow_id}/telemetry/latest")
 def latest_workflow_telemetry(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         run = session.scalar(
             select(WorkflowRun)
@@ -2301,7 +2307,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
 @app.get("/api/workflows/{workflow_id}/findings/{fingerprint}/history")
 def finding_state_history(workflow_id: UUID, fingerprint: str, request: Request, limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         entity_id = f"{workflow_id}:{fingerprint}"
         rows = session.scalars(
