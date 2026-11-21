@@ -40,6 +40,11 @@ def test_secret_values_are_redacted_from_source_context(tmp_path: Path):
     snippet = "\n".join(item["text"] for item in finding["code_context"])
     assert "super-secret-value-123" not in snippet
     assert "[REDACTED:" in snippet
+    ai_snippet = "\\n".join(item["text"] for item in finding["ai_code_context"])
+    assert "password" in ai_snippet
+    assert "[REDACTED]" in ai_snippet
+    assert "super-secret-value-123" not in ai_snippet
+    assert finding["ai_evidence_status"] == "safe_redacted"
 
 
 def test_private_key_source_context_is_fully_hidden(tmp_path: Path):
@@ -61,3 +66,5 @@ def test_private_key_source_context_is_fully_hidden(tmp_path: Path):
     snippet = "\\n".join(item["text"] for item in finding["code_context"])
     assert "VERY-SENSITIVE-PRIVATE-KEY-MATERIAL" not in snippet
     assert finding["code_context_redacted"] is True
+    assert finding["ai_code_context"] == []
+    assert finding["ai_evidence_status"] == "withheld_private_key"
