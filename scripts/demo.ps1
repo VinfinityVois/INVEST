@@ -1,5 +1,6 @@
 param(
     [string]$ApiBaseUrl = "http://localhost:8000",
+    [string]$FrontendOrigin = "http://localhost:5173",
     [Parameter(Mandatory = $true)]
     [string]$WebhookUrl,
     [int]$TimeoutSeconds = 900
@@ -15,10 +16,10 @@ if (-not $notifyNode) { throw "Demo graph has no notify node." }
 $notifyNode.config.url = $WebhookUrl
 
 Write-Host "Creating demo workflow..." -ForegroundColor Cyan
-$workflow = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/workflows" -ContentType "application/json" -Body ($graph | ConvertTo-Json -Depth 100)
+$workflow = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/workflows" -ContentType "application/json" -Headers $apiHeaders -WebSession $webSession -Body ($graph | ConvertTo-Json -Depth 100)
 
 Write-Host "Workflow: $($workflow.id)" -ForegroundColor Green
-$queued = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/workflows/$($workflow.id)/runs"
+$queued = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/workflows/$($workflow.id)/runs" -Headers $apiHeaders -WebSession $webSession
 $runId = $queued.run_id
 Write-Host "Run queued: $runId" -ForegroundColor Cyan
 
@@ -27,7 +28,7 @@ $run = $null
 $result = $null
 do {
     Start-Sleep -Seconds 3
-    $run = Invoke-RestMethod -Method Get -Uri "$ApiBaseUrl/api/runs/$runId"
+    $run = Invoke-RestMethod -Method Get -Uri "$ApiBaseUrl/api/runs/$runId" -WebSession $webSession
     Write-Host ("{0} · {1}" -f (Get-Date -Format "HH:mm:ss"), $run.status)
     if ($run.status -in @("completed", "partial", "failed", "cancelled")) { break }
 } while ((Get-Date) -lt $deadline)
@@ -77,6 +78,11 @@ if ($run.result) {
 }
 
 Write-Host "Run details: $ApiBaseUrl/api/runs/$runId" -ForegroundColor Green
+try {
+    $null = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/api/auth/logout" -Headers $apiHeaders -WebSession $webSession
+} catch {
+    Write-Warning "Could not revoke the demo session automatically; it will expire after the configured session lifetime."
+}
 $gateBlocked = $false
 if ($result -and $result.security_gate) { $gateBlocked = $result.security_gate.decision -eq "BLOCK" }
 if ($run.status -ne "completed" -and -not ($gateBlocked -and $run.status -eq "failed")) {
