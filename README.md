@@ -39,6 +39,10 @@ docker compose exec api python -m app.bootstrap_admin admin@example.test
 
 Bootstrap разрешён только пока в базе нет администратора. Повторный запуск не меняет существующие учётные записи. Для аккаунта создаются личные Organization и Workspace; первый bootstrap-администратор также получает доступ к legacy workspace, куда миграция переносит прежние проекты. Вход выполняется через UI; API использует серверную HttpOnly-сессию и активный Workspace в серверной сессии. Проекты, workflows, runs, findings и отчёты в browser API ограничиваются активным Workspace. Это первый tenant-isolation слой, а не заявление о полном production RBAC: CI токены теперь workspace-scoped, но invitations/email, полный аудит, экспорт/удаление workspace, backup/restore и системная security-проверка ещё остаются в backlog.
 
+## Dashboard / Analytics
+
+Кнопка «Обзор» открывает workspace-scoped dashboard: projects, workflows, scans, findings и severity counts; динамика запусков/findings; последние runs со ссылками на HTML/JSON отчёты. Фильтры: период 7/30/90 дней, проект, severity и scanner. API: `GET /api/dashboard/summary`; все агрегаты ограничены активным Workspace. При выборе проекта workflow должен быть связан с ним через source.upload path; если граф использует ровно один project source, связь сохраняется в `workflows.project_id`.
+
 ## Organizations и Workspace
 
 Модель данных: `User → Organization → Workspace → Project`. У каждого пользователя есть личная Organization и default Workspace. Командные организации могут иметь несколько Workspace. Системные роли организации: Owner, Admin, Member; роли Workspace: Admin, Editor, Analyst, Viewer. Активная рабочая область хранится в серверной сессии, а не принимается из произвольного client header.
