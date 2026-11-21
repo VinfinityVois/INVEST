@@ -1702,6 +1702,38 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     });
   }, [findings, findingQuery, findingSeverity, findingLifecycleFilter, findingStates]);
   const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
+  const exportVisibleFindingsCsv = () => {
+    const columns = ["fingerprint", "severity", "lifecycle", "rule_id", "path", "line", "message", "why_it_matters", "recommendation", "cve", "cwe"];
+    const safeCell = (value: unknown) => {
+      let text = value == null ? "" : Array.isArray(value) ? value.join("; ") : String(value);
+      // Prevent spreadsheet formula execution when a report is opened in Excel or similar tools.
+      if (/^[\\s]*[=+@-]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""').replace(/\\r?\\n/g, " ") + '"';
+    };
+    const rows = orderedVisibleFindings.map(item => [
+      item.fingerprint,
+      item.severity,
+      item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open",
+      item.rule_id,
+      item.path,
+      item.line,
+      item.message,
+      item.why_it_matters,
+      item.recommendation,
+      item.cve,
+      item.cwe,
+    ]);
+    const csv = "\\uFEFF" + [columns, ...rows].map(row => row.map(safeCell).join(",")).join("\\r\\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "invest-findings-" + (lastRunId || "latest").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
   const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
   const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) { setSelectedFinding(next); setSourceWindowStart(Math.max(1, (next.line || 1) - 40)); } };
   const toggleFindingSource = (finding: Finding) => {
@@ -2175,6 +2207,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
           <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","В работе","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
           <span>{orderedVisibleFindings.length} / {findings.length}</span>
+          <button type="button" className="ghost" disabled={orderedVisibleFindings.length === 0} onClick={exportVisibleFindingsCsv} title="Экспортировать текущую выборку без исходного кода и секретных значений"><Download size={12}/> CSV</button>
           <div className="finding-lifecycle-summary" aria-label="Распределение находок по статусам">
             <span className="is-open">{findingLifecycleCounts.open || 0} открыто</span>
             <span className="is-risk">{findingLifecycleCounts.accepted_risk || 0} риск</span>
