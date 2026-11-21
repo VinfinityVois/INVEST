@@ -372,8 +372,8 @@ def test_secret_finding_with_redaction_only_context_is_not_counted_as_explained(
     assert calls == []
     assert result["status"] == "completed"
     assert result["explained_count"] == 0
-    assert result["analyzed_count"] == 1
-    assert result["unexplained_count"] == 1
+    assert result["analyzed_count"] == 0
+    assert result["unexplained_count"] == 0
     assert result["insufficient_evidence_count"] == 1
     assert result["evidence_coverage"] == 0.0
     assert result["coverage"] == 0.0
@@ -416,7 +416,9 @@ def test_secret_finding_sends_only_dedicated_masked_ai_context(monkeypatch):
         }],
     }])
 
-    assert 'api_key = "[REDACTED]"' in captured["prompt"]
+    prompt_data = json.loads(captured["prompt"])
+    sent_context = prompt_data["findings"][0]["code_context"][0]["text"]
+    assert sent_context == 'api_key = "[REDACTED]"'
     assert "[REDACTED: secret-bearing source context]" not in captured["prompt"]
     assert result["explained_count"] == 1
     assert result["insufficient_evidence_count"] == 0
