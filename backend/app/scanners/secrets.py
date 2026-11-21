@@ -1,8 +1,10 @@
 """Context-aware secret scanner; never executes repository files."""
+import fnmatch
 import hashlib, hmac, math, re
 from collections import Counter
 from pathlib import Path
 from app.config import settings
+from app.rules_loader import RulePackError, rule_packs
 
 MAX_FILE_BYTES=1_000_000
 MAX_FILES=20_000
@@ -32,13 +34,22 @@ def _make_finding(rule_id,class_name,path,line,value,severity,confidence,end_lin
  item={"rule_id":rule_id,"class":class_name,"category":"SECRET","path":path,"line":line,"severity":severity,"confidence":confidence,"message":f"Возможный секрет ({rule_id}); значение замаскировано.","masked_value":_masked(value),"value_hash":digest,"fingerprint":hmac.new(settings.app_secret_key.encode(),f"{rule_id}:{path}:{line}:{digest}".encode(),hashlib.sha256).hexdigest()}
  if end_line is not None and end_line!=line: item["endLine"]=end_line
  return item
-def scan_text(text,path):
+def scan_text(text,path, selected_rule_packs=None):
  lines=text.splitlines(); findings=[]; seen=set()
  def add(rule,cls,line,value,severity,confidence,end=None):
   if not value or _is_placeholder(value) or (rule,line) in seen: return
   seen.add((rule,line)); findings.append(_make_finding(rule,cls,path,line,value,severity,confidence,end))
+ custom_patterns = []
+ if selected_rule_packs is not None:
+  for pack in selected_rule_packs:
+   globs = pack.get("path_globs", [])
+   if globs and not any(fnmatch.fnmatchcase(path, item) for item in globs):
+    continue
+   for item in pack.get("patterns", []):
+    custom_patterns.append((item["id"], re.compile(item["regex"]), float(item.get("confidence", 0.8)), str(item.get("severity", "MEDIUM")).upper(), str(item.get("class", "secret"))))
+ active_patterns = custom_patterns if selected_rule_packs is not None else PATTERNS
  for line_no,line in enumerate(lines,1):
-  for rule,pattern,confidence,severity,cls in PATTERNS:
+  for rule,pattern,confidence,severity,cls in active_patterns:
    match=pattern.search(line)
    if match: add(rule,cls,line_no,match.group(1) if match.lastindex else match.group(0),severity,confidence)
   named=re.search(r"(?i)\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"+QUOTED,line)
@@ -66,8 +77,14 @@ def scan_text(text,path):
    use_line=next((i for i,line in enumerate(lines,1) if "setBearerAuth" in line and concat.group(1) in line),max(first_line,second_line))
    add("reconstructed_auth_token","recoverable-token",first_line,first+second,"MEDIUM",.91,use_line)
  return sorted(findings,key=lambda x:(x["line"],x["rule_id"]))
-def scan_directory(root, on_progress=None):
+def scan_directory(root, on_progress=None, selected_rule_packs=None):
  root=Path(root).resolve(); results=[]; count=0
+ resolved_packs = None
+ if selected_rule_packs is not None:
+  try:
+   resolved_packs = rule_packs.resolve(selected_rule_packs, analyzer="secrets")
+  except RulePackError as exc:
+   raise ValueError(str(exc)) from exc
  candidates=[]
  for path in root.rglob("*"):
   if any(part in SKIP_DIRS for part in path.parts) or path.is_symlink() or not path.is_file(): continue
@@ -85,7 +102,7 @@ def scan_directory(root, on_progress=None):
    if b"\x00" in raw[:8192]: continue
    content=raw.decode("utf-8")
   except (OSError,UnicodeDecodeError): continue
-  results.extend(scan_text(content,path.relative_to(root).as_posix()))
+  results.extend(scan_text(content,path.relative_to(root).as_posix(),resolved_packs))
   if on_progress:
    try: on_progress({"files_scanned":count,"total_files":total_files,"current_file":path.relative_to(root).as_posix()})
    except Exception: pass
