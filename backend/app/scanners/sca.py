@@ -101,10 +101,20 @@ def _load_lockfile_entries(path: Path) -> list[tuple[str, str, str, int]]:
     return entries
 
 
-def _load_lockfile(path: Path) -> dict[tuple[str, str], str]:
+def _is_dev_configuration(value: str | None) -> bool:
+    name = (value or "").replace("-", "").replace("_", "").lower()
+    return name.startswith(("test", "androidtest", "kaptTest".lower(), "testfixtures")) or "testcompile" in name or "testruntime" in name
+
+
+def _load_lockfile(path: Path, include_dev: bool = True) -> dict[tuple[str, str], str]:
     """Return only unambiguous versions; configurations may resolve differently."""
     versions: dict[tuple[str, str], set[str]] = {}
-    for group, artifact, version, _line in _load_lockfile_entries(path):
+    rows = (_read_text(path) or "").splitlines()
+    for group, artifact, version, line in _load_lockfile_entries(path):
+        if not include_dev and line <= len(rows):
+            configuration = rows[line - 1].split("=", 1)[0].rsplit(":", 1)[-1]
+            if _is_dev_configuration(configuration):
+                continue
         versions.setdefault((group, artifact), set()).add(version)
     return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
 
