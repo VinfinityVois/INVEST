@@ -2089,8 +2089,7 @@ def get_run(run_id: UUID, request: Request):
 @app.get("/api/runs/{run_id}/findings")
 def list_run_findings(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(WorkflowRun, run_id) is None:
-            raise HTTPException(status_code=404, detail="Run not found")
+        _run_in_active_workspace(session, request, run_id)
         rows = session.scalars(
             select(Finding).where(Finding.run_id == run_id).order_by(Finding.severity, Finding.path, Finding.line)
         ).all()
