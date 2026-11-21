@@ -18,22 +18,22 @@
 
 Порядок внутри этапа:
 
-1. **Users / Accounts / Access** — UI и backend управления пользователями, профиль, смена пароля, сессии, роли и разрешения, политика блокировки/удаления.
-2. **Organizations / Workspace / Projects** — реализовать принятую модель [ADR-0001](./adr/0001-workspace-tenancy-model.md): личная organization, team organization, несколько workspaces, membership/roles, переключение и изоляция данных.
+1. **Users / Accounts / Access** — завершить recovery/reset, MFA по модели угроз, политику удаления/анонимизации и полную permission matrix.
+2. **Organizations / Workspace / Projects** — завершить [ADR-0001](./adr/0001-workspace-tenancy-model.md): invitations/acceptance, export, soft-delete/retention, organization deletion и полный exceptional-route/background isolation review.
 3. **Findings lifecycle** — статусы, назначение ответственного, комментарии, история, массовые действия, обоснование Accepted Risk/False Positive, fingerprints и сравнение запусков.
 4. **Dashboard / Analytics** — метрики на реальных данных, фильтры, drill-down, корректные агрегаты и пустые состояния.
 5. **Reports / Export** — проверить JSON/HTML, затем CSV и SARIF; PDF/XLSX после фиксации требований к форматам.
 6. **Audit Log** — полный перечень событий, actor identity, поиск, фильтры, экспорт и retention.
-7. **API Tokens / CI/CD** — UI токенов, scopes, срок действия, отзыв/ротация, примеры CI и отдельные права CI API.
+7. **API Tokens / CI/CD** — базовый UI токенов/scopes/expiry/revoke и workspace-bound CI authorization реализованы; остаются rotation workflow, usage history, docs/examples verification и audit.
 8. **Backup / Restore / Administration** — backup PostgreSQL и файлов, проверенный restore, health/status и retention.
 9. **Workflow / Sources / Scanners / AI / Integrations** — закрыть регрессию движка, загрузок, scanner coverage, AI и согласованные интеграции. Существующие функции не переписывать без доказанной необходимости.
 
 ### Текущий статус этапа 1
 
-- 1.1: базовые admin user management и self-service session/password UI/API добавлены; recovery/reset, полноценная RBAC matrix и политика удаления остаются открытыми.
-- 1.2: Organization/Workspace/Membership и tenant isolation отсутствуют; до их реализации продукт не считать multi-tenant.
-- 1.4: базовый lifecycle findings существует, но assignment/comments/bulk operations требуют завершения.
-- 1.10–1.13: отчёты, audit trail, API tokens, backup/restore требуют функционального завершения и runtime-проверок.
+- 1.1: admin user management, profile email, password change и session controls реализованы; recovery/reset, MFA и policy удаления/анонимизации остаются открытыми.
+- 1.2: базовые Organization/Workspace/Membership, active workspace session, switching, member roles, owner transfer и workspace-scoped browser APIs реализованы; invitations, export/delete/retention и полный exceptional-route review остаются открытыми.
+- 1.4: базовый lifecycle findings существует; assignment/comments/bulk operations требуют завершения. Finding APIs уже ограничены active workspace.
+- 1.10–1.13: JSON/HTML reports существуют; CSV/SARIF, полный audit UI, backup/restore и расширенная API token usage history требуют завершения. Workspace-scoped API tokens и CI scopes реализованы базово.
 
 ## Этап 2 — стабилизация и проверка готовности
 
@@ -87,11 +87,12 @@
 
 ## Следующий порядок работ
 
-1. Довести 1.1: восстановление доступа, правила смены/сброса пароля, окончательная role-permission matrix и политика деактивации/удаления.
-2. Зафиксировать конечную модель Organization/Workspace/Project и выполнить 1.2 с tenant ownership и object-level isolation.
-3. После стабилизации модели данных завершить Findings lifecycle и Audit Log.
-4. Затем Reports/Export, API Tokens/CI, Dashboard и Backup/Restore.
-5. Только после функционального завершения перейти к системной стабилизации, затем Security Hardening и Release Readiness.
+1. Довести CI для миграций 0008/0009, Workspace Manager и API token flows; проверить локальную миграцию и переключение workspace.
+2. Завершить 1.2: invitations, workspace export/delete/retention и полный route/background isolation review.
+3. Довести 1.1: recovery/reset, MFA по модели угроз, account deletion policy.
+4. После стабилизации модели данных завершить Findings lifecycle, Audit Log, Reports/Export и Dashboard.
+5. Затем Backup/Restore и оставшиеся API token usage/rotation flows.
+6. Только после функционального завершения перейти к системной стабилизации, затем Security Hardening и Release Readiness.
 
 ## Связанные документы
 
