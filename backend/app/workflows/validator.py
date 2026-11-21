@@ -16,7 +16,11 @@ def validate_graph(graph: WorkflowGraph, registry: NodeRegistry) -> ValidationRe
     adjacency = defaultdict(list)
     indegree = {n.id:0 for n in graph.nodes}
     seen = set()
+    seen_edge_ids = set()
     for edge in graph.edges:
+        if edge.id in seen_edge_ids:
+            issues.append(ValidationIssue(code="duplicate_edge_id",message="Идентификаторы связей должны быть уникальными.",edge_id=edge.id))
+        seen_edge_ids.add(edge.id)
         if edge.source not in by_id or edge.target not in by_id:
             issues.append(ValidationIssue(code="dangling_edge",message="Связь ссылается на отсутствующую ноду.",edge_id=edge.id)); continue
         key=(edge.source,edge.target,edge.source_handle,edge.target_handle)
