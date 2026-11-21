@@ -230,7 +230,6 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
             <button className="template-card-clone" disabled={saving || profileEmail.trim().toLowerCase() === currentEmail.toLowerCase()}><Check size={13}/> Сохранить профиль</button>
           </form>
         </section>
-        </section>
         <div className="user-profile-security">
         <section className="user-management-section">
           <div className="user-section-heading"><div><Lock size={15}/><b>Активные сессии</b><small>{sessions.filter(item => !item.revoked).length} действующих</small></div><button className="ghost" disabled={saving} onClick={() => void revokeOthers()}>Завершить остальные</button></div>
