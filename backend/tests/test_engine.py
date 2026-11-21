@@ -749,3 +749,35 @@ def test_logic_compare_count_operator_uses_total_finding_count(tmp_path, monkeyp
     assert result["outputs"]["compare"]["branch"] == "true"
     assert len(result["outputs"]["compare"]["matched_findings"]) == 2
     assert result["outputs"]["compare"]["unmatched_findings"] == []
+
+
+
+def test_scanner_config_filters_test_paths_and_low_confidence_findings():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"path": "src/main/App.kt", "confidence": 0.9},
+        {"path": "src/test/AppTest.kt", "confidence": 0.99},
+        {"path": "src/main/Weak.kt", "confidence": 0.2},
+    ]
+
+    filtered = _filter_scanner_findings(
+        findings, {"include_tests": False, "min_confidence": 0.4}, "sast"
+    )
+
+    assert filtered == [findings[0]]
+
+
+def test_scanner_config_can_include_tests_and_zero_confidence_threshold():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"path": "src/main/App.kt", "confidence": 0.1},
+        {"path": "src/test/AppTest.kt", "confidence": 0.2},
+    ]
+
+    filtered = _filter_scanner_findings(
+        findings, {"include_tests": True, "min_confidence": 0}, "secrets"
+    )
+
+    assert filtered == findings
