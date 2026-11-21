@@ -8,12 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import OrganizationMembership, User, UserSession, WorkspaceMembership
+from app.models import Organization, OrganizationMembership, User, UserSession, Workspace, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
 import app.security.api as auth_api
 import app.security.users_api as users_api
+import app.security.workspaces_api as workspaces_api
+from app.security.tenancy import create_personal_workspace
 
 
 @pytest.fixture
@@ -42,12 +44,16 @@ def user_client(monkeypatch):
             is_admin=False,
         )
         db.add_all([admin, member])
+        db.flush()
+        create_personal_workspace(db, admin)
+        create_personal_workspace(db, member)
         db.commit()
         member_id = member.id
 
     monkeypatch.setattr(main, "SessionLocal", TestingSession)
     monkeypatch.setattr(auth_api, "SessionLocal", TestingSession)
     monkeypatch.setattr(users_api, "SessionLocal", TestingSession)
+    monkeypatch.setattr(workspaces_api, "SessionLocal", TestingSession)
 
     with TestClient(main.app) as client:
         yield client, TestingSession, member_id
@@ -224,3 +230,64 @@ def test_admin_update_rejects_null_fields(user_client, field):
         headers={"Origin": "http://localhost:5173"},
     )
     assert response.status_code == 422
+
+
+def test_workspace_membership_isolation_and_switching(user_client):
+    client, _, member_id = user_client
+    assert login(client).status_code == 200
+
+    own_workspaces = client.get("/api/workspaces")
+    assert own_workspaces.status_code == 200
+    assert len(own_workspaces.json()["items"]) == 1
+    assert own_workspaces.json()["items"][0]["role"] == "admin"
+
+    organization = client.post(
+        "/api/organizations",
+        json={"name": "Security Team"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert organization.status_code == 201
+    organization_id = organization.json()["id"]
+
+    workspace = client.post(
+        "/api/workspaces",
+        json={"organization_id": organization_id, "name": "Application Security"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert workspace.status_code == 201
+    workspace_id = workspace.json()["id"]
+
+    member_added = client.post(
+        f"/api/organizations/{organization_id}/members",
+        json={
+            "email": "member@example.test",
+            "workspace_id": workspace_id,
+            "workspace_role": "viewer",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert member_added.status_code == 201
+    assert member_added.json()["user_id"] == str(member_id)
+
+    assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    member_workspaces = client.get("/api/workspaces")
+    assert member_workspaces.status_code == 200
+    visible_ids = {item["id"] for item in member_workspaces.json()["items"]}
+    assert workspace_id in visible_ids
+    assert len(visible_ids) == 2
+
+    switched = client.post(
+        f"/api/workspaces/{workspace_id}/switch",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert switched.status_code == 200
+    assert switched.json()["role"] == "viewer"
+    active = client.get("/api/workspaces/active")
+    assert active.status_code == 200
+    assert active.json()["id"] == workspace_id
+
+    denied = client.post(
+        f"/api/workspaces/{organization.json()['default_workspace_id']}/switch",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert denied.status_code == 404
