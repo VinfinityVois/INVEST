@@ -1,61 +1,62 @@
 # Rule packs и готовые presets
 
 **Проект:** AI Security Workflow · Центр-инвест  
-**Ограничение ТЗ:** без Semgrep/Gitleaks/Trivy/detekt; LLM не детектит.
+**Ограничение кейса:** обнаружение выполняют собственные правила платформы; LLM используется только для объяснения подтверждённых находок.
 
-## Зачем
+## Архитектура
 
-| Слой | Роль |
-|------|------|
-| Rule packs | Подключаемые наборы правил secrets / SCA / SAST / policies |
-| Presets | Готовые workflow: clone → repo/webhook → Run |
-| Policies | bank-strict, startup-lenient для ci.gate |
+| Слой | Назначение | Реализация |
+|---|---|---|
+| Rule packs | Подключаемые наборы правил Secrets / SCA / SAST / policy | YAML в `rules/`, загрузчик `backend/app/rules_loader.py` |
+| Presets | Встроенные готовые workflow | JSON-каталог `presets/manifest.json` и `presets/*.json` |
+| Templates | Публикуемые и копируемые пользовательские workflow | БД и API `/api/templates` |
+| Policies | Пороговые решения Security Gate | YAML в `rules/policies/` |
 
-## Структура
+Rule packs поддерживают наследование через `extends`; загрузчик проверяет идентификаторы, тип анализатора, структуру и ограничения содержимого. Циклы наследования и несовместимые типы анализаторов отклоняются. Содержимое правил не исполняется как код.
 
-```text
-rules/
-  secrets/core.yml, spring-config.yml
-  sast/injection.yml, spring-security.yml, idor-bac.yml
-  sca/spring-boot-starters.json
-  policies/bank-strict.yml, startup-lenient.yml
-presets/
-  manifest.json
-  quick-secrets.json, pr-gate.json, nightly-full.json, spring-boot-audit.json
-```
+## Текущий каталог
 
-## Config нод
+- **Secrets:** базовые паттерны, Spring-конфигурация и дополнительные контекстные эвристики.
+- **SCA:** Maven/Gradle; локальный advisory snapshot и каталог Spring Boot starters.
+- **SAST:** Kotlin/Spring правила для injection, Spring Security и IDOR/BAC.
+- **Policies:** `bank-strict`, `startup-lenient` и `secrets-zero`.
+- **Built-in preset:** `pr-gate` — Manual trigger → Git source → Secrets/SCA/SAST → Merge → CI Gate.
+- **Published templates:** отдельная библиотека с публикацией, поиском и клонированием очищенного графа.
+
+Список доступен через `GET /api/rule-packs` и `GET /api/presets`; клонирование встроенного preset — `POST /api/presets/{id}/clone`. Публикация и клонирование пользовательских templates используют `/api/templates`.
+
+## Конфигурация нод
 
 ```json
-// scan.secrets
-{ "rule_packs": ["secrets-core", "secrets-spring"], "min_confidence": 0.4 }
-
-// scan.sast
-{ "rule_packs": ["sast-injection", "sast-spring-security", "sast-idor-bac"] }
-
-// ci.gate
-{ "policy_pack": "bank-strict" }
+{
+  "scan.secrets": {
+    "rule_packs": ["secrets-core"],
+    "min_confidence": 0.4
+  },
+  "scan.sca": {
+    "rule_packs": ["sca-spring-boot"],
+    "advisory_db": "maven-advisories",
+    "starter_pack": "spring-boot-starters"
+  },
+  "scan.sast": {
+    "rule_packs": ["sast-core"],
+    "min_confidence": 0.4
+  },
+  "ci.gate": {
+    "policy_pack": "bank-strict"
+  }
+}
 ```
 
-## API
+## Ограничения, которые важно раскрыть на защите
 
-- `GET /api/rule-packs`
-- `GET /api/presets`
-- `POST /api/presets/{id}/clone`
+- Maven advisory snapshot — ограниченный курируемый набор (41 advisory на дату, указанную в `data/README.md`), а не полный и автоматически обновляемый feed.
+- Spring Boot managed-version snapshot покрывает выбранные версии и координаты, а не весь BOM.
+- SAST остаётся ограниченным статическим анализом; межфайловый taint propagation — эвристический и не заменяет полноценный Kotlin PSI/AST, type resolution или call graph.
+- Gradle/Maven и проектные скрипты не запускаются. Неизвестные версии и неразрешённые зависимости не угадываются.
+- Встроенный каталог сейчас содержит один preset (`pr-gate`); остальные сценарии можно собрать вручную или опубликовать как templates.
+- Публикация templates требует отдельного `TEMPLATE_PUBLISH_TOKEN`; секреты и локальные пути очищаются, webhook URL заменяется безопасным placeholder.
 
-Presets (built-in) vs templates (БД, publish/clone) — два таба в UI.
+## Проверки
 
-## План внедрения
-
-1. Вынести secrets в `rules/secrets/core.yml`
-2. `rules_loader` + `rule_packs` в registry
-3. 2–3 SAST YAML
-4. presets/manifest + 3 graph JSON
-5. UI Clone + multi-select packs
-6. policies → ci.gate
-
-## Текст для защиты
-
-> Не один монолитный сканер, а библиотека собственных алгоритмов (rule packs) и готовых сценариев (presets). Новое правило = файл в rules/, без чужих движков.
-
-Полная спецификация форматов YAML/JSON — в артефактах команды / расширенной версии docs при необходимости.
+Backend tests проверяют загрузку и наследование packs, валидность preset-графа, очистку и клонирование templates. CI дополнительно запускает Secrets, SCA и SAST benchmark на публичном учебном репозитории. Результаты benchmark относятся к конкретному открытому набору и не гарантируют такую же полноту на скрытой вариации.
