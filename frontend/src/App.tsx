@@ -26,6 +26,7 @@ type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
 type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; sha256: string; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
+type ProjectFileVersion = { sha256: string; current: boolean; available: boolean; created_at?: string | null; source: string };
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
@@ -503,6 +504,12 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [projectContentSearching, setProjectContentSearching] = useState(false);
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryEntry[]>([]);
   const [projectHistoryOpen, setProjectHistoryOpen] = useState(false);
+  const [projectFileVersions, setProjectFileVersions] = useState<ProjectFileVersion[]>([]);
+  const [projectVersionsOpen, setProjectVersionsOpen] = useState(false);
+  const [projectVersionsBusy, setProjectVersionsBusy] = useState(false);
+  const [projectRollbackBusy, setProjectRollbackBusy] = useState(false);
+  const [projectVersionsError, setProjectVersionsError] = useState("");
+
   const [projectWorkspaceOpen, setProjectWorkspaceOpen] = useState(false);
   const [projectFilesLoading, setProjectFilesLoading] = useState(false);
   const [uploadingProjectId, setUploadingProjectId] = useState<string | null>(null);
@@ -1341,6 +1348,65 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     window.location.assign(`/api/projects/${activeProject.id}/download`);
     setResult("Подготовка ZIP-экспорта · секретные файлы и .git исключаются.");
   };
+  const loadProjectFileVersions = async () => {
+    if (!activeProject || !projectFilePreview) return;
+    setProjectVersionsBusy(true);
+    setProjectVersionsError("");
+    try {
+      const params = new URLSearchParams({ path: projectFilePreview.path });
+      const response = await apiFetch("/api/projects/" + activeProject.id + "/file-versions?" + params);
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить историю файла");
+      setProjectFileVersions(Array.isArray(data.versions) ? data.versions : []);
+      setProjectVersionsOpen(true);
+    } catch (error) {
+      setProjectVersionsError(String(error));
+      setProjectVersionsOpen(true);
+    } finally {
+      setProjectVersionsBusy(false);
+    }
+  };
+
+  const rollbackProjectFile = async (version: ProjectFileVersion) => {
+    if (!activeProject || !projectFilePreview || version.current || !version.available || projectRollbackBusy) return;
+    if (!window.confirm("Восстановить версию файла " + projectFilePreview.path + "? Текущая версия также сохранится в истории.")) return;
+    setProjectRollbackBusy(true);
+    setProjectVersionsError("");
+    try {
+      const params = new URLSearchParams({ path: projectFilePreview.path });
+      const response = await apiFetch("/api/projects/" + activeProject.id + "/file-rollback?" + params, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_sha256: version.sha256,
+          expected_sha256: projectFilePreview.sha256,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const detail = data.detail;
+        if (response.status === 409 && detail && typeof detail === "object" && detail.code === "PROJECT_FILE_VERSION_CONFLICT") {
+          throw new Error("Файл изменился после открытия истории. Обнови файл и повтори восстановление.");
+        }
+        throw new Error(typeof detail === "string" ? detail : "Не удалось восстановить версию");
+      }
+      setProjectVersionsOpen(false);
+      await openProjectFile({ path: projectFilePreview.path, size: 0 }, 1, true);
+      const versionsResponse = await apiFetch("/api/projects/" + activeProject.id + "/file-versions?" + params);
+      if (versionsResponse.ok) {
+        const versionsData = await versionsResponse.json();
+        setProjectFileVersions(Array.isArray(versionsData.versions) ? versionsData.versions : []);
+      }
+      setResult("Версия файла восстановлена · " + data.path);
+      const historyResponse = await apiFetch("/api/projects/" + activeProject.id + "/history");
+      if (historyResponse.ok) setProjectHistory(await historyResponse.json());
+    } catch (error) {
+      setProjectVersionsError(String(error));
+    } finally {
+      setProjectRollbackBusy(false);
+    }
+  };
+
   const saveProjectFile = async () => {
     if (!activeProject || !projectFilePreview?.editable || !projectEditing) return;
     setProjectSaving(true);
@@ -2426,8 +2492,20 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           <section className="project-file-view">
             {projectEditorTabs.length > 0 && <div className="project-editor-tabs" role="tablist" aria-label="Открытые файлы">{projectEditorTabs.map(tab => <div key={tab.path} className={"project-editor-tab" + (activeEditorTab === tab.path ? " active" : "")} role="tab" aria-selected={activeEditorTab === tab.path}><button className="project-editor-tab-open" title={tab.path} onClick={() => { const file = projectFiles.find(item => item.path === tab.path); if (file) void openProjectFile(file); }}><FileText size={11}/><span>{tab.name}</span>{tab.draft !== tab.baseline && <i title="Несохранённые изменения" />}</button><button className="project-editor-tab-close" title="Закрыть вкладку" onClick={() => closeEditorTab(tab.path)}><X size={11}/></button></div>)}</div>}
             <div className="project-file-view-head"><span><FileText size={13}/> {projectFilePreview?.path || projectVisualPreview?.path || "Выбери файл в дереве проекта"}</span>
-              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setActiveEditorEditing(true)}><Pencil size={12}/> Изменить</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { const baseline = projectEditorTabs.find(tab => tab.path === activeEditorTab)?.baseline ?? projectFilePreview.content ?? ""; updateActiveEditorDraft(baseline); setActiveEditorEditing(false); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
+              {projectFilePreview && <div className="project-file-tools"><small>{projectFilePreview.total_lines} строк · {projectFilePreview.editable ? "текстовый файл" : "только чтение"}</small>{projectFilePreview.editable && !projectEditing && <button onClick={() => setActiveEditorEditing(true)}><Pencil size={12}/> Изменить</button>}{projectFilePreview.editable && <button onClick={() => void loadProjectFileVersions()} disabled={projectVersionsBusy}><History size={12}/> {projectVersionsBusy ? "Загрузка…" : "Версии"}</button>}{projectEditing && <><button className="save" disabled={projectSaving} onClick={() => void saveProjectFile()}><Save size={12}/> {projectSaving ? "Сохранение…" : "Сохранить"}</button><button onClick={() => { const baseline = projectEditorTabs.find(tab => tab.path === activeEditorTab)?.baseline ?? projectFilePreview.content ?? ""; updateActiveEditorDraft(baseline); setActiveEditorEditing(false); }}>Отмена</button></>}</div>}{(projectFilePreview || projectVisualPreview) && <button className="ghost" onClick={downloadProjectFile} title="Скачать выбранный файл"><Download size={12}/> Скачать файл</button>}
             </div>
+            {projectVersionsOpen && projectFilePreview && <section className="project-file-versions">
+              <header><div><b>История файла</b><small>{projectFilePreview.path} · текущая версия и сохранённые снимки</small></div><button className="ghost" onClick={() => setProjectVersionsOpen(false)}><X size={13}/></button></header>
+              {projectVersionsError && <p className="project-versions-error">{projectVersionsError}</p>}
+              <div className="project-versions-list">
+                {projectFileVersions.map(version => <article key={version.sha256}>
+                  <div><b>{version.current ? "Текущая версия" : "Сохранённая версия"}</b><small>{version.created_at ? formatDate(version.created_at) : "Сейчас"} · {version.source}</small><code>{version.sha256.slice(0, 16)}…</code></div>
+                  {version.current ? <span className="project-version-current">АКТУАЛЬНА</span> : <button disabled={!version.available || projectRollbackBusy} onClick={() => void rollbackProjectFile(version)}>{projectRollbackBusy ? "Восстановление…" : version.available ? "Восстановить" : "Недоступна"}</button>}
+                </article>)}
+                {projectFileVersions.length === 0 && <p className="project-history-muted">Сохранённых версий пока нет. Они начнут появляться после первого изменения файла.</p>}
+              </div>
+              <small>Перед восстановлением текущая версия также сохраняется. Конфликт SHA-256 предотвращает перезапись более свежих изменений.</small>
+            </section>}
             {projectVisualPreview ? <div className={"project-asset-preview " + (projectVisualPreview.kind === "pdf" ? "is-pdf" : "is-image")}>{projectVisualPreview.kind === "image" ? <img src={projectVisualPreview.url} alt={projectVisualPreview.path} /> : <iframe src={projectVisualPreview.url} title={projectVisualPreview.path} />}</div> : projectFilePreview ? projectEditing ? <>
               <div className="project-editor-findbar">
                 <div><Search size={12}/><input ref={editorFindRef} value={editorFind} onChange={event => setEditorFind(event.target.value)} placeholder="Найти в файле…" onKeyDown={event => { if (event.key === "Enter") findNextInEditor(); }}/><button onClick={findNextInEditor} disabled={!editorFind}>Найти далее</button></div>
