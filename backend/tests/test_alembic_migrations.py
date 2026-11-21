@@ -271,6 +271,7 @@ def _assert_workspace_backfill(connection):
         "organization_memberships",
         "workspace_memberships",
         "api_tokens",
+        "finding_comments",
     }.issubset(tables)
 
     project = connection.execute(
@@ -293,6 +294,10 @@ def _assert_workspace_backfill(connection):
         "SELECT COUNT(*) FROM workspaces"
     ).fetchone()[0]
     assert workspace_count == 2
+    finding_state_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(finding_states)").fetchall()
+    }
+    assert "assigned_to_user_id" in finding_state_columns
     admin_workspace = connection.execute(
         "SELECT workspace_memberships.workspace_id FROM workspace_memberships "
         "JOIN organization_memberships ON organization_memberships.organization_id = "
@@ -353,7 +358,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0009_workspace_api_tokens")
+        _assert_revision(connection, "0010_finding_collaboration")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
         _assert_rate_limit_schema(connection, present=True)
@@ -368,7 +373,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
         _run_alembic(database_url, "downgrade", "0007_login_rate_limits")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0009_workspace_api_tokens")
+        _assert_revision(connection, "0010_finding_collaboration")
         _assert_workspace_backfill(connection)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
