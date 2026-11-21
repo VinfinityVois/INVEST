@@ -65,10 +65,49 @@ def _make_finding(rule_id,class_name,path,line,value,severity,confidence,end_lin
  if end_line is not None and end_line!=line: item["endLine"]=end_line
  return item
 def scan_text(text,path, selected_rule_packs=None):
- lines=text.splitlines(); findings=[]; seen=set()
- def add(rule,cls,line,value,severity,confidence,end=None):
-  if not value or _is_placeholder(value) or (rule,line) in seen: return
-  seen.add((rule,line)); findings.append(_make_finding(rule,cls,path,line,value,severity,confidence,end))
+ lines = text.splitlines()
+findings = []
+seen = {}
+
+def add(rule, cls, line, value, severity, confidence, end=None):
+    if not value or _is_placeholder(value):
+        return
+
+    finding = _make_finding(
+        rule, cls, path, line, value, severity, confidence, end
+    )
+
+    # Один и тот же секрет на одной строке — одна находка.
+    # Разные секреты на одной строке сохраняются.
+    dedup_key = (line, finding["value_hash"])
+    existing_index = seen.get(dedup_key)
+
+    if existing_index is None:
+        seen[dedup_key] = len(findings)
+        findings.append(finding)
+        return
+
+    # При совпадении оставляем вариант с более высоким приоритетом.
+    severity_rank = {
+        "INFO": 0,
+        "LOW": 1,
+        "MEDIUM": 2,
+        "HIGH": 3,
+        "CRITICAL": 4,
+    }
+
+    existing = findings[existing_index]
+    new_priority = (
+        severity_rank.get(finding["severity"], 0),
+        finding["confidence"],
+    )
+    old_priority = (
+        severity_rank.get(existing["severity"], 0),
+        existing["confidence"],
+    )
+
+    if new_priority > old_priority:
+        findings[existing_index] = finding
  custom_patterns = []
  if selected_rule_packs is not None:
   for pack in selected_rule_packs:

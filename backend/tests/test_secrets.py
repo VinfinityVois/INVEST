@@ -159,3 +159,37 @@ def test_common_placeholder_formats_are_ignored():
             f'api_key = "{value}"',
             "config.py",
         ) == []
+def test_same_secret_detected_by_multiple_rules_is_deduplicated():
+    from app.scanners.secrets import scan_text
+
+    value = "AKIAIOSFODNN7EXAMPLE"
+
+    findings = scan_text(
+        f'api_key = "{value}"',
+        "config.py",
+    )
+
+    matching = [
+        item for item in findings
+        if item["value_hash"]
+    ]
+
+    assert len(matching) == 1
+    assert value not in str(findings)
+
+
+def test_different_secrets_on_same_line_are_preserved():
+    from app.scanners.secrets import scan_text
+
+    first = "ordinary_secret_value_123"
+    second = "AKIAIOSFODNN7EXAMPLE"
+
+    findings = scan_text(
+        f'api_key = "{first}"; aws_key = "{second}"',
+        "config.py",
+    )
+
+    assert len(findings) == 2
+    assert len({item["value_hash"] for item in findings}) == 2
+    assert first not in str(findings)
+    assert second not in str(findings)
