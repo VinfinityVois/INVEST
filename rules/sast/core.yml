@@ -1,0 +1,8 @@
+pack_id: sast-core
+title: Kotlin / Spring core security
+version: 1
+analyzer: sast
+extends:
+  - sast-injection
+  - sast-spring-security
+  - sast-idor-bac
