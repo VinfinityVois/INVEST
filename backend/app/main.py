@@ -4,7 +4,6 @@ import shutil
 import re
 import os
 import hashlib
-import hmac
 import html
 import tempfile
 import zipfile
