@@ -161,3 +161,39 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class LoginRateLimit(Base):
+    __tablename__ = "login_rate_limits"
+
+    __table_args__ = (
+        CheckConstraint(
+            "scope IN ('email', 'ip')",
+            name="ck_login_rate_limits_scope",
+        ),
+        CheckConstraint(
+            "attempts > 0",
+            name="ck_login_rate_limits_attempts_positive",
+        ),
+        Index(
+            "ix_login_rate_limits_window_started_at",
+            "window_started_at",
+        ),
+    )
+
+    scope: Mapped[str] = mapped_column(
+        String(16),
+        primary_key=True,
+    )
+    key_hash: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+    )
+    window_started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )

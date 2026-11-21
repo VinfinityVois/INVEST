@@ -18,12 +18,14 @@ from croniter import croniter
 from app.db import SessionLocal
 from app.models import AuditLog, Finding, FindingState, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
+from app.security.rate_limit import cleanup_expired_rate_limits
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 
 logger = logging.getLogger("secworkflow.queue")
 STALE_AFTER = timedelta(minutes=2)
 HEARTBEAT_INTERVAL = 15
+RATE_LIMIT_CLEANUP_INTERVAL = 300.0
 
 
 def make_worker_id() -> str:
@@ -309,18 +311,42 @@ def enqueue_due_schedules(limit: int = 10) -> int:
         session.commit()
     return enqueued
 
+def cleanup_rate_limit_counters() -> int:
+    """Remove one bounded batch of expired login counters."""
+    with SessionLocal() as session:
+        deleted = cleanup_expired_rate_limits(session, batch_size=500)
+        session.commit()
+
+    if deleted:
+        logger.info("Cleaned up %d expired login rate-limit counters", deleted)
+
+    return deleted
+
+
 def run_worker(poll_interval: float = 2.0) -> None:
     worker_id = make_worker_id()
+    last_rate_limit_cleanup = 0.0
+
     logger.info("Worker %s started", worker_id)
+
     while True:
         try:
             enqueue_due_schedules()
+
+            now = time.monotonic()
+            if now - last_rate_limit_cleanup >= RATE_LIMIT_CLEANUP_INTERVAL:
+                cleanup_rate_limit_counters()
+                last_rate_limit_cleanup = now
+
             run_id = claim_next_run(worker_id)
+
             if run_id is None:
                 time.sleep(poll_interval)
                 continue
+
             logger.info("Worker %s claimed run %s", worker_id, run_id)
             process_run(run_id, worker_id)
+
         except Exception:
             logger.exception("Queue polling failed")
             time.sleep(max(poll_interval, 2.0))

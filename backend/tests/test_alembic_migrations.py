@@ -69,7 +69,7 @@ def _assert_timestamps_populated(connection):
 
 
 def _assert_auth_tables(connection, present):
-    for table in ("users", "user_sessions"):
+    for table in ("users", "user_sessions", "login_rate_limits"):
         exists = connection.execute(
             "SELECT 1 FROM sqlite_master "
             "WHERE type = 'table' AND name = ?",
@@ -80,6 +80,42 @@ def _assert_auth_tables(connection, present):
             f"{table}: expected present={present}, got {exists}"
         )
 
+
+def _assert_rate_limit_schema(connection, present):
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master "
+        "WHERE type = 'table' AND name = 'login_rate_limits'"
+    ).fetchone() is not None
+
+    assert exists is present, (
+        f"login_rate_limits: expected present={present}, got {exists}"
+    )
+
+    if present:
+        columns = {
+            row[1]: row
+            for row in connection.execute(
+                'PRAGMA table_info("login_rate_limits")'
+            ).fetchall()
+        }
+        assert set(columns) == {
+            "scope",
+            "key_hash",
+            "window_started_at",
+            "attempts",
+        }
+        assert columns["scope"][3] == 1
+        assert columns["key_hash"][3] == 1
+        assert columns["window_started_at"][3] == 1
+        assert columns["attempts"][3] == 1
+
+        indexes = {
+            row[1]
+            for row in connection.execute(
+                'PRAGMA index_list("login_rate_limits")'
+            ).fetchall()
+        }
+        assert "ix_login_rate_limits_window_started_at" in indexes
 
 def _assert_foreign_keys(connection):
     errors = connection.execute(
@@ -232,6 +268,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
         _assert_revision(connection, "0004_workflow_templates")
         _assert_timestamp_nullability(connection, nullable=True)
         _assert_auth_tables(connection, present=False)
+        _assert_rate_limit_schema(connection, present=False)
 
         _seed_existing_rows(connection)
         connection.commit()
@@ -254,9 +291,10 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0006_user_auth")
+        _assert_revision(connection, "0007_login_rate_limits")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
+        _assert_rate_limit_schema(connection, present=True)
         _assert_timestamps_populated(connection)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
@@ -268,6 +306,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
         _assert_revision(connection, "0004_workflow_templates")
         _assert_timestamp_nullability(connection, nullable=True)
         _assert_auth_tables(connection, present=False)
+        _assert_rate_limit_schema(connection, present=False)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
 
@@ -275,11 +314,13 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0006_user_auth")
+        _assert_revision(connection, "0007_login_rate_limits")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
+        _assert_rate_limit_schema(connection, present=True)
         _assert_timestamps_populated(connection)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
+
 
 

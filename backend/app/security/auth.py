@@ -1,10 +1,18 @@
-﻿"""Authentication helpers for user credentials."""
+"""Authentication helpers for user credentials."""
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import User
 from app.security.passwords import verify_password
+
+
+# Precomputed Argon2id hash used when an account does not exist.
+# Keep its parameters aligned with app.security.passwords.
+_DUMMY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$koSdB/7W51jWTPfAf/I+/Q"
+    "$IQ8RV/yz4l/IhcKC2WbMjxHsJvYzQn5jZihiDGtTzxk"
+)
 
 
 def normalize_email(email: str) -> str:
@@ -29,16 +37,19 @@ def authenticate_user(
     try:
         normalized_email = normalize_email(email)
     except ValueError:
-        return None
+        normalized_email = None
 
     if not isinstance(password, str) or not password:
         return None
 
-    user = db.execute(
-        select(User).where(User.email == normalized_email)
-    ).scalar_one_or_none()
+    user = None
+    if normalized_email is not None:
+        user = db.execute(
+            select(User).where(User.email == normalized_email)
+        ).scalar_one_or_none()
 
     if user is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         return None
 
     if not verify_password(password, user.password_hash):

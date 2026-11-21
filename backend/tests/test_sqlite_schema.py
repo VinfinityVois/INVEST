@@ -22,7 +22,9 @@ def test_all_persisted_models_create_on_sqlite():
             "workflow_templates",
             "users",
             "user_sessions",
+            "login_rate_limits",
         }.issubset(tables)
     finally:
         engine.dispose()
+
 

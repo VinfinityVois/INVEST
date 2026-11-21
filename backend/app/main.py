@@ -99,7 +99,7 @@ class FindingStateUpdate(BaseModel):
 app = FastAPI(title="AI Security Workflow API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.allowed_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -126,7 +126,7 @@ async def authentication_middleware(request: Request, call_next):
 
     if method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
-        if origin != "http://localhost:5173":
+        if origin not in settings.allowed_origin_list:
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Invalid or missing Origin"},
