@@ -16,6 +16,7 @@ import app.security.api as auth_api
 import app.security.users_api as users_api
 import app.security.workspaces_api as workspaces_api
 import app.security.tokens_api as tokens_api
+import app.security.dashboard_api as dashboard_api
 from app.security.tenancy import create_personal_workspace
 
 
@@ -56,6 +57,7 @@ def user_client(monkeypatch):
     monkeypatch.setattr(users_api, "SessionLocal", TestingSession)
     monkeypatch.setattr(workspaces_api, "SessionLocal", TestingSession)
     monkeypatch.setattr(tokens_api, "SessionLocal", TestingSession)
+    monkeypatch.setattr(dashboard_api, "SessionLocal", TestingSession)
 
     with TestClient(main.app) as client:
         yield client, TestingSession, member_id
