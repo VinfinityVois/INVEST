@@ -1,0 +1,4 @@
+# This is a Gradle lockfile
+org.springframework.boot:spring-boot-starter-web:3.2.0=runtimeClasspath
+org.apache.commons:commons-lang3:3.17.0=runtimeClasspath
+org.yaml:snakeyaml:2.2=runtimeClasspath

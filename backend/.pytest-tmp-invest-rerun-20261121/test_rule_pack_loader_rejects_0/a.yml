@@ -1,0 +1,5 @@
+pack_id: pack-a
+title: A
+version: 1
+analyzer: secrets
+extends: [pack-b]

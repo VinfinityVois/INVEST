@@ -5,9 +5,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime, timedelta, timezone
 
 from app.db import Base
-from app.models import User
+from app.models import User, UserSession
 from app.security.passwords import hash_password
 import app.main as main
 import app.security.api as auth_api
@@ -117,6 +118,47 @@ def test_logout_revokes_session(client):
 
     current = client.get("/api/auth/me")
     assert current.status_code == 401
+
+def test_logout_without_session_cookie_succeeds_and_clears_cookie(client):
+    response = client.post(
+        "/api/auth/logout",
+        headers={"Origin": "http://localhost:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert "max-age=0" in response.headers.get("set-cookie", "").lower()
+
+
+def test_logout_with_expired_session_succeeds_and_revokes_it(client):
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "admin@example.test",
+            "password": "CorrectPassword123!",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert login.status_code == 200
+
+    with main.SessionLocal() as db:
+        session = db.query(UserSession).one()
+        session.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.commit()
+
+    response = client.post(
+        "/api/auth/logout",
+        headers={"Origin": "http://localhost:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert "max-age=0" in response.headers.get("set-cookie", "").lower()
+
+    with main.SessionLocal() as db:
+        session = db.query(UserSession).one()
+        assert session.revoked_at is not None
+
 
 def test_health_endpoints_are_public(client):
     health = client.get("/health")
