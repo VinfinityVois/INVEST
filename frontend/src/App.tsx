@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
-type ConfigSchemaProperty = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; items?: ConfigSchemaProperty; format?: string };
+type ConfigSchemaProperty = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number; minLength?: number; maxLength?: number; minItems?: number; maxItems?: number; pattern?: string; items?: ConfigSchemaProperty; format?: string; properties?: Record<string, ConfigSchemaProperty>; required?: string[] };
 type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { type?: string; title?: string; description?: string; required?: string[]; properties?: Record<string, ConfigSchemaProperty>; [key: string]: unknown } };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
@@ -637,39 +637,67 @@ export default function App() {
     const entries = Object.entries(properties);
     if (!entries.length) return <p className="edit-hint">Для этого блока параметры не требуются.</p>;
     const setField = (key: string, value: unknown) => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, [key]: value } });
+    const clearField = (key: string) => {
+      const next = { ...selectedNode.data.config };
+      delete next[key];
+      updateNode(selectedNode.id, { config: next });
+    };
+    const optionIndex = (options: unknown[], value: unknown) => {
+      const index = options.findIndex(option => Object.is(option, value));
+      return index < 0 ? "" : String(index);
+    };
     return <div className="schema-config-fields">
       {schema?.description && <p className="edit-hint">{schema.description}</p>}
       {entries.map(([key, field]) => {
-        const value = selectedNode.data.config[key] ?? field.default ?? (field.type === "boolean" ? false : field.type === "array" ? [] : "");
+        const configured = selectedNode.data.config[key];
+        const value = configured ?? field.default ?? (field.type === "boolean" ? false : field.type === "array" ? [] : "");
         const label = field.title || key.replace(/_/g, " ");
         const id = "config-" + selectedNode.id + "-" + key;
         const requiredField = required.has(key);
+        const missing = configured === undefined || configured === null || configured === "" || (Array.isArray(configured) && configured.length === 0);
+        const constraints = [
+          field.minimum !== undefined ? "мин. " + field.minimum : "",
+          field.maximum !== undefined ? "макс. " + field.maximum : "",
+          field.minLength !== undefined ? "от " + field.minLength + " симв." : "",
+          field.maxLength !== undefined ? "до " + field.maxLength + " симв." : "",
+          field.minItems !== undefined ? "не менее " + field.minItems + " знач." : "",
+          field.maxItems !== undefined ? "не более " + field.maxItems + " знач." : "",
+        ].filter(Boolean).join(" · ");
         return <div className="schema-config-field" key={key}>
           <label className="field-label" htmlFor={id}>{label}{requiredField && <span className="schema-required"> *</span>}</label>
-          {field.enum ? <select id={id} value={String(value)} onChange={event => setField(key, event.target.value)}>
+          {field.enum ? <select id={id} value={optionIndex(field.enum, value)} onChange={event => {
+            if (event.target.value === "") { clearField(key); return; }
+            const option = field.enum?.[Number(event.target.value)];
+            if (option !== undefined) setField(key, option);
+          }}>
             {!requiredField && <option value="">Не задано</option>}
-            {field.enum.map(option => <option key={String(option)} value={String(option)}>{String(option)}</option>)}
+            {field.enum.map((option, index) => <option key={index} value={String(index)}>{String(option)}</option>)}
           </select> : field.type === "boolean" ? <label className="schema-checkbox"><input id={id} type="checkbox" checked={Boolean(value)} onChange={event => setField(key, event.target.checked)}/><span>{Boolean(value) ? "Включено" : "Отключено"}</span></label>
-          : field.type === "integer" || field.type === "number" ? <input id={id} type="number" step={field.type === "integer" ? 1 : "any"} min={field.minimum} max={field.maximum} value={value === "" ? "" : Number(value)} onChange={event => {
-            if (event.target.value === "") { setField(key, ""); return; }
-            const parsed = field.type === "integer" ? Number.parseInt(event.target.value, 10) : Number(event.target.value);
-            if (Number.isFinite(parsed)) setField(key, parsed);
+          : field.type === "integer" || field.type === "number" ? <input id={id} type="number" step={field.type === "integer" ? 1 : "any"} min={field.minimum ?? field.exclusiveMinimum} max={field.maximum ?? field.exclusiveMaximum} value={value === "" ? "" : Number(value)} onChange={event => {
+            if (event.target.value === "") { clearField(key); return; }
+            const parsed = Number(event.target.value);
+            if (Number.isFinite(parsed) && (field.type !== "integer" || Number.isInteger(parsed))) setField(key, parsed);
           }}/>
-          : field.type === "array" && field.items?.enum ? <div className="schema-array-options">{field.items.enum.map(option => {
-            const selected = Array.isArray(value) && value.includes(option);
-            return <label key={String(option)}><input type="checkbox" checked={selected} onChange={event => {
+          : field.type === "array" && field.items?.enum ? <div className="schema-array-options">{field.items.enum.map((option, index) => {
+            const selected = Array.isArray(value) && value.some(item => Object.is(item, option));
+            return <label key={index}><input type="checkbox" checked={selected} onChange={event => {
               const current = Array.isArray(value) ? value : [];
-              setField(key, event.target.checked ? [...current, option] : current.filter(item => item !== option));
+              setField(key, event.target.checked ? [...current, option] : current.filter(item => !Object.is(item, option)));
             }}/><span>{String(option)}</span></label>;
           })}</div>
-          : field.type === "array" ? <textarea id={id} rows={3} value={Array.isArray(value) ? value.join("\n") : String(value)} placeholder="Одно значение на строку" onChange={event => setField(key, event.target.value.split("\n").map(item => item.trim()).filter(Boolean))}/>
+          : field.type === "array" ? <textarea id={id} rows={3} value={Array.isArray(value) ? value.join("\n") : ""} placeholder="Одно значение на строку" onChange={event => {
+            const lines = event.target.value.split("\n").map(item => item.trim()).filter(Boolean);
+            const itemType = field.items?.type || "string";
+            const parsed = lines.map(item => itemType === "integer" ? Number.parseInt(item, 10) : itemType === "number" ? Number(item) : item);
+            if (parsed.every(item => itemType === "string" || (typeof item === "number" && Number.isFinite(item) && (itemType !== "integer" || Number.isInteger(item))))) setField(key, parsed);
+          }}/>
           : field.type === "object" ? <textarea id={id} rows={4} className="schema-json-fallback" value={JSON.stringify(value, null, 2)} spellCheck={false} onChange={event => {
             try { const parsed = JSON.parse(event.target.value); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) setField(key, parsed); } catch { /* Keep the last valid object until JSON is complete. */ }
           }}/>
-          : <input id={id} type="text" value={String(value)} maxLength={field.maxLength} placeholder={field.format === "uri" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri"} onChange={event => setField(key, event.target.value)}/>}
+          : <input id={id} type={field.format === "password" ? "password" : field.format === "uri" || field.format === "url" ? "url" : field.format === "email" ? "email" : "text"} value={String(value)} minLength={field.minLength} maxLength={field.maxLength} pattern={field.pattern} placeholder={field.format === "uri" || field.format === "url" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri" && field.format !== "url"} onChange={event => setField(key, event.target.value)}/>}
           {field.description && <small className="schema-field-help">{field.description}</small>}
-          {(field.minimum !== undefined || field.maximum !== undefined || field.minLength !== undefined || field.maxLength !== undefined) && <small className="schema-field-constraints">{[field.minimum !== undefined ? "мин. " + field.minimum : "", field.maximum !== undefined ? "макс. " + field.maximum : "", field.minLength !== undefined ? "от " + field.minLength + " симв." : "", field.maxLength !== undefined ? "до " + field.maxLength + " симв." : ""].filter(Boolean).join(" · ")}</small>}
-          {requiredField && field.default === undefined && (selectedNode.data.config[key] === undefined || selectedNode.data.config[key] === null || selectedNode.data.config[key] === "") && <small className="schema-field-error">Обязательное поле</small>}
+          {constraints && <small className="schema-field-constraints">{constraints}</small>}
+          {requiredField && missing && <small className="schema-field-error">Обязательное поле</small>}
         </div>;
       })}
     </div>;
