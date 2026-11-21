@@ -36,6 +36,7 @@ if (-not $run -or $run.status -notin @("completed", "partial", "failed", "cancel
     throw "Demo run timed out after $TimeoutSeconds seconds. Run ID: $runId"
 }
 
+if (-not $run.result) { throw "Run completed without a result payload. Run ID: $runId" }
 if ($run.result) {
     $result = $run.result
     if ($result -is [string]) { $result = $result | ConvertFrom-Json }
@@ -45,7 +46,7 @@ if ($run.result) {
         $gate = $result.security_gate
         Write-Host ("Security Gate: {0}" -f $gate.decision) -ForegroundColor $(if ($gate.decision -eq "BLOCK") { "Red" } elseif ($gate.decision -eq "WARN") { "Yellow" } else { "Green" })
         $gate.counts | Format-List
-        if ($gate.decision -notin @("PASS", "WARN")) {
+        if ($gate.decision -notin @("PASS", "WARN", "BLOCK")) {
             Write-Error "Security Gate returned no valid decision. Run ID: $runId"
             exit 1
         }
