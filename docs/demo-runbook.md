@@ -29,7 +29,17 @@
 
 ## Автоматический прогон из PowerShell
 
-Из корня репозитория:
+Сначала создай администратора по инструкции «Первый вход» в README. Для автоматического сценария передай учётные данные через переменные текущего PowerShell-процесса (не добавляй их в `.env`, репозиторий или аргументы команды):
+
+```powershell
+$env:INVEST_DEMO_EMAIL = "admin@example.test"
+$secure = Read-Host "Пароль администратора" -AsSecureString
+$env:INVEST_DEMO_PASSWORD = [Net.NetworkCredential]::new("", $secure).Password
+.\scripts\demo.ps1 -WebhookUrl "https://webhook.site/<unique-id>"
+Remove-Item Env:INVEST_DEMO_EMAIL, Env:INVEST_DEMO_PASSWORD
+```
+
+Скрипт входит через `/api/auth/login`, хранит HttpOnly session cookie только в памяти процесса, выполняет демонстрацию и отзывает сессию через logout. По умолчанию отправляет Origin `http://localhost:5173`; для другого frontend origin укажи `-FrontendOrigin` и добавь его в `ALLOWED_ORIGINS`.
 \`\`\`powershell
 .\\scripts\\demo.ps1 -WebhookUrl "https://webhook.site/<unique-id>"
 \`\`\`
