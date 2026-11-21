@@ -7,12 +7,23 @@ on:
         description: Saved INVEST workflow UUID (must include exactly one Security Gate)
         required: true
         type: string
+  workflow_call:
+    inputs:
+      workflow_id:
+        description: Saved INVEST workflow UUID (must include exactly one Security Gate)
+        required: true
+        type: string
+    secrets:
+      INVEST_API_BASE_URL:
+        required: true
+      INVEST_CI_TOKEN:
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: invest-security-check-\${{ github.event.inputs.workflow_id }}
+  group: invest-security-check-\${{ inputs.workflow_id }}
   cancel-in-progress: false
 
 jobs:
