@@ -654,7 +654,17 @@ export default function App() {
         const label = field.title || key.replace(/_/g, " ");
         const id = "config-" + selectedNode.id + "-" + key;
         const requiredField = required.has(key);
-        const missing = configured === undefined || configured === null || configured === "" || (Array.isArray(configured) && configured.length === 0);
+        const missing = field.default === undefined && (configured === undefined || configured === null || configured === "" || (Array.isArray(configured) && configured.length === 0));
+        const constraintError = field.type === "array" && Array.isArray(value) && field.minItems !== undefined && value.length < field.minItems ? "Недостаточно значений"
+          : field.type === "array" && Array.isArray(value) && field.maxItems !== undefined && value.length > field.maxItems ? "Слишком много значений"
+          : (field.type === "string" || !field.type) && typeof value === "string" && field.minLength !== undefined && value.length < field.minLength && value.length > 0 ? "Значение слишком короткое"
+          : (field.type === "string" || !field.type) && typeof value === "string" && field.maxLength !== undefined && value.length > field.maxLength ? "Значение слишком длинное"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.minimum !== undefined && value < field.minimum ? "Значение меньше минимума"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.maximum !== undefined && value > field.maximum ? "Значение больше максимума"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.exclusiveMinimum !== undefined && value <= field.exclusiveMinimum ? "Значение должно быть больше " + field.exclusiveMinimum
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.exclusiveMaximum !== undefined && value >= field.exclusiveMaximum ? "Значение должно быть меньше " + field.exclusiveMaximum
+          : field.pattern && typeof value === "string" && value && !new RegExp(field.pattern).test(value) ? "Формат значения не соответствует шаблону"
+          : "";
         const constraints = [
           field.minimum !== undefined ? "мин. " + field.minimum : "",
           field.maximum !== undefined ? "макс. " + field.maximum : "",
@@ -697,7 +707,7 @@ export default function App() {
           : <input id={id} type={field.format === "password" ? "password" : field.format === "uri" || field.format === "url" ? "url" : field.format === "email" ? "email" : "text"} value={String(value)} minLength={field.minLength} maxLength={field.maxLength} pattern={field.pattern} placeholder={field.format === "uri" || field.format === "url" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri" && field.format !== "url"} onChange={event => setField(key, event.target.value)}/>}
           {field.description && <small className="schema-field-help">{field.description}</small>}
           {constraints && <small className="schema-field-constraints">{constraints}</small>}
-          {requiredField && missing && <small className="schema-field-error">Обязательное поле</small>}
+          {requiredField && missing ? <small className="schema-field-error">Обязательное поле</small> : constraintError ? <small className="schema-field-error">{constraintError}</small> : null}
         </div>;
       })}
     </div>;
