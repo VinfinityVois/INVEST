@@ -96,3 +96,35 @@ def test_duplicate_edge_ids_are_rejected():
     result = validate_graph(graph, registry)
     assert not result.valid
     assert any(issue.code == "duplicate_edge_id" for issue in result.issues)
+
+
+def test_required_node_configuration_fields_are_validated():
+    graph = WorkflowGraph(nodes=[{"id": "hook", "type": "notify.webhook", "config": {}}], edges=[])
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "invalid_node_config" and issue.node_id == "hook" and "url" in issue.message for issue in result.issues)
+
+
+def test_node_configuration_types_enums_and_bounds_are_validated():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "explain", "type": "ai.explain", "config": {"language": "fr", "max_findings": 26}},
+            {"id": "gate", "type": "ci.gate", "config": {"block_on": ["SEVERE"]}},
+        ],
+        edges=[],
+    )
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    invalid_nodes = {issue.node_id for issue in result.issues if issue.code == "invalid_node_config"}
+    assert invalid_nodes == {"explain", "gate"}
+
+
+def test_valid_node_configuration_is_accepted():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "explain", "type": "ai.explain", "config": {"language": "ru", "max_findings": 10}},
+            {"id": "gate", "type": "ci.gate", "config": {"block_on": ["CRITICAL", "HIGH"]}},
+        ],
+        edges=[],
+    )
+    assert validate_graph(graph, registry).valid
