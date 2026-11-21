@@ -54,3 +54,28 @@ def test_selected_node_scope_includes_all_upstream_dependencies_only():
     )
     assert resolve_execution_scope(graph, ["secrets"]) == ["trigger", "source", "secrets"]
     assert resolve_execution_scope(graph, ["gate"]) == ["trigger", "source", "secrets", "sca", "merge", "gate"]
+
+
+import pytest
+from pydantic import ValidationError
+
+
+def test_workflow_graph_rejects_excessive_node_count():
+    with pytest.raises(ValidationError):
+        WorkflowGraph(nodes=[{"id": f"node-{index}", "type": "trigger.manual"} for index in range(501)], edges=[])
+
+
+def test_workflow_graph_rejects_excessive_edge_count():
+    with pytest.raises(ValidationError):
+        WorkflowGraph(
+            nodes=[{"id": "source", "type": "source.git"}],
+            edges=[{"id": f"edge-{index}", "source": "source", "target": "source"} for index in range(2001)],
+        )
+
+
+def test_workflow_graph_rejects_oversized_node_configuration():
+    with pytest.raises(ValidationError):
+        WorkflowGraph(
+            nodes=[{"id": "source", "type": "source.git", "config": {f"option-{index}": index for index in range(101)}],
+            edges=[],
+        )
