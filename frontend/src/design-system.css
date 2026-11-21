@@ -32,7 +32,7 @@
 .shell button,.shell input,.shell select,.shell textarea { font-family:inherit; }
 .shell button { white-space:nowrap; transition:background-color .14s ease,border-color .14s ease,color .14s ease; }
 .shell code,.shell pre,.shell .node-copy small,.shell .eyebrow,.shell .section-caption,.shell .revision,
-.shell .node-topline,.shell .node-footer,.shell .finding small,.shell .project-tree-entry small { font-family:"IBM Plex Mono",monospace; }
+.shell .node-topline,.shell .node-footer,.shell .finding small,.shell .project-tree-entry small { font-family:"JetBrains Mono",monospace; }
 .shell .topbar {
   position:sticky;top:0;z-index:30;height:52px;min-height:52px;gap:16px;
   border-bottom:1px solid var(--border);background:var(--surface);
@@ -78,7 +78,7 @@
 .shell .panel h3 { margin-top:7px;color:var(--text);font-size:16px;font-weight:600; }
 .shell .panel h3 svg,.shell .panel-heading h3 svg { color:var(--icon); }
 .shell .panel-intro { margin:8px 0 12px;color:var(--text-secondary);font-size:12px;line-height:1.5; }
-.shell .counter { padding:3px 6px;border:1px solid var(--border);border-radius:2px;background:var(--gray-50);color:var(--text-secondary);font:500 11px "IBM Plex Mono"; }
+.shell .counter { padding:3px 6px;border:1px solid var(--border);border-radius:2px;background:var(--gray-50);color:var(--text-secondary);font:500 11px "JetBrains Mono"; }
 .shell[data-theme="dark"] .counter { background:var(--gray-800); }
 .shell .searchbox { height:36px;padding:0 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--icon); }
 .shell .searchbox input { color:var(--text);font-size:13px; }
@@ -90,7 +90,7 @@
 .shell .palette-folder-head { min-height:38px;padding:0 9px;background:var(--gray-25);color:var(--text-secondary); }
 .shell[data-theme="dark"] .palette-folder-head { background:var(--gray-800); }
 .shell .palette-folder-head b { font:500 11px Inter,sans-serif;letter-spacing:.03em; }
-.shell .palette-folder-head small { color:var(--muted);font:11px "IBM Plex Mono"; }
+.shell .palette-folder-head small { color:var(--muted);font:11px "JetBrains Mono"; }
 .shell .source-section,.shell .library-item,.shell .project-library-item,.shell .edit-section,
 .shell .selected-card,.shell .telemetry-card,.shell .workflow-version-card {
   background:var(--surface);border:1px solid var(--border);border-radius:4px;box-shadow:none;
@@ -123,7 +123,7 @@
 .shell .editor-head { min-height:64px;padding:0 4px; }
 .shell .editor-head h1 { margin:3px 0;color:var(--text);font-size:26px;font-weight:700;letter-spacing:-.035em; }
 .shell .editor-head p { color:var(--text-secondary);font-size:12px;line-height:1.45; }
-.shell .counts { color:var(--text-secondary);font:11px "IBM Plex Mono"; }
+.shell .counts { color:var(--text-secondary);font:11px "JetBrains Mono"; }
 .shell .counts svg { color:var(--icon); }
 .shell .flow { border:1px solid var(--border);border-radius:4px;background-color:var(--canvas);
   background-image:radial-gradient(var(--dots) .8px,transparent .8px);background-size:20px 20px; }
@@ -163,7 +163,7 @@
 .shell .node-live-dot { background:var(--accent-500);box-shadow:none; }
 .shell .node-footer { border-color:var(--border);color:var(--muted); }
 .shell .node-port-label { color:var(--accent-600); }
-.shell .flow-foot { height:28px;align-items:center;color:var(--muted);font:10px "IBM Plex Mono"; }
+.shell .flow-foot { height:28px;align-items:center;color:var(--muted);font:10px "JetBrains Mono"; }
 .shell .inspector-top h3 { color:var(--text);font-size:16px; }
 .shell .inspector-tabs { gap:16px;border-color:var(--border);color:var(--muted);font-size:12px; }
 .shell .tab-active { color:var(--accent-text);border-color:var(--accent-600); }
@@ -177,9 +177,9 @@
 .shell .runtime label { color:var(--accent-700);background:var(--accent-50); }
 .shell .runtime label.running { color:var(--warning);background:var(--warning-bg); }
 .shell .findings-head { color:var(--text);font-size:14px;font-weight:600; }
-.shell .findings-head span { border-radius:2px;background:var(--soft-accent);color:var(--accent-text);font:500 11px "IBM Plex Mono"; }
+.shell .findings-head span { border-radius:2px;background:var(--soft-accent);color:var(--accent-text);font:500 11px "JetBrains Mono"; }
 .shell .finding { margin:6px 0;padding:10px;border:1px solid var(--border);border-left:3px solid var(--warning);border-radius:4px;background:var(--surface); }
-.shell .finding strong { color:var(--text);font:600 11px "IBM Plex Mono"; }
+.shell .finding strong { color:var(--text);font:600 11px "JetBrains Mono"; }
 .shell .finding label { padding:3px 5px;border-radius:2px;background:var(--warning-bg);color:var(--warning);font:600 10px Inter,sans-serif; }
 .shell .finding p { color:var(--text-secondary);font-size:12px;line-height:1.5; }
 .shell .finding small { color:var(--muted);font-size:10px; }
@@ -195,7 +195,7 @@
 .shell .severity-medium { color:var(--warning)!important;background:var(--warning-bg)!important; }
 .shell .severity-low,.shell .severity-info { color:var(--text-secondary)!important;background:var(--gray-100)!important; }
 .shell[data-theme="dark"] .severity-low,.shell[data-theme="dark"] .severity-info { background:var(--gray-800)!important; }
-.shell footer { height:28px;border-color:var(--border);color:var(--muted);font:10px "IBM Plex Mono";letter-spacing:.02em; }
+.shell footer { height:28px;border-color:var(--border);color:var(--muted);font:10px "JetBrains Mono";letter-spacing:.02em; }
 .shell :focus-visible { outline:2px solid var(--accent-500);outline-offset:2px; }
 .shell .template-library-backdrop,.shell .ai-graph-backdrop { background:rgba(11,14,19,.48);backdrop-filter:none; }
 .shell .template-library-dialog,.shell .ai-graph-dialog {
@@ -312,8 +312,8 @@
 .shell .finding-ai-explanation>small { color:var(--text-secondary);font-size:12px;line-height:1.5; }
 .shell .finding-ai-explanation { border-left-color:var(--gray-500); }
 .shell .finding-ai-explanation>div span { color:var(--muted); }
-.shell .finding-identifiers span { border-color:var(--border);border-radius:2px;color:var(--text-secondary);font:10px "IBM Plex Mono"; }
-.shell .finding-location { color:var(--text-secondary)!important;font:11px "IBM Plex Mono"; }
+.shell .finding-identifiers span { border-color:var(--border);border-radius:2px;color:var(--text-secondary);font:10px "JetBrains Mono"; }
+.shell .finding-location { color:var(--text-secondary)!important;font:11px "JetBrains Mono"; }
 .shell .node-output-success,.shell .node-output-active,.shell .node-output-warning,.shell .node-output-danger {
   background:var(--gray-50);border:1px solid var(--border);border-left:2px solid var(--gray-400);
 }
@@ -391,7 +391,7 @@
 .shell .inspector-tabs button.tab-active { border-bottom-color:var(--accent-600);color:var(--accent-text); }
 .shell .inspector-tabs button span {
   min-width:18px;padding:2px 5px;border:1px solid var(--border);border-radius:2px;
-  background:var(--gray-50);color:var(--text-secondary);font:500 10px "IBM Plex Mono";
+  background:var(--gray-50);color:var(--text-secondary);font:500 10px "JetBrains Mono";
 }
 .shell[data-theme="dark"] .inspector-tabs button span { background:var(--gray-800); }
 .shell .inspector-tab-panel[hidden] { display:none!important; }
@@ -451,7 +451,7 @@
 }
 .shell .left-rail-tabs button span {
   padding:1px 5px;border:1px solid var(--border);border-radius:2px;color:var(--muted);
-  font:10px "IBM Plex Mono";
+  font:10px "JetBrains Mono";
 }
 .shell .palette .panel-intro { min-height:36px; }
 
@@ -488,7 +488,7 @@
 .shell .workflow-save-state.is-draft { color:var(--muted); }
 .shell .node-output-heading>i { display:inline-flex;align-items:center;justify-content:center; }
 .shell .node-output-spinner { animation:node-spin 1.2s linear infinite; }
-.shell .node-port-label { font:500 9px "IBM Plex Mono";letter-spacing:.04em; }
+.shell .node-port-label { font:500 9px "JetBrains Mono";letter-spacing:.04em; }
 .shell .workflow-node .node-copy { min-width:0; }
 .shell .workflow-node .node-copy b,.shell .workflow-node .node-copy small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 @keyframes node-spin { to { transform:rotate(360deg); } }
@@ -525,7 +525,7 @@
   border-color:var(--accent-500);color:var(--accent-text);background:var(--gray-50);
 }
 .shell[data-theme="dark"] .workflow-drawer-toggle:hover,.shell[data-theme="dark"] .workflow-drawer-toggle.is-open { background:var(--gray-800); }
-.shell .workflow-drawer-toggle b { color:var(--text);font:10px "IBM Plex Mono"; }
+.shell .workflow-drawer-toggle b { color:var(--text);font:10px "JetBrains Mono"; }
 .shell .workflow-drawer-toggle>svg:last-child { transition:transform .16s ease; }
 .shell .workflow-drawer-toggle.is-open>svg:last-child { transform:rotate(180deg); }
 .shell .workflow-bottom-drawer {
@@ -536,7 +536,7 @@
 .shell .workflow-bottom-drawer-head>div:first-child { display:grid;grid-template-columns:auto auto;align-items:center;column-gap:9px;row-gap:2px; }
 .shell .workflow-bottom-drawer-head .section-caption { grid-column:1/-1; }
 .shell .workflow-bottom-drawer-head b { color:var(--text);font-size:12px;font-weight:600; }
-.shell .workflow-bottom-drawer-head small { color:var(--muted);font:9px "IBM Plex Mono"; }
+.shell .workflow-bottom-drawer-head small { color:var(--muted);font:9px "JetBrains Mono"; }
 .shell .workflow-bottom-drawer-head>div:last-child { display:flex;align-items:center;gap:6px; }
 .shell .workflow-bottom-drawer-head button {
   display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:25px;padding:0 8px;
@@ -554,14 +554,14 @@
 .shell .workflow-bottom-run:hover { border-color:var(--accent-500);background:var(--gray-50); }
 .shell[data-theme="dark"] .workflow-bottom-run:hover { background:var(--gray-800); }
 .shell .workflow-bottom-run.is-current { border-color:color-mix(in srgb,var(--accent-500) 45%,var(--border)); }
-.shell .workflow-bottom-run-index { color:var(--muted);font:9px "IBM Plex Mono"; }
+.shell .workflow-bottom-run-index { color:var(--muted);font:9px "JetBrains Mono"; }
 .shell .workflow-bottom-run-status { display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:10px; }
 .shell .workflow-bottom-run-status i { width:6px;height:6px;border-radius:50%;background:var(--gray-400); }
 .shell .workflow-bottom-run-status.state-completed i { background:var(--accent-600); }
 .shell .workflow-bottom-run-status.state-failed i { background:var(--danger); }
 .shell .workflow-bottom-run-status.state-running i,.shell .workflow-bottom-run-status.state-queued i { background:var(--info); }
-.shell .workflow-bottom-run-date { color:var(--muted);font:9px "IBM Plex Mono"; }
-.shell .workflow-bottom-run>b { color:var(--text);font:10px "IBM Plex Mono";white-space:nowrap; }
+.shell .workflow-bottom-run-date { color:var(--muted);font:9px "JetBrains Mono"; }
+.shell .workflow-bottom-run>b { color:var(--text);font:10px "JetBrains Mono";white-space:nowrap; }
 .shell .workflow-bottom-run-open { color:var(--accent-text);font-size:9px;text-align:right; }
 .shell .workflow-bottom-empty { margin:0;padding:12px 4px;color:var(--muted);font-size:11px; }
 @media(max-width:760px) {
@@ -580,7 +580,7 @@
 .shell .node-port-list>span {
   display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:3px 5px;
   border:1px solid var(--border);border-radius:3px;background:var(--gray-50);
-  color:var(--text-secondary);font:9px "IBM Plex Mono";
+  color:var(--text-secondary);font:9px "JetBrains Mono";
 }
 .shell[data-theme="dark"] .node-port-list>span { background:var(--gray-800); }
 .shell .node-port-list>span b { color:var(--accent-text);font-size:8px;font-weight:600; }
@@ -592,7 +592,7 @@
 }
 .shell[data-theme="dark"] .edge-endpoint-readonly { background:var(--gray-800); }
 .shell .edge-endpoint-readonly>span { display:grid;gap:3px;min-width:0; }
-.shell .edge-endpoint-readonly small { color:var(--muted);font:8px "IBM Plex Mono"; }
+.shell .edge-endpoint-readonly small { color:var(--muted);font:8px "JetBrains Mono"; }
 .shell .edge-endpoint-readonly b { overflow:hidden;color:var(--text);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }
 .shell .edge-endpoint-readonly>i { color:var(--accent-text);font-style:normal; }
 .shell .edge-endpoint-readonly p { grid-column:1/-1;margin:0;color:var(--muted);font-size:9px;line-height:1.4; }
@@ -601,8 +601,8 @@
 .shell .finding-file-group { margin:10px 0 14px;border:1px solid var(--border);border-radius:4px;overflow:hidden; }
 .shell .finding-file-heading { display:flex;align-items:center;gap:7px;padding:8px 9px;background:var(--gray-50); }
 .shell[data-theme="dark"] .finding-file-heading { background:var(--gray-800); }
-.shell .finding-file-heading b { min-width:0;overflow:hidden;color:var(--text);font:10px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
-.shell .finding-file-heading span { margin-left:auto;color:var(--muted);font:9px "IBM Plex Mono";white-space:nowrap; }
+.shell .finding-file-heading b { min-width:0;overflow:hidden;color:var(--text);font:10px "JetBrains Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-file-heading span { margin-left:auto;color:var(--muted);font:9px "JetBrains Mono";white-space:nowrap; }
 .shell .finding-table-item { margin:0;padding:0;border:0;border-top:1px solid var(--border);border-left:0;border-radius:0;background:var(--surface); }
 .shell .finding-table-row {
   display:grid;grid-template-columns:70px minmax(90px,.8fr) minmax(90px,1fr) minmax(110px,1.4fr) 14px;
@@ -611,18 +611,18 @@
 }
 .shell .finding-table-row:hover,.shell .finding-table-row.is-selected { background:var(--gray-50); }
 .shell[data-theme="dark"] .finding-table-row:hover,.shell[data-theme="dark"] .finding-table-row.is-selected { background:var(--gray-800); }
-.shell .finding-table-row>b { min-width:0;overflow:hidden;color:var(--text);font:10px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
-.shell .finding-table-row>small { min-width:0;overflow:hidden;color:var(--muted);font:9px "IBM Plex Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-table-row>b { min-width:0;overflow:hidden;color:var(--text);font:10px "JetBrains Mono";text-overflow:ellipsis;white-space:nowrap; }
+.shell .finding-table-row>small { min-width:0;overflow:hidden;color:var(--muted);font:9px "JetBrains Mono";text-overflow:ellipsis;white-space:nowrap; }
 .shell .finding-table-message { min-width:0;overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }
 .shell .finding-table-row>svg { color:var(--muted);transition:transform .14s ease; }
 .shell .finding-table-row.is-selected>svg { transform:rotate(180deg);color:var(--accent-text); }
-.shell .finding-table-severity { display:inline-flex;justify-content:center;padding:3px 5px;border:1px solid var(--border);border-radius:3px;color:var(--text-secondary);font:8px "IBM Plex Mono"; }
+.shell .finding-table-severity { display:inline-flex;justify-content:center;padding:3px 5px;border:1px solid var(--border);border-radius:3px;color:var(--text-secondary);font:8px "JetBrains Mono"; }
 .shell .finding-table-severity.severity-critical,.shell .finding-table-severity.severity-high { border-color:color-mix(in srgb,var(--danger) 45%,var(--border));color:var(--danger); }
 .shell .finding-table-severity.severity-medium { border-color:color-mix(in srgb,var(--warning) 45%,var(--border));color:var(--warning); }
 .shell .finding-detail { padding:12px;border-top:1px solid var(--border);background:var(--surface); }
 .shell .finding-detail-heading { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px; }
 .shell .finding-detail-heading>b { color:var(--text);font-size:11px; }
-.shell .finding-detail-heading>span { color:var(--muted);font:9px "IBM Plex Mono"; }
+.shell .finding-detail-heading>span { color:var(--muted);font:9px "JetBrains Mono"; }
 .shell .finding-detail>.finding-location { display:block; }
 @media(max-width:760px) {
   .shell .finding-table-row { grid-template-columns:64px minmax(0,1fr) 14px;gap:6px; }
