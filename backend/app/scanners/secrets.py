@@ -64,30 +64,11 @@ def _make_finding(rule_id,class_name,path,line,value,severity,confidence,end_lin
  item={"rule_id":rule_id,"class":class_name,"category":"SECRET","path":path,"line":line,"severity":severity,"confidence":confidence,"message":f"Возможный секрет ({rule_id}); значение замаскировано.","masked_value":_masked(value),"value_hash":digest,"fingerprint":hmac.new(settings.app_secret_key.encode(),f"{rule_id}:{path}:{line}:{digest}".encode(),hashlib.sha256).hexdigest()}
  if end_line is not None and end_line!=line: item["endLine"]=end_line
  return item
-def scan_text(text,path, selected_rule_packs=None):
- lines = text.splitlines()
-findings = []
-seen = {}
+def scan_text(text, path, selected_rule_packs=None):
+    lines = text.splitlines()
+    findings = []
+    seen = {}
 
-def add(rule, cls, line, value, severity, confidence, end=None):
-    if not value or _is_placeholder(value):
-        return
-
-    finding = _make_finding(
-        rule, cls, path, line, value, severity, confidence, end
-    )
-
-    # Один и тот же секрет на одной строке — одна находка.
-    # Разные секреты на одной строке сохраняются.
-    dedup_key = (line, finding["value_hash"])
-    existing_index = seen.get(dedup_key)
-
-    if existing_index is None:
-        seen[dedup_key] = len(findings)
-        findings.append(finding)
-        return
-
-    # При совпадении оставляем вариант с более высоким приоритетом.
     severity_rank = {
         "INFO": 0,
         "LOW": 1,
@@ -96,56 +77,196 @@ def add(rule, cls, line, value, severity, confidence, end=None):
         "CRITICAL": 4,
     }
 
-    existing = findings[existing_index]
-    new_priority = (
-        severity_rank.get(finding["severity"], 0),
-        finding["confidence"],
-    )
-    old_priority = (
-        severity_rank.get(existing["severity"], 0),
-        existing["confidence"],
+    def add(rule, cls, line, value, severity, confidence, end=None):
+        if not value or _is_placeholder(value):
+            return
+
+        finding = _make_finding(
+            rule, cls, path, line, value, severity, confidence, end
+        )
+        dedup_key = (line, finding["value_hash"])
+        existing_index = seen.get(dedup_key)
+
+        if existing_index is None:
+            seen[dedup_key] = len(findings)
+            findings.append(finding)
+            return
+
+        existing = findings[existing_index]
+        new_priority = (
+            severity_rank.get(finding["severity"], 0),
+            finding["confidence"],
+        )
+        old_priority = (
+            severity_rank.get(existing["severity"], 0),
+            existing["confidence"],
+        )
+        if new_priority > old_priority:
+            findings[existing_index] = finding
+
+    custom_patterns = []
+    if selected_rule_packs is not None:
+        for pack in selected_rule_packs:
+            globs = pack.get("path_globs", [])
+            if globs and not any(
+                fnmatch.fnmatchcase(path, item) for item in globs
+            ):
+                continue
+            for item in pack.get("patterns", []):
+                custom_patterns.append((
+                    item["id"],
+                    re.compile(item["regex"]),
+                    float(item.get("confidence", 0.8)),
+                    str(item.get("severity", "MEDIUM")).upper(),
+                    str(item.get("class", "secret")),
+                ))
+
+    active_patterns = (
+        custom_patterns
+        if selected_rule_packs is not None
+        else PATTERNS
     )
 
-    if new_priority > old_priority:
-        findings[existing_index] = finding
- custom_patterns = []
- if selected_rule_packs is not None:
-  for pack in selected_rule_packs:
-   globs = pack.get("path_globs", [])
-   if globs and not any(fnmatch.fnmatchcase(path, item) for item in globs):
-    continue
-   for item in pack.get("patterns", []):
-    custom_patterns.append((item["id"], re.compile(item["regex"]), float(item.get("confidence", 0.8)), str(item.get("severity", "MEDIUM")).upper(), str(item.get("class", "secret"))))
- active_patterns = custom_patterns if selected_rule_packs is not None else PATTERNS
- for line_no,line in enumerate(lines,1):
-  for rule,pattern,confidence,severity,cls in active_patterns:
-   match=pattern.search(line)
-   if match: add(rule,cls,line_no,match.group(1) if match.lastindex else match.group(0),severity,confidence)
-  named=re.search(r"(?i)\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"+QUOTED,line)
-  if named and SECRET_NAME.search(named.group(1)):
-   name=named.group(1).lower(); cls="password" if "pass" in name else ("api-key" if "key" in name else "configuration-token")
-   add("named_secret_literal",cls,line_no,named.group(2),"HIGH" if "pass" in name else "MEDIUM",.88)
-  bearer=re.search(r"(?i)\b(?:authorization|token)\b\s*:\s*['\"]?Bearer\s+([A-Za-z0-9._~+/=-]{8,})",line)
-  if bearer: add("bearer_configuration","configuration-token",line_no,bearer.group(1),"HIGH",.94)
-  entropy_match=SECRET_LITERAL_ASSIGNMENT.search(line)
-  if entropy_match and SECRET_NAME.search(entropy_match.group("name")):
-   candidate=entropy_match.group("value")
-   already_detected=any(item["line"]==line_no for item in findings)
-   if not already_detected and 20<=len(candidate)<=4096 and _shannon_entropy(candidate)>=3.5:
-    add("high_entropy_secret","high-entropy-secret",line_no,candidate,"MEDIUM",.76)
-  fallback=re.search(r"(?i)(?:getenv|environment\.getproperty|System\.getProperty)\s*\([^)]*\)\s*\?:\s*"+QUOTED,line)
-  if fallback: add("secret_fallback","secret-fallback",line_no,fallback.group(1),"LOW",.92)
- if re.search(r"(?i)setBearerAuth\s*\(\s*\w+\s*\)|set\s*\(\s*['\"]Authorization['\"]",text):
-  declarations={}
-  for line_no,line in enumerate(lines,1):
-   decl=re.search(r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*"+QUOTED,line)
-   if decl: declarations[decl.group(1)]=(decl.group(2),line_no)
-  concat=re.search(r"\b(?:val|var)\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\s*\+\s*([A-Za-z_]\w*)",text)
-  if concat and concat.group(2) in declarations and concat.group(3) in declarations:
-   first,first_line=declarations[concat.group(2)]; second,second_line=declarations[concat.group(3)]
-   use_line=next((i for i,line in enumerate(lines,1) if "setBearerAuth" in line and concat.group(1) in line),max(first_line,second_line))
-   add("reconstructed_auth_token","recoverable-token",first_line,first+second,"MEDIUM",.91,use_line)
- return sorted(findings,key=lambda x:(x["line"],x["rule_id"]))
+    for line_no, line in enumerate(lines, 1):
+        for rule, pattern, confidence, severity, cls in active_patterns:
+            for match in pattern.finditer(line):
+                value = (
+                    match.group(1)
+                    if match.lastindex
+                    else match.group(0)
+                )
+                add(rule, cls, line_no, value, severity, confidence)
+
+        for named in re.finditer(
+            r"(?i)\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*" + QUOTED,
+            line,
+        ):
+            if SECRET_NAME.search(named.group(1)):
+                name = named.group(1).lower()
+                cls = (
+                    "password"
+                    if "pass" in name
+                    else "api-key"
+                    if "key" in name
+                    else "configuration-token"
+                )
+                add(
+                    "named_secret_literal",
+                    cls,
+                    line_no,
+                    named.group(2),
+                    "HIGH" if "pass" in name else "MEDIUM",
+                    0.88,
+                )
+
+        for bearer in re.finditer(
+            r"(?i)\\b(?:authorization|token)\\b\\s*:\\s*['\"]?"
+            r"Bearer\\s+([A-Za-z0-9._~+/=-]{8,})",
+            line,
+        ):
+            add(
+                "bearer_configuration",
+                "configuration-token",
+                line_no,
+                bearer.group(1),
+                "HIGH",
+                0.94,
+            )
+
+        for entropy_match in SECRET_LITERAL_ASSIGNMENT.finditer(line):
+            if not SECRET_NAME.search(entropy_match.group("name")):
+                continue
+            candidate = entropy_match.group("value")
+            already_detected = any(
+                item["line"] == line_no
+                and item["value_hash"] == hmac.new(
+                    settings.app_secret_key.encode(),
+                    candidate.encode(),
+                    hashlib.sha256,
+                ).hexdigest()
+                for item in findings
+            )
+            if (
+                not already_detected
+                and 20 <= len(candidate) <= 4096
+                and _shannon_entropy(candidate) >= 3.5
+            ):
+                add(
+                    "high_entropy_secret",
+                    "high-entropy-secret",
+                    line_no,
+                    candidate,
+                    "MEDIUM",
+                    0.76,
+                )
+
+        for fallback in re.finditer(
+            r"(?i)(?:getenv|environment\\.getproperty|System\\.getProperty)"
+            r"\\s*\\([^)]*\\)\\s*\\?:\\s*" + QUOTED,
+            line,
+        ):
+            add(
+                "secret_fallback",
+                "secret-fallback",
+                line_no,
+                fallback.group(1),
+                "LOW",
+                0.92,
+            )
+
+    if re.search(
+        r"(?i)setBearerAuth\\s*\\(\\s*\\w+\\s*\\)|"
+        r"set\\s*\\(\\s*['\"]Authorization['\"]",
+        text,
+    ):
+        declarations = {}
+        for line_no, line in enumerate(lines, 1):
+            for decl in re.finditer(
+                r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*" + QUOTED,
+                line,
+            ):
+                declarations[decl.group(1)] = (
+                    decl.group(2),
+                    line_no,
+                )
+
+        concat = re.search(
+            r"\\b(?:val|var)\\s+([A-Za-z_]\\w*)\\s*=\\s*"
+            r"([A-Za-z_]\\w*)\\s*\\+\\s*([A-Za-z_]\\w*)",
+            text,
+        )
+        if (
+            concat
+            and concat.group(2) in declarations
+            and concat.group(3) in declarations
+        ):
+            first, first_line = declarations[concat.group(2)]
+            second, second_line = declarations[concat.group(3)]
+            use_line = next(
+                (
+                    i
+                    for i, line in enumerate(lines, 1)
+                    if "setBearerAuth" in line
+                    and concat.group(1) in line
+                ),
+                max(first_line, second_line),
+            )
+            add(
+                "reconstructed_auth_token",
+                "recoverable-token",
+                first_line,
+                first + second,
+                "MEDIUM",
+                0.91,
+                use_line,
+            )
+
+    return sorted(
+        findings,
+        key=lambda item: (item["line"], item["rule_id"]),
+    )
+
+
 def scan_directory(root, on_progress=None, selected_rule_packs=None):
  root=Path(root).resolve(); results=[]; count=0
  resolved_packs = None
