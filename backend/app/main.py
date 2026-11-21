@@ -33,6 +33,7 @@ from app.security.redaction import redact_text
 from app.db import SessionLocal
 from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule, WorkflowTemplate
 from app.workflows.registry import registry
+from app.rules_loader import rule_packs
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
@@ -769,6 +770,12 @@ def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_l
             if scanned >= 3000 or len(results) >= 100:
                 break
     return {"results": results, "scanned_files": scanned, "truncated": len(results) >= 100 or scanned >= 3000}
+
+
+@app.get("/api/rule-packs")
+def list_rule_packs(analyzer: str | None = Query(default=None, pattern="^(secrets|sca|sast|policy)$")):
+    """List repository-owned, validated rule packs for configuration forms."""
+    return rule_packs.list(analyzer=analyzer)
 
 
 @app.get("/api/node-types")
