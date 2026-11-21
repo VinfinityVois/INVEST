@@ -187,6 +187,24 @@ def _run_in_active_workspace(session, request: Request, run_id: UUID, *, write: 
     return run
 
 
+def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: WorkflowGraph) -> None:
+    for node in graph.nodes:
+        if node.type != "source.upload":
+            continue
+        source_path = node.config.get("path")
+        project_id = session.scalar(
+            select(Project.id).where(
+                Project.workspace_id == workspace_id,
+                Project.workspace_path == source_path,
+            )
+        )
+        if project_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Workflow source project is not available in the active workspace.",
+            )
+
+
 @app.middleware("http")
 async def authentication_middleware(request: Request, call_next):
     path = request.url.path
@@ -953,6 +971,7 @@ def create_workflow(graph: WorkflowGraph, request: Request):
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
         workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        _validate_graph_workspace_sources(session, workspace.id, graph)
         workflow = Workflow(name=graph.name, workspace_id=workspace.id)
         session.add(workflow)
         session.flush()
@@ -987,7 +1006,8 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
-        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        active_workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        _validate_graph_workspace_sources(session, active_workflow.workspace_id, graph)
         _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
         workflow = _workflow_lock
         if workflow is None:
@@ -1148,6 +1168,7 @@ def execute_saved_workflow(workflow_id: UUID, request: Request, force_full_scan:
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
 
         graph_snapshot = dict(version.graph)
         graph_snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": force_full_scan}
@@ -1273,6 +1294,7 @@ def execute_selected_workflow(workflow_id: UUID, request: Request, payload: Sele
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         known_ids = {node.id for node in graph.nodes}
         unknown = sorted(set(payload.node_ids) - known_ids)
         if unknown:
@@ -1364,6 +1386,7 @@ def restore_workflow_version(workflow_id: UUID, version: int, request: Request):
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         latest = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
@@ -2173,8 +2196,11 @@ def get_finding_source(
 
 
 @app.post("/api/workflows/run")
-def run_workflow(graph: WorkflowGraph):
+def run_workflow(graph: WorkflowGraph, request: Request):
     try:
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+            _validate_graph_workspace_sources(session, workspace.id, graph)
         return execute_graph(graph, registry)
     except WorkflowExecutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
