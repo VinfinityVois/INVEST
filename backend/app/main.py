@@ -192,6 +192,8 @@ def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: Workfl
         if node.type != "source.upload":
             continue
         source_path = node.config.get("path")
+        if not isinstance(source_path, str) or not source_path.strip():
+            continue
         project_id = session.scalar(
             select(Project.id).where(
                 Project.workspace_id == workspace_id,
@@ -2425,7 +2427,7 @@ def get_builtin_preset(preset_id: str):
 
 
 @app.post("/api/presets/{preset_id}/clone", status_code=201)
-def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest):
+def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest, request: Request):
     try:
         preset = load_preset(preset_id)
     except PresetError as exc:
@@ -2443,7 +2445,9 @@ def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest):
         raise HTTPException(status_code=422, detail=validation.model_dump())
 
     with SessionLocal() as session:
-        workflow = Workflow(name=base_name[:200], description=f"Created from built-in preset: {preset['id']}")
+        workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, description=f"Created from built-in preset: {preset['id']}")
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
@@ -2517,7 +2521,7 @@ def publish_workflow_template(payload: TemplatePublishRequest, x_template_publis
 
 
 @app.post("/api/templates/{template_id}/clone", status_code=201)
-def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest):
+def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest, request: Request):
     with SessionLocal() as session:
         template = session.get(WorkflowTemplate, template_id)
         if template is None or not template.published:
@@ -2530,7 +2534,9 @@ def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest):
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
-        workflow = Workflow(name=base_name[:200], description=f"Cloned from template: {template.name}")
+        workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, description=f"Cloned from template: {template.name}")
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
