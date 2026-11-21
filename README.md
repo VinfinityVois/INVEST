@@ -300,3 +300,19 @@ The `scan.sca` node configuration is schema-driven:
 - `use_lockfile` controls Gradle lockfile version resolution and transitive lockfile entries.
 
 Pack metadata and inheritance are validated at API startup. Pack content is treated as data: no rule file, build script, Maven or Gradle task is executed. SCA findings retain their ecosystem identifier, and Spring Boot starter classification is attached only to an advisory finding for a matching starter coordinate.
+
+
+## Built-in workflow presets
+
+The repository ships a versioned preset catalog in `presets/manifest.json`. The first built-in entry is `pr-gate`:
+
+- manual trigger → allowlisted Git source;
+- in-house Secrets scanner, SCA (Maven/Gradle) and Kotlin/Spring SAST;
+- merged findings → exactly one deterministic CI Security Gate using `bank-strict`.
+
+API:
+- `GET /api/presets` lists built-in presets;
+- `GET /api/presets/{preset_id}` returns a sanitized graph preview;
+- `POST /api/presets/{preset_id}/clone` creates a new saved workflow with fresh node/edge IDs and does not execute it.
+
+In the editor, open **Каталог workflow** → **Создать workflow** on **PR Gate**. Then replace the example Git URL with a repository URL already permitted by `ALLOWED_TARGETS`, save the workflow, and run it. The resulting graph contains exactly one `ci.gate` node and can be used with the protected `/api/ci/workflows/{workflow_id}/runs` endpoint after `CI_TRIGGER_TOKEN` is configured. Cloning never starts a scan automatically.
