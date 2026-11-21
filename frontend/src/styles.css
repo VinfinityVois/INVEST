@@ -1233,3 +1233,9 @@
  .auth-footer{min-height:48px;font-size:7px}
 }
 @media(max-width:390px){.auth-top-status{font-size:0;gap:0}.auth-top-status i{width:8px;height:8px}.auth-card{padding-right:17px;padding-left:17px}.auth-card-bottom{margin-right:-17px;margin-left:-17px}}
+
+/* Remembered login and persistent account actions */
+.auth-form .auth-remember-login{display:flex;align-items:center;gap:9px;margin:2px 0 0!important;color:#9bb1c5!important;font:10px Inter,system-ui,sans-serif!important;letter-spacing:0!important;cursor:pointer}
+.auth-form .auth-remember-login input{width:15px;height:15px;min-height:15px;flex:0 0 15px;margin:0;padding:0;accent-color:#36c995;cursor:pointer}
+.account-logout-trigger{border-color:rgba(248,113,113,.32)!important;color:#ffaaa5!important;background:rgba(248,113,113,.07)!important}
+.account-logout-trigger:hover{border-color:rgba(248,113,113,.55)!important;background:rgba(248,113,113,.13)!important}
