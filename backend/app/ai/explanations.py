@@ -24,7 +24,7 @@ class ExplanationGatewayError(RuntimeError):
 def _endpoint(base_url: str) -> str:
     base = base_url.strip().rstrip("/")
     parsed = urlparse(base)
-    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "host.docker.internal"}:
         raise ExplanationGatewayError("LLM_BASE_URL должен использовать HTTPS (для localhost разрешён HTTP).")
     if not parsed.netloc or not parsed.hostname:
         raise ExplanationGatewayError("LLM_BASE_URL имеет неверный формат.")
