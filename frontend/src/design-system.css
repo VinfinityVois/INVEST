@@ -2509,3 +2509,11 @@
   .workspace-manager-backdrop { padding:8px; }
   .workspace-manager { max-height:94vh; }
 }
+
+.workspace-token-scopes { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px; }
+.workspace-token-scopes label { display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:9px; }
+.workspace-token-scopes input { width:13px;height:13px;min-height:0;margin:0;accent-color:var(--accent-600); }
+.workspace-issued-token { display:grid;gap:7px;padding:9px;border:1px solid var(--accent-500);border-radius:5px;background:var(--soft-accent); }
+.workspace-issued-token b { color:var(--accent-text);font-size:10px; }
+.workspace-issued-token code { overflow-wrap:anywhere;color:var(--text);font:10px "JetBrains Mono",monospace; }
+.workspace-issued-token button { justify-self:start; }
