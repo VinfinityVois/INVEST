@@ -287,11 +287,28 @@ export default function App() {
   }, [workflowId]);
 
   useEffect(() => {
-    if (!lastRunId) return;
+    if (!lastRunId) {
+      setFindings([]);
+      return;
+    }
     let active = true;
-    fetch("/api/runs/" + lastRunId + "/telemetry")
-      .then(response => response.ok ? response.json() : null)
-      .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
+    Promise.all([
+      fetch("/api/runs/" + lastRunId + "/findings"),
+      fetch("/api/runs/" + lastRunId + "/telemetry"),
+    ])
+      .then(async ([findingResponse, telemetryResponse]) => {
+        if (!findingResponse.ok || !telemetryResponse.ok) {
+          throw new Error("Не удалось восстановить результаты последнего запуска");
+        }
+        const [rows, data] = await Promise.all([
+          findingResponse.json(),
+          telemetryResponse.json(),
+        ]);
+        if (active) {
+          setFindings(rows as Finding[]);
+          setTelemetry(data as Telemetry);
+        }
+      })
       .catch(() => undefined);
     return () => { active = false; };
   }, [lastRunId]);
