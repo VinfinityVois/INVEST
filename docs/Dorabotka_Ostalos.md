@@ -36,6 +36,10 @@
 
 ## Этап 1 — оставшиеся функциональные задачи
 
+### 1.2 Workspace model
+
+Целевая модель зафиксирована в [ADR-0001](./adr/0001-workspace-tenancy-model.md): Organization → Workspace → Project; личная организация для каждого пользователя; membership и отдельные роли; активный workspace хранится в server-side session. Это пока архитектурное решение, не готовая изоляция. Текущие API ещё требуют полного перехода на workspace-scoped queries и IDOR/BOLA regression tests.
+
 1. **Regex-условие.** Сейчас `logic.compare` покрывает equals/contains и числовые сравнения, но отдельного regex-оператора/ноды в реестре нет. Добавлять только если это требуется точной формулировкой задания.
 2. **SCA freshness и coverage.** Maven advisory snapshot — 41 запись на 2026-11-16, не полный live feed; Spring Boot managed-version catalog ограничен выбранными версиями. Нужны безопасное обновление из upstream, проверка происхождения/хэша, diff-review и регрессионные benchmark-gates.
 3. **SAST coverage.** Текущий Kotlin/Spring анализ остаётся ограниченным лексическим/эвристическим анализом с ограниченным межфайловым taint propagation; полноценные Kotlin AST/PSI, type resolution, call graph и flow-sensitive анализ отсутствуют. Не выдавать его за эквивалент промышленного компиляционного анализатора.
