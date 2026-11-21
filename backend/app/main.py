@@ -140,7 +140,8 @@ from app.security.dashboard_api import router as dashboard_router
 from app.security.findings_api import router as findings_router
 from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
-from app.security.file_versions import sha256_text, version_matches
+from app.security.file_versions import sha256_text, version_matches, project_file_lock
+from filelock import Timeout as FileLockTimeout
 
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -897,51 +898,61 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
         if _project_has_active_run(session, project):
             raise HTTPException(status_code=409, detail="Проект используется активным workflow; редактирование временно заблокировано.")
         root = _project_root(project)
-        candidate = root.joinpath(*relative.parts)
-        current = candidate
-        while current != root:
-            if current.is_symlink():
-                raise HTTPException(status_code=404, detail="Project file is unavailable")
-            current = current.parent
         try:
-            resolved = candidate.resolve(strict=True)
-            if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
-                raise OSError("File is unavailable or too large")
-            original = resolved.read_text(encoding="utf-8")
-            if not _project_content_is_safe(original):
-                raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
-            current_sha256 = sha256_text(original)
-            if not version_matches(original, payload.expected_sha256):
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "PROJECT_FILE_VERSION_CONFLICT",
-                        "message": "Файл изменился после открытия. Обнови его перед сохранением, чтобы не затереть чужие изменения.",
-                        "current_sha256": current_sha256,
-                    },
-                )
-            temp_name = None
-            try:
-                with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
-                    temp_name = temporary.name
-                    temporary.write(payload.content)
-                    temporary.flush()
-                    os.fsync(temporary.fileno())
-                os.replace(temp_name, resolved)
-            finally:
-                if temp_name and os.path.exists(temp_name):
-                    os.unlink(temp_name)
+            # The OS-backed lock serializes writers across API/worker processes sharing this workspace.
+            with project_file_lock(settings.workspace_root, project_id, relative):
+                candidate = root.joinpath(*relative.parts)
+                current = candidate
+                while current != root:
+                    if current.is_symlink():
+                        raise HTTPException(status_code=404, detail="Project file is unavailable")
+                    current = current.parent
+                resolved = candidate.resolve(strict=True)
+                if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                    raise OSError("File is unavailable or too large")
+                original = resolved.read_text(encoding="utf-8")
+                if not _project_content_is_safe(original):
+                    raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
+                current_sha256 = sha256_text(original)
+                if not version_matches(original, payload.expected_sha256):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PROJECT_FILE_VERSION_CONFLICT",
+                            "message": "Файл изменился после открытия. Обнови его перед сохранением, чтобы не затереть чужие изменения.",
+                            "current_sha256": current_sha256,
+                        },
+                    )
+                temp_name = None
+                try:
+                    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
+                        temp_name = temporary.name
+                        temporary.write(payload.content)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.replace(temp_name, resolved)
+                finally:
+                    if temp_name and os.path.exists(temp_name):
+                        os.unlink(temp_name)
+                session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
+                    "path": relative.as_posix(),
+                    "bytes": len(payload.content.encode("utf-8")),
+                    "previous_sha256": current_sha256,
+                    "new_sha256": sha256_text(payload.content),
+                }))
+                session.commit()
+        except FileLockTimeout as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_FILE_UPDATE_IN_PROGRESS",
+                    "message": "Этот файл уже сохраняется в другом запросе. Повтори попытку через несколько секунд.",
+                },
+            ) from exc
         except HTTPException:
             raise
         except (OSError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=400, detail="Не удалось сохранить файл. Проверь размер и кодировку UTF-8.") from exc
-        session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
-            "path": relative.as_posix(),
-            "bytes": len(payload.content.encode("utf-8")),
-            "previous_sha256": current_sha256,
-            "new_sha256": sha256_text(payload.content),
-        }))
-        session.commit()
     return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
 
 
