@@ -781,3 +781,16 @@ def test_scanner_config_can_include_tests_and_zero_confidence_threshold():
     )
 
     assert filtered == findings
+
+
+def test_sast_rule_pack_filters_findings_to_selected_rule_ids():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"rule_id": "kotlin.jdbc.sql-injection", "severity": "LOW", "confidence": 0.96},
+        {"rule_id": "kotlin.spring.idor.unscoped-object-read", "severity": "LOW", "confidence": 0.84},
+    ]
+    filtered = _filter_scanner_findings(findings, {"rule_packs": ["sast-injection"]}, "sast")
+    assert [item["rule_id"] for item in filtered] == ["kotlin.jdbc.sql-injection"]
+    assert filtered[0]["severity"] == "HIGH"
+    assert filtered[0]["cwe"] == ["CWE-89"]
