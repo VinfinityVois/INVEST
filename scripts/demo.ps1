@@ -24,6 +24,7 @@ Write-Host "Run queued: $runId" -ForegroundColor Cyan
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $run = $null
+$result = $null
 do {
     Start-Sleep -Seconds 3
     $run = Invoke-RestMethod -Method Get -Uri "$ApiBaseUrl/api/runs/$runId"
@@ -60,6 +61,18 @@ if ($run.result) {
     }
     Write-Host "Webhook delivered:" -ForegroundColor Green
     $notify | ConvertTo-Json -Depth 10
+    foreach ($scannerId in @("secrets", "sca", "sast")) {
+        $scannerOutput = $result.outputs.$scannerId
+        if (-not $scannerOutput -or $scannerOutput.status -ne "completed") {
+            Write-Error "Scanner '$scannerId' did not complete successfully. Run ID: $runId"
+            exit 1
+        }
+    }
+    $aiOutput = $result.outputs.ai
+    if (-not $aiOutput -or $aiOutput.status -ne "completed") {
+        Write-Error "AI explanation did not complete. Check LLM_BASE_URL, LLM_MODEL and LLM_API_KEY. Run ID: $runId"
+        exit 1
+    }
 }
 
 Write-Host "Run details: $ApiBaseUrl/api/runs/$runId" -ForegroundColor Green
