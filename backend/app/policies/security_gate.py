@@ -44,6 +44,8 @@ def evaluate_security_gate(
         state_record = states.get(fingerprint, {})
         lifecycle_state = state_record.get("state")
         expires_at = state_record.get("expires_at")
+        if policy.get("fail_on_unfixed") is True and lifecycle_state == "fixed":
+            continue
         is_active_exception = lifecycle_state in {"accepted_risk", "false_positive"}
         if is_active_exception and expires_at:
             try:
