@@ -56,6 +56,20 @@ class RulePackRegistry:
             analyzer = raw.get("analyzer")
             if analyzer not in {"secrets", "sca", "sast", "policy"}:
                 raise RulePackError(f"Unsupported analyzer for {pack_id}")
+            extends = raw.get("extends", [])
+            if not isinstance(extends, list) or not all(isinstance(item, str) for item in extends):
+                raise RulePackError(f"Invalid extends list in {pack_id}")
+            globs = raw.get("path_globs", [])
+            if not isinstance(globs, list) or not all(isinstance(item, str) and len(item) <= 300 for item in globs):
+                raise RulePackError(f"Invalid path_globs in {pack_id}")
+            if analyzer == "policy":
+                allowed = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
+                for key in ("block_on", "warn_on"):
+                    values = raw.get(key, [])
+                    if not isinstance(values, list) or not all(isinstance(item, str) and item.upper() in allowed for item in values):
+                        raise RulePackError(f"Invalid {key} severity list in {pack_id}")
+                if "fail_on_unfixed" in raw and not isinstance(raw["fail_on_unfixed"], bool):
+                    raise RulePackError(f"Invalid fail_on_unfixed flag in {pack_id}")
             packs[pack_id] = raw
             paths[pack_id] = path
         self._packs, self._paths = packs, paths
@@ -87,8 +101,14 @@ class RulePackRegistry:
             if not isinstance(entries, list):
                 raise RulePackError(f"{pack_id}.{key} must be a list")
             for item in entries:
-                if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                if not isinstance(item, dict) or not isinstance(item.get("id"), str) or len(item["id"]) > 160:
                     raise RulePackError(f"Invalid {key} entry in {pack_id}")
+                severity = item.get("severity")
+                if severity is not None and str(severity).upper() not in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}:
+                    raise RulePackError(f"Invalid severity for {pack_id}:{item['id']}")
+                confidence = item.get("confidence")
+                if confidence is not None and (not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1):
+                    raise RulePackError(f"Invalid confidence for {pack_id}:{item['id']}")
                 target[item["id"]] = item
             if len(target) > _MAX_RULES_PER_PACK:
                 raise RulePackError(f"Too many rules in {pack_id}")
