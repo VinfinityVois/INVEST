@@ -19,7 +19,7 @@
 Порядок внутри этапа:
 
 1. **Users / Accounts / Access** — UI и backend управления пользователями, профиль, смена пароля, сессии, роли и разрешения, политика блокировки/удаления.
-2. **Organizations / Workspace / Projects** — утвердить модель личного пространства и организации, членство, приглашения, workspace roles, переключение и изоляцию данных.
+2. **Organizations / Workspace / Projects** — реализовать принятую модель [ADR-0001](./adr/0001-workspace-tenancy-model.md): личная organization, team organization, несколько workspaces, membership/roles, переключение и изоляция данных.
 3. **Findings lifecycle** — статусы, назначение ответственного, комментарии, история, массовые действия, обоснование Accepted Risk/False Positive, fingerprints и сравнение запусков.
 4. **Dashboard / Analytics** — метрики на реальных данных, фильтры, drill-down, корректные агрегаты и пустые состояния.
 5. **Reports / Export** — проверить JSON/HTML, затем CSV и SARIF; PDF/XLSX после фиксации требований к форматам.
