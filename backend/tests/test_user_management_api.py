@@ -467,3 +467,53 @@ def test_workspace_api_tokens_are_shown_once_scoped_and_revocable(user_client):
     )
     assert revoked.status_code == 200
     assert revoked.json()["revoked"] is True
+
+
+def test_workspace_token_is_revoked_when_its_owner_loses_membership(user_client):
+    client, TestingSession, member_id = user_client
+    assert login(client).status_code == 200
+    organization = client.post(
+        "/api/organizations",
+        json={"name": "Token revocation team"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    organization_id = organization.json()["id"]
+    workspace_id = organization.json()["default_workspace_id"]
+    added = client.post(
+        f"/api/organizations/{organization_id}/members",
+        json={
+            "email": "member@example.test",
+            "workspace_id": workspace_id,
+            "workspace_role": "admin",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert added.status_code == 201
+
+    assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    created = client.post(
+        f"/api/workspaces/{workspace_id}/tokens",
+        json={"name": "Member CI", "scopes": ["workflow:run"]},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert created.status_code == 201
+    raw_token = created.json()["token"]
+
+    with TestingSession.begin() as db:
+        workflow = Workflow(name="Member-owned CI workflow", workspace_id=uuid.UUID(workspace_id))
+        db.add(workflow)
+        db.flush()
+        workflow_id = workflow.id
+
+    assert login(client).status_code == 200
+    removed = client.delete(
+        f"/api/workspaces/{workspace_id}/members/{member_id}",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert removed.status_code == 200
+
+    rejected = client.post(
+        f"/api/ci/workflows/{workflow_id}/runs",
+        headers={"X-CI-Token": raw_token},
+    )
+    assert rejected.status_code == 401
