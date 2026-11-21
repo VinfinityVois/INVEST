@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import Organization, OrganizationMembership, Project, User, UserSession, Workflow, WorkflowRun, Workspace, WorkspaceMembership
+from app.models import ApiToken, Organization, OrganizationMembership, Project, User, UserSession, Workflow, WorkflowRun, Workspace, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
@@ -134,6 +134,17 @@ def test_admin_can_update_user_and_deactivation_revokes_sessions(user_client):
     with TestingSession.begin() as db:
         token, _ = create_session(db, member_id)
 
+    assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    member_workspace = client.get("/api/workspaces/active").json()["id"]
+    issued = client.post(
+        f"/api/workspaces/{member_workspace}/tokens",
+        json={"name": "Member token", "scopes": ["run:read"]},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert issued.status_code == 201
+    raw_api_token = issued.json()["token"]
+    assert login(client).status_code == 200
+
     response = client.patch(
         f"/api/admin/users/{member_id}",
         json={"is_active": False},
@@ -147,6 +158,11 @@ def test_admin_can_update_user_and_deactivation_revokes_sessions(user_client):
         session = db.scalar(select(UserSession).where(UserSession.token_hash.is_not(None), UserSession.user_id == member_id))
         assert session is not None
         assert session.revoked_at is not None
+        api_token = db.scalar(
+            select(ApiToken).where(ApiToken.token_hash == tokens_api.token_digest(raw_api_token))
+        )
+        assert api_token is not None
+        assert api_token.revoked_at is not None
 
 
 def test_cannot_remove_last_active_administrator(user_client):
