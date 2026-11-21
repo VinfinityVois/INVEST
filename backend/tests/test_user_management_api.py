@@ -233,7 +233,7 @@ def test_admin_update_rejects_null_fields(user_client, field):
 
 
 def test_workspace_membership_isolation_and_switching(user_client):
-    client, _, member_id = user_client
+    client, TestingSession, member_id = user_client
     assert login(client).status_code == 200
 
     with TestingSession.begin() as db:
