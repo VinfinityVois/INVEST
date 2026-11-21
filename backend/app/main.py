@@ -988,7 +988,6 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
         _workflow_in_active_workspace(session, request, workflow_id, write=True)
-        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
         workflow = _workflow_lock
         if workflow is None:
@@ -1057,7 +1056,6 @@ def get_workflow_schedule(workflow_id: UUID, request: Request):
 @app.put("/api/workflows/{workflow_id}/schedule")
 def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate, request: Request):
     with SessionLocal() as session:
-        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         _workflow_in_active_workspace(session, request, workflow_id, write=True)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
@@ -1183,7 +1181,7 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
     """Queue a saved workflow for CI; requires a dedicated secret and an explicit Security Gate."""
     _require_ci_token(x_ci_token)
     with SessionLocal() as session:
-        workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        workflow = session.get(Workflow, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -1304,7 +1302,7 @@ def execute_selected_workflow(workflow_id: UUID, request: Request, payload: Sele
 @app.get("/api/workflows/{workflow_id}/versions")
 def list_workflow_versions(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         versions = session.scalars(
@@ -1350,6 +1348,7 @@ def compare_workflow_versions(
 @app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
 def restore_workflow_version(workflow_id: UUID, version: int, request: Request):
     with SessionLocal() as session:
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -2184,6 +2183,7 @@ def run_workflow(graph: WorkflowGraph):
 @app.get("/api/workflows/{workflow_id}/finding-states")
 def list_finding_states(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -2248,6 +2248,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
         if expiry <= datetime.now(timezone.utc):
             raise HTTPException(status_code=422, detail="Срок принятого риска должен быть в будущем.")
     with SessionLocal() as session:
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
         workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
