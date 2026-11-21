@@ -514,7 +514,7 @@ def transfer_organization_ownership(organization_id: UUID, payload: OwnershipTra
             raise HTTPException(status_code=404, detail="New owner must already be an organization member.")
         if target.user_id == actor.id:
             raise HTTPException(status_code=422, detail="Choose another organization member.")
-        current.role = "member"
+        current.role = "admin"
         db.flush()
         target.role = "owner"
         _audit(db, actor, "organization.ownership_transferred", "organization", organization_id, {
