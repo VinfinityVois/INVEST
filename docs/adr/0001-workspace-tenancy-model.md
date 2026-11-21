@@ -1,6 +1,6 @@
 # ADR-0001 — Organization, Workspace and project ownership
 
-- **Status:** Accepted as the target model for implementation planning
+- **Status:** Accepted; base schema, session context and scoped APIs implemented, remaining lifecycle/security work tracked in the backlog
 - **Date:** 2026-11-21
 - **Scope:** Stage 1.2 (Organizations / Workspace / Projects)
 
