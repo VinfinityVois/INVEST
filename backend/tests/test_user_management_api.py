@@ -411,3 +411,56 @@ def test_workspace_membership_role_changes_removal_and_owner_transfer(user_clien
         headers={"Origin": "http://localhost:5173"},
     )
     assert cannot_remove_owner.status_code == 409
+
+
+def test_workspace_api_tokens_are_shown_once_scoped_and_revocable(user_client):
+    client, TestingSession, member_id = user_client
+    assert login(client).status_code == 200
+    active = client.get("/api/workspaces/active")
+    assert active.status_code == 200
+    workspace_id = active.json()["id"]
+
+    with TestingSession.begin() as db:
+        member_workspace = db.scalar(
+            select(Workspace).join(WorkspaceMembership).where(
+                WorkspaceMembership.user_id == member_id
+            )
+        )
+        foreign_workflow = Workflow(
+            name="Foreign CI workflow",
+            workspace_id=member_workspace.id,
+        )
+        db.add(foreign_workflow)
+        db.flush()
+        foreign_workflow_id = foreign_workflow.id
+
+    created = client.post(
+        f"/api/workspaces/{workspace_id}/tokens",
+        json={
+            "name": "GitHub Actions",
+            "scopes": ["workflow:run", "run:read"],
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert created.status_code == 201
+    token = created.json()["token"]
+    assert token.startswith("inv_")
+
+    listed = client.get(f"/api/workspaces/{workspace_id}/tokens")
+    assert listed.status_code == 200
+    assert len(listed.json()["items"]) == 1
+    assert "token" not in listed.json()["items"][0]
+    token_id = listed.json()["items"][0]["id"]
+
+    cross_workspace = client.post(
+        f"/api/ci/workflows/{foreign_workflow_id}/runs",
+        headers={"X-CI-Token": token},
+    )
+    assert cross_workspace.status_code == 401
+
+    revoked = client.delete(
+        f"/api/workspaces/{workspace_id}/tokens/{token_id}",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["revoked"] is True
