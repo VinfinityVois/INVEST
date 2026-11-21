@@ -1,7 +1,7 @@
 # INVEST — актуальный аудит исходников и roadmap
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `c63c6a60a394df3c5af9ed7acd5e116bd4ca8904`  
+**Срез исходников:** `8348fc5cad54f64d8bd3309876e179ae65457da9`  
 **Дата:** 2026-11-21  
 **Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
 
@@ -35,6 +35,9 @@
 | Rule packs/presets/templates | YAML inheritance, built-in preset, sanitized template publish/clone | Реализовано |
 | CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Реализовано; external consumer repository setup unverified |
 | Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для single-operator |
+| User management | Admin-only create/list/search/filter/pagination/update email/role/status; soft deactivation revokes sessions | Реализовано частично; only admin/user, no deletion/recovery |
+| Self-service account | Password change after current-password verification; session list, revoke one/others | Реализовано в API/UI; требует runtime UX check |
+| User audit events | user.created / user.updated / user.password_changed with actor_user_id | Частично; auth and all security/admin events not fully audited |
 | Authorization / tenancy | No Organization/Workspace/Membership/Role ownership model | Не реализовано |
 | Finding lifecycle | open, accepted_risk, fixed, false_positive; reason, expiry, history | Частично |
 | Audit log | Selected events persisted; no actor identity/full query/export/tamper evidence | Частично |
@@ -56,9 +59,10 @@ The frontend now uses the authenticated session. Demo automation was updated to 
 Remaining security boundary:
 1. no tenant isolation or object-level access checks;
 2. `is_admin` exists but is not a complete RBAC system;
-3. no self-service account lifecycle, password reset, MFA or all-session revocation UI;
+3. basic admin user management and self-service session/password UI now exist; password recovery/reset, MFA and data deletion policy remain open;
 4. selected audit events do not yet form a complete actor-aware trail;
 5. operational key rotation, backup/restore and reverse-proxy/TLS deployment need review.
+6. current role model is only the boolean `is_admin` mapped to admin/user; it is not workspace-scoped RBAC. Project/workflow/run/finding ownership and object-level access checks remain absent.
 
 Do not expose this branch as a multi-user production service until tenant ownership and backend authorization are implemented and tested against IDOR/cross-tenant cases.
 
@@ -82,6 +86,8 @@ Do not expose this branch as a multi-user production service until tenant owners
 
 ## 4. Runtime verification still required
 
+The new account-management screens and APIs are covered by CI tests/build, but have not yet been exercised in the user's local Docker/browser session. Verify admin-only access, user create/update/deactivate, session revocation and password change against a migrated database.
+
 Source code and CI cannot prove these against the user's current environment:
 - clean Docker Compose startup and health of API, DB, frontend and worker;
 - Alembic upgrade from empty DB and from the user's existing DB;
@@ -99,7 +105,7 @@ The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO
 | Stage | Current assessment | Next action |
 |---|---|---|
 | P0 Audit/stabilization | Source review refreshed; local runtime still open | E2E + migrations + worker recovery |
-| P1 Authentication | Single-operator auth baseline implemented | Account lifecycle, session controls, security review |
+| P1 Users / authentication | Admin user UI/API, basic status/role management, password change and session controls implemented | Password recovery, deletion policy, role matrix, tenancy and runtime UX tests |
 | P2 Organizations/RBAC | Not implemented | Tenant schema, object-level authorization, IDOR tests |
 | P3 Dashboard | Workflow telemetry exists; organization aggregate dashboard absent | Build after tenancy |
 | P4 Analytics/reports | Run trends, comparison, JSON/HTML exist | CSV/SARIF, aggregate metrics |
