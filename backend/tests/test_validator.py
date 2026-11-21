@@ -79,3 +79,20 @@ def test_workflow_graph_rejects_oversized_node_configuration():
             nodes=[{"id": "source", "type": "source.git", "config": {f"option-{index}": index for index in range(101)}}],
             edges=[],
         )
+
+
+def test_duplicate_edge_ids_are_rejected():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.git"},
+            {"id": "secrets", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "duplicate", "source": "trigger", "target": "source"},
+            {"id": "duplicate", "source": "source", "target": "secrets"},
+        ],
+    )
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "duplicate_edge_id" for issue in result.issues)
