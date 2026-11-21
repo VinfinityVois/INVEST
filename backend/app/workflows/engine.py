@@ -589,7 +589,37 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 pass
 
         if incoming_edge_handles[node_id] and not active_edge_handles:
-            output = {"status": "skipped"}
+            upstream_outputs = [
+                outputs.get(parent_id)
+                for parent_id, _ in incoming_edge_handles[node_id]
+            ]
+            blocking_parent = next((
+                parent for parent in upstream_outputs
+                if isinstance(parent, dict)
+                and parent.get("status") in {
+                    "failed", "configuration_required", "blocked", "cancelled"
+                }
+            ), None)
+            if blocking_parent is not None:
+                parent_status = blocking_parent.get("status")
+                reason_code = (
+                    "UPSTREAM_CONFIGURATION_REQUIRED"
+                    if parent_status == "configuration_required"
+                    else "UPSTREAM_EXECUTION_FAILED"
+                    if parent_status == "failed"
+                    else "UPSTREAM_STEP_BLOCKED"
+                )
+                output = {
+                    "status": "blocked",
+                    "message": (
+                        "Блок заблокирован: предыдущий источник или этап "
+                        "не завершился успешно."
+                    ),
+                    "reason_code": reason_code,
+                }
+            else:
+                # A successful conditional node selected another output handle.
+                output = {"status": "skipped"}
         elif node.type in {"trigger.manual", "trigger.schedule"}:
             output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":

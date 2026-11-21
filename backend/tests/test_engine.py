@@ -41,6 +41,29 @@ def test_workspace_source_runs_secrets_scanner_and_merges_findings(tmp_path, mon
     assert "VeryStrongPasswordValue123" not in str(result)
 
 
+
+def test_downstream_is_blocked_when_upstream_source_is_unconfigured():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["outputs"]["source"]["status"] == "configuration_required"
+    assert result["outputs"]["scan"]["status"] == "blocked"
+    scan_trace = next(item for item in result["trace"] if item["node_id"] == "scan")
+    assert scan_trace["diagnostic_level"] == "blocked"
+    assert scan_trace["reason_code"] == "UPSTREAM_CONFIGURATION_REQUIRED"
+
+
 def test_unconfigured_source_is_reported_as_partial_with_actionable_status():
     graph = WorkflowGraph(
         nodes=[

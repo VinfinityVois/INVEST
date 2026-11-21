@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None
+    llm_timeout_seconds: float = 90.0
+    llm_max_tokens: int = 1400
     notify_webhook_allowed_hosts: str = "webhook.site"
     webhook_allowed_hosts: str | None = None
     ci_trigger_token: str | None = None
