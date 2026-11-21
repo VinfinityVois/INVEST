@@ -1,0 +1,7 @@
+[versions]
+commonsText = "1.9"
+jsonVersion = { strictly = "20230227" }
+[libraries]
+commons-text = { module = "org.apache.commons:commons-text", version.ref = "commonsText" }
+json-lib = { group = "org.json", name = "json", version = { ref = "jsonVersion" } }
+unversioned-lib = { module = "org.apache.commons:commons-lang3" }

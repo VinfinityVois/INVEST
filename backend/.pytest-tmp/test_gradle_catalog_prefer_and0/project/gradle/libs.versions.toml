@@ -1,0 +1,6 @@
+[versions]
+preferred = { prefer = "3.17.0" }
+bounded = { strictly = "[3.0, 4.0)" }
+[libraries]
+preferred-commons = { module = "org.apache.commons:commons-lang3", version.ref = "preferred" }
+bounded-commons = { module = "org.apache.commons:commons-lang3", version.ref = "bounded" }
