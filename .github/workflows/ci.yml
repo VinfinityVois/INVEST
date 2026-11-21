@@ -3,6 +3,10 @@ on:
   push:
     branches: ["main", "feat/**"]
   pull_request:
+
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -13,6 +17,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r backend/requirements.txt pytest
       - run: cd backend && pytest -q
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -21,8 +26,10 @@ jobs:
         with:
           node-version: "22"
       - run: cd frontend && npm install && npm run build
+
   benchmark:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -34,10 +41,34 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r backend/requirements.txt
-      - run: python eval/run_secrets_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
-      - run: python eval/run_sca_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
-      - run: python eval/run_sast_benchmark.py --repo-root training/training-project --ground-truth training/ground-truth/training-findings.json
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run Secrets benchmark
+        run: >-
+          python eval/run_secrets_benchmark.py
+          --repo-root training/training-project
+          --ground-truth training/ground-truth/training-findings.json
+          --output eval/reports/training-secrets.json
+      - name: Run SCA benchmark
+        run: >-
+          python eval/run_sca_benchmark.py
+          --repo-root training/training-project
+          --ground-truth training/ground-truth/training-findings.json
+          --output eval/reports/training-sca.json
+      - name: Run SAST benchmark
+        run: >-
+          python eval/run_sast_benchmark.py
+          --repo-root training/training-project
+          --ground-truth training/ground-truth/training-findings.json
+          --output eval/reports/training-sast.json
+      - name: Upload benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: invest-benchmark-reports
+          path: eval/reports/*.json
+          if-no-files-found: error
+          retention-days: 14
 
   container:
     runs-on: ubuntu-latest
