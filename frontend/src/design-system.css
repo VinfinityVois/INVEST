@@ -1621,3 +1621,195 @@
 @media (prefers-reduced-motion:reduce) {
   .shell[data-theme="light"] * { transition-duration:.01ms!important; }
 }
+
+
+/* --------------------------------------------------------------------------
+   READING LAYOUT · keep related explanation content side-by-side on desktop
+   -------------------------------------------------------------------------- */
+.shell[data-theme="light"] .finding-detail {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:10px;
+  padding:14px;
+  background:#fbfcfd;
+}
+.shell[data-theme="light"] .finding-detail-heading {
+  grid-column:1/-1;
+  margin:0;
+  padding-bottom:9px;
+  border-bottom:1px solid #e3e9ed;
+}
+.shell[data-theme="light"] .finding-detail > .finding-location,
+.shell[data-theme="light"] .finding-detail > .finding-identifiers,
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation,
+.shell[data-theme="light"] .finding-detail > .ai-source-evidence,
+.shell[data-theme="light"] .finding-detail > .ai-no-evidence,
+.shell[data-theme="light"] .finding-detail > .ai-confidence-note {
+  grid-column:1/-1;
+}
+.shell[data-theme="light"] .finding-detail > .finding-explanation,
+.shell[data-theme="light"] .finding-detail > .finding-remediation {
+  min-width:0;
+  margin:0;
+  padding:11px 12px;
+  border:1px solid #dce8e0;
+  border-left:3px solid #6eae88;
+  border-radius:8px;
+  background:#f5faf7;
+}
+.shell[data-theme="light"] .finding-detail > .finding-remediation {
+  border-color:#dce5ef;
+  border-left-color:#7b9fc5;
+  background:#f5f8fc;
+}
+.shell[data-theme="light"] .finding-detail > .finding-explanation > b,
+.shell[data-theme="light"] .finding-detail > .finding-remediation > b {
+  display:block;
+  margin-bottom:7px;
+  font-size:9px;
+  letter-spacing:.07em;
+}
+.shell[data-theme="light"] .finding-detail > .finding-explanation p,
+.shell[data-theme="light"] .finding-detail > .finding-remediation p {
+  margin:0;
+  color:#425563;
+  font-size:12px;
+  line-height:1.55;
+  overflow-wrap:anywhere;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px 12px;
+  margin:0;
+  padding:12px;
+  border:1px solid #e2d8f1;
+  border-left:3px solid #9a80c0;
+  border-radius:8px;
+  background:#faf8fd;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > div:first-child {
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding-bottom:8px;
+  border-bottom:1px solid #e9e2f2;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > p {
+  min-width:0;
+  margin:0;
+  color:#4c4260;
+  font-size:11px;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > p b {
+  display:block;
+  margin-bottom:4px;
+  color:#594477;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence,
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > small {
+  grid-column:1/-1;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence > div {
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation code {
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.shell[data-theme="light"] .layout {
+  grid-template-columns:minmax(230px,260px) minmax(0,1fr) minmax(370px,410px);
+  column-gap:16px;
+}
+.shell[data-theme="light"] .layout.left-collapsed {
+  grid-template-columns:56px minmax(0,1fr) minmax(370px,410px);
+}
+.shell[data-theme="light"] .layout.right-collapsed {
+  grid-template-columns:minmax(230px,260px) minmax(0,1fr) 56px;
+}
+.shell[data-theme="light"] .layout.left-collapsed.right-collapsed {
+  grid-template-columns:56px minmax(0,1fr) 56px;
+}
+.shell[data-theme="light"] .panel {
+  padding:16px;
+  border-radius:12px;
+  box-shadow:0 5px 20px rgba(31,51,67,.045);
+}
+.shell[data-theme="light"] .panel-heading { gap:10px; }
+.shell[data-theme="light"] .panel-intro { max-width:62ch;line-height:1.65; }
+.shell[data-theme="light"] .inspector-tab-panel > section,
+.shell[data-theme="light"] .inspector-tab-panel > .telemetry-card,
+.shell[data-theme="light"] .inspector-tab-panel > .workflow-version-card {
+  margin-bottom:12px;
+}
+.shell[data-theme="light"] .telemetry-metrics {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.shell[data-theme="light"] .telemetry-metrics > div {
+  min-width:0;
+  padding:10px 8px;
+  border:1px solid #e0e7ec;
+  border-radius:8px;
+  background:#f7f9fa;
+  text-align:center;
+}
+.shell[data-theme="light"] .telemetry-metrics > div strong {
+  display:block;
+  color:#233b30;
+  font-size:18px;
+  line-height:1.2;
+}
+.shell[data-theme="light"] .telemetry-metrics > div small {
+  display:block;
+  margin-top:5px;
+  color:#71818d;
+  font-size:9px;
+  letter-spacing:.04em;
+}
+.shell[data-theme="light"] .finding-lifecycle-summary {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:7px;
+  padding:9px;
+  border-radius:8px;
+  background:#f7f9fa;
+}
+@media (max-width:1280px) {
+  .shell[data-theme="light"] .layout,
+  .shell[data-theme="light"] .layout.left-collapsed,
+  .shell[data-theme="light"] .layout.right-collapsed {
+    grid-template-columns:minmax(210px,240px) minmax(0,1fr) minmax(320px,350px);
+    column-gap:10px;
+  }
+  .shell[data-theme="light"] .layout.left-collapsed.right-collapsed {
+    grid-template-columns:56px minmax(0,1fr) 56px;
+  }
+  .shell[data-theme="light"] .finding-detail > .finding-ai-explanation {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media (max-width:980px) {
+  .shell[data-theme="light"] .layout,
+  .shell[data-theme="light"] .layout.left-collapsed,
+  .shell[data-theme="light"] .layout.right-collapsed {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .shell[data-theme="light"] .finding-detail {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .shell[data-theme="light"] .finding-detail > .finding-explanation,
+  .shell[data-theme="light"] .finding-detail > .finding-remediation,
+  .shell[data-theme="light"] .finding-detail > .finding-ai-explanation {
+    grid-column:1;
+  }
+  .shell[data-theme="light"] .finding-detail > .finding-ai-explanation {
+    grid-template-columns:minmax(0,1fr);
+  }
+}
