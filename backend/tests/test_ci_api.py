@@ -14,9 +14,11 @@ class FakeTokenSession:
         self.token = token
         self.owner = owner
         self.flushed = False
+        self.scalar_calls = 0
 
     def scalar(self, statement):
-        return self.token
+        self.scalar_calls += 1
+        return self.token if self.scalar_calls == 1 else "admin"
 
     def get(self, model, identifier):
         return self.owner
@@ -39,7 +41,7 @@ def test_workspace_token_requires_declared_scope():
         user_id=uuid4(),
         last_used_at=None,
     )
-    db = FakeTokenSession(token, SimpleNamespace(is_active=True))
+    db = FakeTokenSession(token, SimpleNamespace(id=token.user_id, is_active=True))
     with pytest.raises(HTTPException) as error:
         require_workspace_api_token(db, "inv_valid", uuid4(), "workflow:run")
     assert error.value.status_code == 403
