@@ -11,6 +11,7 @@ from app.models import (
     AuditLog,
     Organization,
     OrganizationMembership,
+    ApiToken,
     User,
     Workspace,
     WorkspaceMembership,
@@ -443,6 +444,12 @@ def remove_workspace_member(workspace_id: UUID, user_id: UUID, request: Request)
         )
         if membership is None:
             raise HTTPException(status_code=404, detail="Workspace member not found.")
+        now = datetime.now(timezone.utc)
+        db.query(ApiToken).filter(
+            ApiToken.workspace_id == workspace_id,
+            ApiToken.user_id == user_id,
+            ApiToken.revoked_at.is_(None),
+        ).update({ApiToken.revoked_at: now}, synchronize_session=False)
         db.delete(membership)
         _audit(db, actor, "workspace.member_removed", "workspace", workspace_id, {
             "member_user_id": str(user_id),
@@ -469,6 +476,12 @@ def remove_organization_member(organization_id: UUID, user_id: UUID, request: Re
         if membership.role == "owner":
             raise HTTPException(status_code=409, detail="Transfer organization ownership before removing its owner.")
         workspace_ids = select(Workspace.id).where(Workspace.organization_id == organization_id)
+        now = datetime.now(timezone.utc)
+        db.query(ApiToken).filter(
+            ApiToken.user_id == user_id,
+            ApiToken.workspace_id.in_(workspace_ids),
+            ApiToken.revoked_at.is_(None),
+        ).update({ApiToken.revoked_at: now}, synchronize_session=False)
         db.query(WorkspaceMembership).filter(
             WorkspaceMembership.user_id == user_id,
             WorkspaceMembership.workspace_id.in_(workspace_ids),
