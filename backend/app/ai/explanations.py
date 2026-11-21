@@ -296,6 +296,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "temperature": 0.1,
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
+        "reasoning_effort": "none",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
