@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+from urllib.parse import urlsplit
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph, ValidationIssue, ValidationResult
 
@@ -18,7 +19,10 @@ def _config_schema_errors(value, schema, path="config"):
         "boolean": lambda item: isinstance(item, bool),
         "null": lambda item: item is None,
     }
-    if expected_type in type_matches and not type_matches[expected_type](value):
+    if isinstance(expected_type, list):
+        if not any(type_name in type_matches and type_matches[type_name](value) for type_name in expected_type):
+            return [f"{path}: ожидается один из типов {', '.join(expected_type)}."]
+    elif expected_type in type_matches and not type_matches[expected_type](value):
         return [f"{path}: ожидается тип {expected_type}."]
     if "enum" in schema and value not in schema["enum"]:
         errors.append(f"{path}: значение не входит в допустимый список.")
@@ -28,6 +32,10 @@ def _config_schema_errors(value, schema, path="config"):
         if "maximum" in schema and value > schema["maximum"]:
             errors.append(f"{path}: значение больше максимума {schema['maximum']}.")
     if isinstance(value, str):
+        if schema.get("format") == "uri":
+            parsed = urlsplit(value)
+            if not parsed.scheme or any(character.isspace() for character in value):
+                errors.append(f"{path}: ожидается корректный URI.")
         if "minLength" in schema and len(value) < schema["minLength"]:
             errors.append(f"{path}: строка короче {schema['minLength']} символов.")
         if "maxLength" in schema and len(value) > schema["maxLength"]:
