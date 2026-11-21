@@ -1,7 +1,7 @@
 # INVEST — актуальный аудит исходников и roadmap
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `02b736fa6c57534cd98629c7ca5528d66d2e8f7c`  
+**Срез исходников:** `24e09061447d3aeac140333d7fbf58235aaf3866`  
 **Дата:** 2026-11-21  
 **Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
 
