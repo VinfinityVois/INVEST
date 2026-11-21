@@ -9,6 +9,7 @@ dist/
 coverage/
 .idea/
 .vscode/
+<<<<<<< Updated upstream
 # Local and test artifacts
 **/.pytest-tmp-*/
 *.bak
@@ -20,3 +21,6 @@ coverage/
 /auth-p1-backup-*/
 **/.pytest-tmp/
 **/.pytest-tmp/**
+=======
+.vs/
+>>>>>>> Stashed changes
