@@ -134,10 +134,12 @@ app.add_middleware(
 
 from app.security.api import router as auth_router, SESSION_COOKIE
 from app.security.users_api import router as users_router
+from app.security.workspaces_api import router as workspaces_router
 from app.security.sessions import get_session_context
 
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(workspaces_router)
 
 
 @app.middleware("http")
