@@ -1059,3 +1059,96 @@
 .project-versions-list article button:disabled{opacity:.45;cursor:not-allowed}
 .project-version-current{flex:none;color:#8ec6a9;font-size:9px;letter-spacing:.08em}
 .project-versions-error{margin:8px 0;color:#e8a7a7;font-size:10px;white-space:pre-wrap}
+
+
+/* Access & user management layout hardening */
+.user-management-dialog{
+  width:min(1120px,calc(100vw - 48px));
+  max-height:calc(100vh - 48px);
+  min-width:0;
+}
+.user-management-dialog>.user-management-content{
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  align-items:stretch;
+  gap:16px;
+  width:100%;
+  min-width:0;
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  padding:18px 20px;
+  scrollbar-width:thin;
+  scrollbar-color:#34516b transparent;
+}
+.user-management-dialog>.user-management-content>*{width:100%;min-width:0}
+.user-management-dialog .user-profile-banner{width:100%;min-width:0;min-height:112px}
+.user-management-dialog .user-profile-grid{
+  display:grid;
+  grid-template-columns:minmax(260px,.78fr) minmax(0,1.22fr);
+  align-items:start;
+  gap:14px;
+  width:100%;
+  min-width:0;
+}
+.user-management-dialog .user-profile-panel,
+.user-management-dialog .user-profile-security,
+.user-management-dialog .user-profile-security>.user-management-section{width:100%;min-width:0}
+.user-management-dialog .user-profile-panel{align-self:stretch}
+.user-management-dialog .user-profile-security{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.user-management-dialog .user-section-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;min-width:0}
+.user-management-dialog .user-section-heading>div{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.user-management-dialog .user-section-heading b{min-width:0;overflow-wrap:anywhere}
+.user-management-dialog .user-section-heading small{max-width:100%;overflow-wrap:anywhere}
+.user-management-dialog .user-section-heading>button{flex:0 0 auto;max-width:100%;white-space:normal}
+.user-management-dialog .user-password-form{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;width:100%;min-width:0}
+.user-management-dialog .user-password-form input{width:100%;min-width:0;max-width:100%}
+.user-management-dialog .user-password-form button{justify-self:start;max-width:100%;white-space:normal}
+.user-management-dialog .user-session-list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;width:100%;min-width:0}
+.user-management-dialog .user-session-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:8px 12px;
+  width:100%;
+  min-width:0;
+  padding:12px;
+}
+.user-management-dialog .user-session-row>div{min-width:0}
+.user-management-dialog .user-session-row b,
+.user-management-dialog .user-session-row small{display:block;max-width:100%;overflow-wrap:anywhere}
+.user-management-dialog .user-session-row small{line-height:1.45}
+.user-management-dialog .user-session-row>span{justify-self:end;white-space:nowrap}
+.user-management-dialog .user-session-row>button{grid-column:1/-1;justify-self:start}
+.user-management-dialog .user-admin-intro,
+.user-management-dialog .user-management-section{min-width:0}
+.user-management-dialog .user-filter-row,
+.user-management-dialog .user-create-form{display:flex;flex-wrap:wrap;align-items:center;gap:9px;min-width:0}
+.user-management-dialog .user-filter-row>*,
+.user-management-dialog .user-create-form>*{min-width:0;max-width:100%}
+.user-management-dialog .user-create-form input{flex:1 1 220px}
+.user-management-dialog .user-table-wrap{width:100%;min-width:0}
+.user-management-dialog .user-row{min-width:0}
+.user-management-dialog .user-row-main{min-width:0}
+.user-management-dialog .user-row-main b{overflow-wrap:anywhere}
+.user-management-dialog .user-row-actions,
+.user-management-dialog .user-email-edit{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.user-management-dialog .user-email-edit input{flex:1 1 220px;min-width:0;max-width:100%}
+.user-management-dialog button{max-width:100%}
+@media(max-width:900px){
+  .user-management-dialog{width:min(760px,calc(100vw - 24px))}
+  .user-management-dialog .user-profile-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:600px){
+  .user-management-dialog{width:calc(100vw - 16px);max-height:calc(100vh - 16px)}
+  .user-management-dialog>.user-management-content{padding:12px;gap:12px}
+  .user-management-dialog .user-profile-banner{align-items:flex-start;flex-wrap:wrap}
+  .user-management-dialog .user-profile-online{margin-left:auto}
+  .user-management-dialog .user-session-row{grid-template-columns:minmax(0,1fr)}
+  .user-management-dialog .user-session-row>span{justify-self:start}
+  .user-management-dialog .user-session-row>button{grid-column:auto}
+  .user-management-dialog .user-section-heading>button{width:100%;justify-content:center}
+  .user-management-dialog .user-create-form>*{flex:1 1 100%}
+  .user-management-dialog .user-pagination{flex-wrap:wrap;gap:8px}
+}
