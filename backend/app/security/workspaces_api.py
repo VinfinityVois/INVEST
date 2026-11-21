@@ -14,6 +14,7 @@ from app.models import (
     OrganizationMembership,
     ApiToken,
     User,
+    UserSession,
     Workspace,
     WorkspaceMembership,
 )
@@ -183,6 +184,11 @@ def create_organization(payload: OrganizationCreate, request: Request):
             role="admin",
         ))
         _audit(db, actor, "organization.created", "organization", organization.id)
+        session_id = getattr(request.state, "user_session_id", None)
+        user_session = db.get(UserSession, session_id) if session_id else None
+        if user_session is not None and user_session.user_id == actor.id and user_session.revoked_at is None:
+            user_session.current_workspace_id = workspace.id
+            request.state.current_workspace_id = workspace.id
         db.commit()
         return {
             "id": str(organization.id),
