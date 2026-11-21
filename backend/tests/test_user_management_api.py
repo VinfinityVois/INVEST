@@ -535,6 +535,11 @@ def test_workspace_token_is_revoked_when_its_owner_loses_membership(user_client)
     )
     organization_id = organization.json()["id"]
     workspace_id = organization.json()["default_workspace_id"]
+    switched_admin = client.post(
+        f"/api/workspaces/{workspace_id}/switch",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert switched_admin.status_code == 200
     added = client.post(
         f"/api/organizations/{organization_id}/members",
         json={
@@ -629,6 +634,11 @@ def test_finding_comments_assignment_and_bulk_lifecycle(user_client):
     assert assigned.json()["assigned_to_user_id"] == str(member_id)
 
     assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    switched_member = client.post(
+        f"/api/workspaces/{workspace_id}/switch",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert switched_member.status_code == 200
     comment = client.post(
         f"/api/workflows/{workflow_id}/findings/{fingerprint}/comments",
         json={"body": "Проверил источник и подтвердил путь данных."},
