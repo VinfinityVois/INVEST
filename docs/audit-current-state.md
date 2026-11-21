@@ -1,7 +1,7 @@
 # INVEST — актуальный аудит исходников и roadmap
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `9a96729e649f65d078d2a108e669877971220eeb`  
+**Срез исходников:** `bd05d31d8a804535c542cc16759fb61c4af4439f`  
 **Дата:** 2026-11-21  
 **Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
 
@@ -130,7 +130,7 @@ The demo script `scripts/demo.ps1` requires `INVEST_DEMO_EMAIL` and `INVEST_DEMO
 | P0 Audit/stabilization | Source review refreshed; local runtime still open | E2E + migrations + worker recovery |
 | P1 Users / authentication | Admin user UI/API, profile, password/session controls implemented | Password recovery, deletion policy, MFA and runtime UX tests |
 | P2 Organizations/RBAC | Base Organization/Workspace model and scoped APIs implemented | Complete route/background audit, invitations, export/delete and broader IDOR tests |
-| P3 Dashboard | Workflow telemetry exists; organization aggregate dashboard absent | Build after tenancy |
+| P3 Dashboard | Workspace-scoped dashboard summary and UI filters/trend/recent runs implemented | Deeper finding drill-down, large-workspace performance and UX validation |
 | P4 Analytics/reports | Run trends, comparison, JSON/HTML exist | CSV/SARIF, aggregate metrics |
 | P5 Findings management | Basic lifecycle/history exists | Assignment, comments, labels, due dates, reopen |
 | P6 AI remediation | Not confirmed | Human-approved patch proposal and diff review |
