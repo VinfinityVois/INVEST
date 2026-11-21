@@ -20,6 +20,7 @@ ALLOWED_SCOPES = {
     "run:read",
     "findings:read",
     "reports:read",
+    "template:publish",
 }
 
 
