@@ -142,6 +142,7 @@ from app.security.findings_api import router as findings_router
 from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
 from app.security.file_versions import sha256_text, version_matches, project_file_lock
+from app.security.project_file_history import save_project_file_version, load_project_file_version
 from filelock import Timeout as FileLockTimeout
 
 app.include_router(auth_router)
@@ -653,6 +654,10 @@ class ProjectFileUpdate(BaseModel):
     ai_fix_run_id: UUID | None = None
     ai_fix_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
+class ProjectFileRollback(BaseModel):
+    target_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
 
 @app.get("/api/projects/{project_id}/file")
 def preview_project_file(
@@ -965,6 +970,7 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
                             "current_sha256": current_sha256,
                         },
                     )
+                save_project_file_version(settings.workspace_root, project_id, relative, original)
                 temp_name = None
                 try:
                     with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
