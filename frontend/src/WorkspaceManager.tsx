@@ -33,6 +33,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   const [issuedToken, setIssuedToken] = useState("");
   const [newOrganization, setNewOrganization] = useState("");
   const [newWorkspace, setNewWorkspace] = useState("");
+  const [workspaceRename, setWorkspaceRename] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("viewer");
   const [busy, setBusy] = useState(false);
@@ -64,6 +65,10 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : "Ошибка загрузки участников."); });
     return () => { active = false; };
   }, [open, organizationId]);
+
+  useEffect(() => {
+    setWorkspaceRename(workspaces.find(item => item.id === workspaceId)?.name || "");
+  }, [workspaceId, workspaces]);
 
   useEffect(() => {
     if (!open || !workspaceId) { setWorkspaceMembers([]); return; }
@@ -106,6 +111,12 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
     setWorkspaceId(created.id);
     setNewWorkspace("");
   }, "Рабочая область создана.");
+
+  const renameWorkspace = () => run(async () => {
+    await api("/api/workspaces/" + workspaceId, {
+      method: "PATCH", body: JSON.stringify({ name: workspaceRename }),
+    });
+  }, "Название Workspace обновлено.");
 
   const addMember = () => run(async () => {
     await api("/api/organizations/" + organizationId + "/members", {
@@ -202,6 +213,10 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
             {canManageOrganization && <form onSubmit={event => { event.preventDefault(); void createWorkspace(); }}>
               <input value={newWorkspace} onChange={event => setNewWorkspace(event.target.value)} placeholder="Название Workspace" maxLength={200} required/>
               <button type="submit" disabled={busy || newWorkspace.trim().length < 2 || !organizationId}><Plus size={13}/> Добавить</button>
+            </form>}
+            {canManageWorkspace && <form onSubmit={event => { event.preventDefault(); void renameWorkspace(); }}>
+              <input value={workspaceRename} onChange={event => setWorkspaceRename(event.target.value)} placeholder="Переименовать Workspace" maxLength={200} required/>
+              <button type="submit" disabled={busy || workspaceRename.trim().length < 2 || workspaceRename === selectedWorkspace?.name}>Сохранить имя</button>
             </form>}
             {selectedWorkspace && <p className="workspace-manager-hint">Текущая роль: <b>{selectedWorkspace.role}</b>{selectedWorkspace.active ? " · активная область" : ""}</p>}
           </section>
