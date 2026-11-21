@@ -1028,7 +1028,7 @@
 @media(prefers-reduced-motion:reduce){.library-item[class*="tone-"]{transition:none}.workflow-node,.react-flow__handle{transition:none}}
 
 .ai-fix-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:12px 0;padding:10px 12px;border:1px solid rgba(105,153,194,.24);border-radius:9px;background:rgba(25,48,70,.22)}
-.ai-fix-actions button,.ai-fix-preview-actions button,.ai-fix-applied button{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid #426a8b;border-radius:7px;background:#17334b;color:#dceeff;font:600 11px inherit;cursor:pointer}
+.ai-fix-actions button,.ai-fix-preview-actions button,.ai-fix-applied button{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid #426a8b;border-radius:7px;background:#17334b;color:#dceeff;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
 .ai-fix-actions button:disabled,.ai-fix-preview-actions button:disabled,.ai-fix-applied button:disabled{opacity:.55;cursor:wait}
 .ai-fix-actions small,.ai-fix-preview>small{color:#8ea5bb;font-size:10px;line-height:1.5}
 .ai-fix-error{margin:9px 0;padding:10px 12px;border:1px solid rgba(213,112,112,.35);border-radius:8px;background:rgba(105,36,43,.18);color:#f0b2b2;font-size:11px;white-space:pre-wrap}
