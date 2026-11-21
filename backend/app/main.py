@@ -2006,7 +2006,7 @@ def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request)
 
 
 @app.get("/api/runs/{run_id}/report.json")
-def export_run_report_json(run_id: UUID):
+def export_run_report_json(run_id: UUID, request: Request):
     with SessionLocal() as session:
         run = session.get(WorkflowRun, run_id)
         if run is None:
@@ -2015,7 +2015,7 @@ def export_run_report_json(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
-def export_run_report_html(run_id: UUID):
+def export_run_report_html(run_id: UUID, request: Request):
     with SessionLocal() as session:
         run = session.get(WorkflowRun, run_id)
         if run is None:
@@ -2035,7 +2035,7 @@ main{{max-width:1100px;margin:auto}}h1{{font-size:22px}}.meta{{color:#8ea5b9}}pr
 
 
 @app.get("/api/runs/{run_id}/telemetry")
-def get_run_telemetry(run_id: UUID):
+def get_run_telemetry(run_id: UUID, request: Request):
     with SessionLocal() as session:
         run = session.get(WorkflowRun, run_id)
         if run is None:
@@ -2044,7 +2044,7 @@ def get_run_telemetry(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}/events")
-def stream_run_events(run_id: UUID):
+def stream_run_events(run_id: UUID, request: Request):
     def event_stream():
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
@@ -2068,7 +2068,7 @@ def stream_run_events(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: UUID):
+def get_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
         run = session.get(WorkflowRun, run_id)
         if run is None:
@@ -2087,7 +2087,7 @@ def get_run(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}/findings")
-def list_run_findings(run_id: UUID):
+def list_run_findings(run_id: UUID, request: Request):
     with SessionLocal() as session:
         if session.get(WorkflowRun, run_id) is None:
             raise HTTPException(status_code=404, detail="Run not found")
@@ -2112,6 +2112,7 @@ def list_run_findings(run_id: UUID):
 def get_finding_source(
     run_id: UUID,
     fingerprint: str,
+    request: Request,
     start_line: int | None = Query(default=None, ge=1),
     end_line: int | None = Query(default=None, ge=1),
 ):
