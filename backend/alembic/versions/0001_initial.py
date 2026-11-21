@@ -3,6 +3,9 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+UUID_TYPE = sa.Uuid(as_uuid=True)
+JSON_TYPE = sa.JSON().with_variant(JSON_TYPE, "postgresql")
+
 revision = "0001_initial"
 down_revision = None
 branch_labels = None
@@ -11,7 +14,7 @@ depends_on = None
 def upgrade():
     op.create_table(
         "workflows",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", UUID_TYPE, primary_key=True),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.Text()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -19,21 +22,21 @@ def upgrade():
     )
     op.create_table(
         "workflow_versions",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("workflow_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", UUID_TYPE, primary_key=True),
+        sa.Column("workflow_id", UUID_TYPE, sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
-        sa.Column("graph", postgresql.JSONB(), nullable=False),
+        sa.Column("graph", JSON_TYPE, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.UniqueConstraint("workflow_id", "version"),
     )
     op.create_table(
         "runs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("workflow_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="SET NULL")),
+        sa.Column("id", UUID_TYPE, primary_key=True),
+        sa.Column("workflow_id", UUID_TYPE, sa.ForeignKey("workflows.id", ondelete="SET NULL")),
         sa.Column("status", sa.String(24), nullable=False),
         sa.Column("source", sa.String(24), nullable=False),
-        sa.Column("graph_snapshot", postgresql.JSONB(), nullable=False),
-        sa.Column("result", postgresql.JSONB()),
+        sa.Column("graph_snapshot", JSON_TYPE, nullable=False),
+        sa.Column("result", JSON_TYPE),
         sa.Column("error", sa.Text()),
         sa.Column("queued_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("started_at", sa.DateTime(timezone=True)),
@@ -43,20 +46,20 @@ def upgrade():
     )
     op.create_table(
         "findings",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("run_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("runs.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", UUID_TYPE, primary_key=True),
+        sa.Column("run_id", UUID_TYPE, sa.ForeignKey("runs.id", ondelete="CASCADE"), nullable=False),
         sa.Column("fingerprint", sa.String(64), nullable=False),
         sa.Column("rule_id", sa.String(160), nullable=False),
         sa.Column("severity", sa.String(16), nullable=False),
         sa.Column("path", sa.Text(), nullable=False),
         sa.Column("line", sa.Integer()),
-        sa.Column("payload", postgresql.JSONB(), nullable=False),
+        sa.Column("payload", JSON_TYPE, nullable=False),
     )
     op.create_index("ix_findings_fingerprint", "findings", ["fingerprint"])
     op.create_table(
         "finding_states",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("workflow_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", UUID_TYPE, primary_key=True),
+        sa.Column("workflow_id", UUID_TYPE, sa.ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False),
         sa.Column("fingerprint", sa.String(64), nullable=False),
         sa.Column("state", sa.String(24), nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
@@ -65,8 +68,8 @@ def upgrade():
     )
     op.create_table(
         "credentials",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("workspace_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("id", UUID_TYPE, primary_key=True),
+        sa.Column("workspace_id", UUID_TYPE, nullable=False),
         sa.Column("name", sa.String(160), nullable=False),
         sa.Column("provider", sa.String(80), nullable=False),
         sa.Column("ciphertext", sa.LargeBinary(), nullable=False),
@@ -81,7 +84,7 @@ def upgrade():
         sa.Column("action", sa.String(160), nullable=False),
         sa.Column("entity", sa.String(120), nullable=False),
         sa.Column("entity_id", sa.String(120)),
-        sa.Column("details", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column("details", JSON_TYPE, nullable=False, server_default=sa.text("'{}'")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
