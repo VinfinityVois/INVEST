@@ -8,10 +8,11 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta, timezone
 
 from app.db import Base
-from app.models import LoginRateLimit, User, UserSession
+from app.models import LoginRateLimit, Organization, User, UserSession, Workflow, Workspace
 from app.security.passwords import hash_password
 import app.main as main
 import app.security.api as auth_api
+import app.security.tokens_api as tokens_api
 
 
 @pytest.fixture
@@ -42,6 +43,7 @@ def client(monkeypatch):
 
     monkeypatch.setattr(main, "SessionLocal", TestingSession)
     monkeypatch.setattr(auth_api, "SessionLocal", TestingSession)
+    monkeypatch.setattr(tokens_api, "SessionLocal", TestingSession)
 
     with TestClient(main.app) as test_client:
         yield test_client
@@ -218,24 +220,28 @@ def test_login_rejects_missing_or_untrusted_origin(client, origin):
     assert "invest_session" not in response.cookies
 
 
-def test_ci_endpoint_does_not_accept_session_cookie_as_ci_token(
-    client,
-    monkeypatch,
-):
-    from app.config import settings
+def test_ci_endpoint_does_not_accept_session_cookie_as_ci_token(client):
+    with main.SessionLocal() as db:
+        organization = Organization(name="CI scope test", kind="organization")
+        db.add(organization)
+        db.flush()
+        workspace = Workspace(
+            organization_id=organization.id,
+            name="CI workspace",
+            is_default=True,
+        )
+        db.add(workspace)
+        db.flush()
+        workflow = Workflow(name="CI workflow", workspace_id=workspace.id)
+        db.add(workflow)
+        db.commit()
+        workflow_id = workflow.id
 
-    monkeypatch.setattr(
-        settings,
-        "ci_trigger_token",
-        "dedicated-ci-secret-for-tests",
-    )
     client.cookies.set("invest_session", "not-a-ci-token")
-
     response = client.post(
-        f"/api/ci/workflows/{uuid.uuid4()}/runs",
+        f"/api/ci/workflows/{workflow_id}/runs",
         json={},
     )
-
     assert response.status_code == 401
 
 
