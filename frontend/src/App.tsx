@@ -2180,7 +2180,7 @@ function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => 
         </div>
       </section>
     </div>}
-    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} onClose={() => setUserManagementOpen(false)} />}
+    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onClose={() => setUserManagementOpen(false)} />}
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
       <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
         <header className="template-library-header">
