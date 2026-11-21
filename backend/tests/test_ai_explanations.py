@@ -344,3 +344,81 @@ def test_gateway_still_rejects_plain_http_for_other_hosts(monkeypatch):
     status = explanations.provider_configuration()
 
     assert status["endpoint_valid"] is False
+
+
+
+def test_secret_finding_with_redaction_only_context_is_not_counted_as_explained(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs)
+        raise AssertionError("AI provider must not receive redaction-only evidence")
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "secret-1",
+        "category": "SECRET",
+        "rule_id": "generic_assignment",
+        "code_context": [{
+            "line": 10,
+            "text": "[REDACTED: secret-bearing source context]",
+            "is_finding": True,
+        }],
+    }])
+
+    assert calls == []
+    assert result["status"] == "completed"
+    assert result["explained_count"] == 0
+    assert result["analyzed_count"] == 1
+    assert result["unexplained_count"] == 1
+    assert result["insufficient_evidence_count"] == 1
+    assert result["evidence_coverage"] == 0.0
+    assert result["coverage"] == 0.0
+    assert "безопасный исходный контекст" in result["message"]
+
+
+def test_secret_finding_sends_only_dedicated_masked_ai_context(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["prompt"] = kwargs["json"]["messages"][1]["content"]
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "secret-2",
+                "root_cause": "Credential is hard-coded",
+                "impact": "May be exposed through source control",
+                "recommendation": "Load it from a secret manager",
+                "confidence": 0.8,
+                "evidence_limits": "Runtime validity is unknown",
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "secret-2",
+        "category": "SECRET",
+        "rule_id": "generic_assignment",
+        "code_context": [{
+            "line": 10,
+            "text": "[REDACTED: secret-bearing source context]",
+            "is_finding": True,
+        }],
+        "ai_code_context": [{
+            "line": 10,
+            "text": 'api_key = "[REDACTED]"',
+            "is_finding": True,
+        }],
+    }])
+
+    assert 'api_key = "[REDACTED]"' in captured["prompt"]
+    assert "[REDACTED: secret-bearing source context]" not in captured["prompt"]
+    assert result["explained_count"] == 1
+    assert result["insufficient_evidence_count"] == 0
+    assert result["evidence_coverage"] == 1.0
+    assert result["explanations"][0]["source_evidence"][0]["text"] == 'api_key = "[REDACTED]"'
