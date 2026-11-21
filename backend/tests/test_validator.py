@@ -70,3 +70,38 @@ def test_schedule_trigger_is_accepted_as_a_workflow_trigger():
 
     assert result.valid
     assert not any(issue.code == "missing_trigger" for issue in result.issues)
+
+
+def test_required_node_config_field_is_rejected():
+    graph = WorkflowGraph(
+        nodes=[{"id": "trigger", "type": "trigger.manual"}, {"id": "webhook", "type": "notify.webhook", "config": {}}],
+        edges=[],
+    )
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "invalid_node_config" and "url" in issue.message for issue in result.issues)
+
+
+def test_node_config_enum_and_numeric_constraints_are_validated():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "ai", "type": "ai.explain", "config": {"language": "de", "max_findings": 99}},
+        ],
+        edges=[],
+    )
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert sum(issue.code == "invalid_node_config" for issue in result.issues) >= 2
+
+
+def test_valid_schema_driven_config_is_accepted():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "schedule", "type": "trigger.schedule", "config": {"cron": "0 2 * * *", "timezone": "UTC"}},
+            {"id": "webhook", "type": "notify.webhook", "config": {"url": "https://example.test/hook"}},
+        ],
+        edges=[],
+    )
+    result = validate_graph(graph, registry)
+    assert not any(issue.code == "invalid_node_config" for issue in result.issues)
