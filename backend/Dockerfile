@@ -10,6 +10,9 @@ COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY presets ./presets
+# RulePackRegistry resolves these repository-root catalogs from /rules and /data.
+COPY rules /rules
+COPY data /data
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 USER appuser
