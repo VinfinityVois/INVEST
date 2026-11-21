@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1400
     notify_webhook_allowed_hosts: str = "webhook.site"
     webhook_allowed_hosts: str | None = None
-    ci_trigger_token: str | None = None
-    template_publish_token: str | None = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
