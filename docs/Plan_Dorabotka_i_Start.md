@@ -1,104 +1,101 @@
-# План оставшихся работ — INVEST / Центр-инвест / CyberGarden 2026
+# INVEST — основной план завершения платформы
 
-**Ветка:** `feat/platform-foundation`  
-**Актуальный статус:** см. [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md)  
-**Последняя сверка исходников:** 2026-11-21
+**Рабочая ветка:** `feat/platform-foundation`  
+**Приоритет:** функциональное завершение → стабилизация → Security Hardening → Release Readiness.
 
-> Этот документ — порядок выполнения, а не утверждение, что все этапы уже пройдены. Реализация, CI и локальная runtime-проверка учитываются раздельно. Не закрывать задачу только по наличию кода.
+Этот документ задаёт порядок работ. Подробные статусы, доказательства по исходникам и открытые дефекты ведутся в [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md), а подтверждённое техническое состояние — в [audit-current-state.md](./audit-current-state.md).
 
-## 0. Правила и приоритеты
+## Принципы выполнения
 
-1. Сначала довести пользовательский сценарий и демо до воспроизводимого MVP.
-2. Затем стабилизировать миграции, worker, Docker и обработку ошибок.
-3. После этого закрывать tenant isolation/RBAC и системный security hardening.
-4. В конце — backup/restore, monitoring, deployment и release packaging.
+1. Сначала закрывать функциональные сценарии MVP. Не начинать полный системный security audit параллельно с незавершёнными пользовательскими функциями.
+2. Не считать функцию готовой по наличию похожего кода: проверять UI, backend, happy path, ошибки, права доступа и тесты.
+3. Базовая безопасность обязательна на каждом этапе: валидация входных данных, серверная проверка доступа, безопасные ошибки, redaction и тесты.
+4. Не вводить multi-user доступ до завершения tenant ownership и object-level authorization.
+5. Не использовать production data/secrets в тестах; не исполнять исходники анализируемых проектов; не отключать allowlist, валидацию или защитные проверки.
+6. Не изменять `main`, не выполнять force-push, не удалять пользовательские stash без отдельного согласования.
 
-Нельзя откладывать базовую безопасность: не коммитить секреты, не использовать реальные данные в тестах, не отключать allowlist/валидацию/redaction, не запускать исходники проверяемого проекта.
+## Этап 1 — функциональное завершение платформы
 
-## 1. P0 — воспроизводимое демо и стабилизация
+Порядок внутри этапа:
 
-| ID | Задача | Текущий статус | Definition of Done |
-|---|---|---|---|
-| P0-1 | Учебный Kotlin/Spring E2E | Код, закреплённый demo graph и script есть; локальный прогон не подтверждён | Один run проходит Git → Secrets/SCA/SAST → Merge → AI → Webhook; trace и findings сохранены |
-| P0-2 | Webhook delivery | Реализация и тесты есть; реальная доставка не подтверждена | Уникальный webhook endpoint получил ожидаемый redacted JSON |
-| P0-3 | AI provider readiness | Код и timeout есть; зависит от LLM credentials/network пользователя | AI completed; explanation содержит scanner evidence; нет configuration_required |
-| P0-4 | Scanner benchmark | CI jobs и ground truth есть | Сохранить precision/recall/F1, FP/FN по каждому анализатору на закреплённом commit |
-| P0-5 | Миграции и queue recovery | Миграции и тесты есть; runtime на текущей БД не подтверждён | Upgrade empty/existing DB; restart worker during run; no duplicate execution |
-| P0-6 | Demo automation | Скрипт обновлён для login/session/logout | Проверить PowerShell-сценарий на чистой машине и описать ожидаемые результаты |
+1. **Users / Accounts / Access** — UI и backend управления пользователями, профиль, смена пароля, сессии, роли и разрешения, политика блокировки/удаления.
+2. **Organizations / Workspace / Projects** — утвердить модель личного пространства и организации, членство, приглашения, workspace roles, переключение и изоляцию данных.
+3. **Findings lifecycle** — статусы, назначение ответственного, комментарии, история, массовые действия, обоснование Accepted Risk/False Positive, fingerprints и сравнение запусков.
+4. **Dashboard / Analytics** — метрики на реальных данных, фильтры, drill-down, корректные агрегаты и пустые состояния.
+5. **Reports / Export** — проверить JSON/HTML, затем CSV и SARIF; PDF/XLSX после фиксации требований к форматам.
+6. **Audit Log** — полный перечень событий, actor identity, поиск, фильтры, экспорт и retention.
+7. **API Tokens / CI/CD** — UI токенов, scopes, срок действия, отзыв/ротация, примеры CI и отдельные права CI API.
+8. **Backup / Restore / Administration** — backup PostgreSQL и файлов, проверенный restore, health/status и retention.
+9. **Workflow / Sources / Scanners / AI / Integrations** — закрыть регрессию движка, загрузок, scanner coverage, AI и согласованные интеграции. Существующие функции не переписывать без доказанной необходимости.
 
-## 2. P1 — завершение функционального MVP
+### Текущий статус этапа 1
 
-### Текущий фокус: этап 1.1 — Users / Accounts
+- 1.1: базовые admin user management и self-service session/password UI/API добавлены; recovery/reset, полноценная RBAC matrix и политика удаления остаются открытыми.
+- 1.2: Organization/Workspace/Membership и tenant isolation отсутствуют; до их реализации продукт не считать multi-tenant.
+- 1.4: базовый lifecycle findings существует, но assignment/comments/bulk operations требуют завершения.
+- 1.10–1.13: отчёты, audit trail, API tokens, backup/restore требуют функционального завершения и runtime-проверок.
 
-Реализованы базовые admin endpoints и UI: создание пользователя, поиск/фильтрация/пагинация, изменение email и флага admin, блокировка/разблокировка, просмотр и отзыв сессий, смена собственного пароля. Блокировка отзывает все сессии; hard delete намеренно не предоставлен до утверждения политики владения/переноса данных. Остаются password recovery/reset, полноценная матрица permissions и tenant-scoped RBAC. Проверять эти функции отдельно от факта успешной сборки CI.
+## Этап 2 — стабилизация и проверка готовности
 
-| ID | Задача | Текущий статус | Следующее действие |
-|---|---|---|---|
-| P1-1 | Schedule trigger | Реализован | Проверить cron/timezone и duplicate suppression на нескольких worker |
-| P1-2 | Conditional logic | Compare findings реализован | Отдельный regex оператор — только если он обязателен по ТЗ |
-| P1-3 | Webhook | Реализован | E2E delivery, retry/signature policy при необходимости |
-| P1-4 | Secrets | Реализован | Поднять precision на benchmark: context, placeholders, entropy thresholds |
-| P1-5 | SCA | Реализован для Maven/Gradle | Автообновление advisory feed, provenance/hash, новые экосистемы |
-| P1-6 | Kotlin/Spring SAST | Реализован ограниченный набор правил | Benchmark-driven rules; постепенно улучшать AST/type/data-flow |
-| P1-7 | Typed ports | UI и backend validation есть | Добавить negative tests для всех несовместимых портов и reconnect |
-| P1-8 | Schema-driven forms | Реализованы | Проверить все JSON schema типы/constraints и UX ошибок |
-| P1-9 | Reports | JSON/HTML есть | CSV/SARIF для CI; затем PDF/XLSX при подтверждённой потребности |
-| P1-10 | Finding management | Базовые статусы/причины/expiry/history есть | Assignment, comments, labels, due dates, reopen |
-| P1-11 | UI/UX | CyberGarden design refinement внесён | Проверить реальные ширины, длинные пути, большие списки и состояния loading/error/empty |
+После функционального завершения:
 
-## 3. P2 — security hardening и multi-user
+- CI: backend lint/type checks, unit/integration tests, frontend lint/typecheck/build, scanner benchmarks, container build; coverage thresholds для критичных модулей.
+- Тестовая матрица: auth, projects, workflow, runs, findings, reports, DB, Queue/Worker, SSE, cache, tenancy, exports и scanner regression.
+- E2E: login → project → source → workflow → run → findings → report; отдельно CRUD, workflow version/restore, cancel/retry, permissions и workspace isolation.
+- Docker clean install, upgrade с предыдущей версии, migrations, persistence, restart policies, graceful shutdown и health checks.
+- Проверка UX, производительности, больших графов/репозиториев/списков и длительных запусков.
 
-| ID | Задача | Статус | Definition of Done |
-|---|---|---|---|
-| P2-1 | Authentication | Базовый admin login/session/rate limit есть | Account lifecycle, session management, secure deployment review |
-| P2-2 | Tenant model | Не реализован | Organization/Workspace/Membership/Role и ownership foreign keys |
-| P2-3 | Object-level authorization | Не реализована | Каждый API lookup проверяет tenant и permission; cross-tenant IDOR tests |
-| P2-4 | Audit trail | Частичный AuditLog | Actor identity, полное покрытие событий, query/export и tamper evidence |
-| P2-5 | Secrets/key management | Vault/redaction primitives есть | Rotation, recovery, backup, least privilege и operational runbook |
-| P2-6 | API security | Origin checks и auth middleware есть | CSRF/reverse-proxy/TLS/header/rate-limit review и negative tests |
-| P2-7 | Upload/Git/Webhook | Защитные механизмы и тесты есть | Runtime boundary tests, SSRF/DNS rebinding checks, logs/redaction audit |
+## Этап 3 — отдельный Security Hardening
 
-**Граница безопасности:** до P2-2/P2-3 приложение остаётся single-operator/trusted deployment. Не предоставлять общий доступ нескольким недоверенным пользователям.
+Выполнять после этапов 1 и 2 как последовательный security-проход:
 
-## 4. P3 — release readiness
+1. Auth и session security: password policy, rate limits, reset, cookie, CSRF, revoke, MFA по модели угроз.
+2. Authorization/RBAC/object-level access: матрица ролей, ownership, workspace isolation, IDOR/BOLA и CI token scopes.
+3. CORS/Origin/CSRF: конфигурация окружений, preflight и запрещённые origins.
+4. Secrets/configuration: production defaults, key rotation, secret scanning и redaction.
+5. Input validation/injection: SQL/command/path/template/XSS, payload size, encoding и deserialization.
+6. Uploads/source/Git: ZIP Slip, symlinks, bombs, limits, SSRF, redirects и confinement.
+7. Webhook/SSRF: DNS rebinding, private IP, ports, redirects, TLS, timeout, retries и signatures.
+8. Database: permissions, migrations, backup encryption, retention, isolation и pool limits.
+9. AI security: prompt injection, context redaction, output schema, graph allowlist, cost/time limits и human approval for patches.
+10. Logging/audit/privacy: sensitive data, trace redaction, audit integrity, retention и PII minimization.
+11. Dependencies/supply chain: lockfiles, vulnerability/license scans, SBOM, image bases and provenance.
+12. Infrastructure/production: HTTPS, proxy, headers, CSP/HSTS, firewall, non-root containers, monitoring and incident response.
+13. Security testing: SAST, dependency/container scans, OWASP checks, threat model, issue severity and remediation of Critical/High.
 
-- Docker Compose clean install и upgrade из предыдущей версии.
-- Backup/restore PostgreSQL и workspace volume с проверкой восстановления.
-- Monitoring API/worker, queue depth, stale runs, provider failures и webhook delivery.
-- Load/soak tests и ограничение ресурсов для архивов, больших репозиториев и длинных workflow.
-- Документация установки, обновления, rollback, bootstrap admin и rotation secrets.
-- Reusable CI workflow проверить из отдельного тестового репозитория; закрепить production usage на release tag или commit SHA.
-- Security review зависимостей backend/frontend и контейнерного образа.
+## Этап 4 — Release Readiness
 
-## 5. Порядок следующих итераций
+- Актуализировать README, architecture/API/deployment/configuration/user/workflow/scanner/CI/backup guides и troubleshooting.
+- Синхронизировать backlog, audit и plan; удалить или пометить устаревшие документы.
+- Подготовить release checklist: зелёный CI на release commit, backend/frontend/E2E, Docker clean install и upgrade, migrations, backup/restore rehearsal, security checklist, secrets/config review.
+- Подготовить version/changelog, release artifacts, deployment и rollback plan.
+- Не объявлять release-ready при непроверенных Critical/High дефектах или неподтверждённом restore.
 
-### Итерация A — demo gate
-P0-1 → P0-2 → P0-3 → P0-4 → P0-5 → P0-6. Никаких новых бонусных функций до подтверждения полного прогона.
+## Definition of Done
 
-### Итерация B — scanner quality
-SCA advisory refresh/provenance → SCA benchmark regression → SAST benchmark/false-positive review → Secrets precision.
+Задача закрывается только когда:
 
-### Итерация C — tenancy/security
-Tenant data model → migration strategy → object-level authorization → cross-tenant tests → actor-aware audit → session lifecycle.
+- функция реализована в UI и backend, если применимо;
+- проверены happy path и негативные сценарии;
+- добавлены/обновлены unit, API или integration tests;
+- проверены backend permissions и изоляция данных;
+- sensitive data не попадает в logs/responses/reports;
+- документация обновлена;
+- CI проходит на соответствующем commit;
+- нет незакрытых Critical/High дефектов по задаче;
+- целевая runtime-конфигурация проверена, а непроверенные локальные сценарии явно отмечены.
 
-### Итерация D — product completion
-Finding workflow → CSV/SARIF → dashboard analytics → integrations → collaboration.
+## Следующий порядок работ
 
-### Итерация E — release
-Backup/restore → monitoring → load test → deployment hardening → tagged release.
+1. Довести 1.1: восстановление доступа, правила смены/сброса пароля, окончательная role-permission matrix и политика деактивации/удаления.
+2. Зафиксировать конечную модель Organization/Workspace/Project и выполнить 1.2 с tenant ownership и object-level isolation.
+3. После стабилизации модели данных завершить Findings lifecycle и Audit Log.
+4. Затем Reports/Export, API Tokens/CI, Dashboard и Backup/Restore.
+5. Только после функционального завершения перейти к системной стабилизации, затем Security Hardening и Release Readiness.
 
-## 6. Запреты кейса
+## Связанные документы
 
-- Не использовать Semgrep, Gitleaks, Trivy, detekt или сторонний rule engine вместо собственных анализаторов.
-- Не использовать LLM для детекции; AI только объясняет findings, подтверждённые сканерами.
-- Не использовать n8n/Node-RED как основу.
-- Не сканировать чужие production-системы.
-- Не запускать Gradle/Maven/project scripts проверяемого репозитория.
-- Не помещать API keys, webhook secrets и реальные пользовательские данные в тестовые fixtures или скриншоты.
-
-## 7. Документы
-
-- [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md) — актуальный backlog и статусы.
-- [audit-current-state.md](./audit-current-state.md) — подтверждённое состояние исходников и архитектурные ограничения.
-- [demo-runbook.md](./demo-runbook.md) — подготовка и полный сценарий демонстрации.
-- [Rule_Packs_and_Presets.md](./Rule_Packs_and_Presets.md) — packs, presets, policies и ограничения анализаторов.
+- [Dorabotka_Ostalos.md](./Dorabotka_Ostalos.md) — текущие статусы, ограничения и оставшиеся дефекты.
+- [audit-current-state.md](./audit-current-state.md) — подтверждённое состояние исходников и security boundary.
+- [demo-runbook.md](./demo-runbook.md) — сценарий демонстрации.
+- [Rule_Packs_and_Presets.md](./Rule_Packs_and_Presets.md) — rule packs, presets и policies.
