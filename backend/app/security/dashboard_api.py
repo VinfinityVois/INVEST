@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from app.db import SessionLocal
 from app.models import Finding, Project, Workflow, WorkflowRun
@@ -46,10 +46,16 @@ def dashboard_summary(
         finding_conditions = [Finding.run_id.in_(run_ids)] if run_ids else [False]
         if severity:
             finding_conditions.append(func.lower(Finding.severity) == severity)
-        scanner_expr = func.coalesce(
-            Finding.payload["scanner"].as_string(),
-            Finding.payload["scanner_type"].as_string(),
-            "unknown",
+        category_expr = func.upper(Finding.payload["category"].as_string())
+        scanner_expr = case(
+            (category_expr == "SAST", "SAST"),
+            (category_expr == "SCA", "SCA"),
+            (category_expr == "SECRET", "Secrets"),
+            else_=func.coalesce(
+                Finding.payload["scanner"].as_string(),
+                Finding.payload["scanner_type"].as_string(),
+                "Other",
+            ),
         )
         if scanner:
             finding_conditions.append(func.lower(scanner_expr) == scanner.lower())
