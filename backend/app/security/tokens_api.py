@@ -157,8 +157,7 @@ def create_api_token(workspace_id: UUID, payload: ApiTokenCreate, request: Reque
 def revoke_api_token(workspace_id: UUID, token_id: UUID, request: Request):
     actor = _actor(request)
     with SessionLocal() as db:
-        active, _ = require_active_workspace(db, request, allowed_roles={"admin"})
-        if active.id != workspace_id:
+        if workspace_role(db, actor.id, workspace_id) != "admin":
             raise HTTPException(status_code=404, detail="Workspace not found.")
         row = db.scalar(
             select(ApiToken).where(
