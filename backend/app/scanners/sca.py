@@ -112,8 +112,8 @@ def _load_lockfile(path: Path, include_dev: bool = True) -> dict[tuple[str, str]
     rows = (_read_text(path) or "").splitlines()
     for group, artifact, version, line in _load_lockfile_entries(path):
         if not include_dev and line <= len(rows):
-            configuration = rows[line - 1].split("=", 1)[0].rsplit(":", 1)[-1]
-            if _is_dev_configuration(configuration):
+            configurations = [item.strip() for item in rows[line - 1].split("=", 1)[1].split(",") if item.strip()] if "=" in rows[line - 1] else []
+            if configurations and all(_is_dev_configuration(item) for item in configurations):
                 continue
         versions.setdefault((group, artifact), set()).add(version)
     return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
@@ -767,8 +767,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
             if (group, artifact) in declared_coordinates:
                 continue
             if not include_dev and lock_line <= len(lock_rows):
-                configuration = lock_rows[lock_line - 1].split("=", 1)[0].rsplit(":", 1)[-1]
-                if _is_dev_configuration(configuration):
+                configurations = [item.strip() for item in lock_rows[lock_line - 1].split("=", 1)[1].split(",") if item.strip()] if "=" in lock_rows[lock_line - 1] else []
+                if configurations and all(_is_dev_configuration(item) for item in configurations):
                     continue
             for advisory in advisory_index.get((group, artifact), []):
                 if _affected(version, advisory.get("ranges", [])):
