@@ -307,6 +307,12 @@ def test_workspace_membership_isolation_and_switching(user_client):
     )
     assert workspace.status_code == 201
     workspace_id = workspace.json()["id"]
+    renamed_workspace = client.patch(
+        f"/api/workspaces/{workspace_id}",
+        json={"name": "AppSec Workspace"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert renamed_workspace.status_code == 200
 
     member_added = client.post(
         f"/api/organizations/{organization_id}/members",
@@ -330,6 +336,12 @@ def test_workspace_membership_isolation_and_switching(user_client):
     assert client.get(f"/api/runs/{admin_run_id}/findings").status_code == 404
     member_workspaces = client.get("/api/workspaces")
     assert member_workspaces.status_code == 200
+    denied_rename = client.patch(
+        f"/api/workspaces/{workspace_id}",
+        json={"name": "Unauthorized rename"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert denied_rename.status_code == 403
     visible_ids = {item["id"] for item in member_workspaces.json()["items"]}
     assert workspace_id in visible_ids
     assert len(visible_ids) == 2
