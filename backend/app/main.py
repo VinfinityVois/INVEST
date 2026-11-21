@@ -135,11 +135,56 @@ app.add_middleware(
 from app.security.api import router as auth_router, SESSION_COOKIE
 from app.security.users_api import router as users_router
 from app.security.workspaces_api import router as workspaces_router
+from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
 
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(workspaces_router)
+
+
+def _project_in_active_workspace(session, request: Request, project_id: UUID, *, write: bool = False):
+    roles = {"admin", "editor"} if write else None
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    project = session.scalar(
+        select(Project).where(
+            Project.id == project_id,
+            Project.workspace_id == workspace.id,
+        )
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _workflow_in_active_workspace(session, request: Request, workflow_id: UUID, *, write: bool = False):
+    roles = {"admin", "editor"} if write else None
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    workflow = session.scalar(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace.id,
+        )
+    )
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow
+
+
+def _run_in_active_workspace(session, request: Request, run_id: UUID, *, write: bool = False):
+    roles = {"admin", "editor"} if write else None
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    run = session.scalar(
+        select(WorkflowRun)
+        .join(Workflow, Workflow.id == WorkflowRun.workflow_id)
+        .where(
+            WorkflowRun.id == run_id,
+            Workflow.workspace_id == workspace.id,
+        )
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
 
 
 @app.middleware("http")
@@ -363,28 +408,33 @@ def _project_snapshot_diff(before: dict, after: dict) -> dict:
 
 
 @app.get("/api/projects")
-def list_projects():
+def list_projects(request: Request):
     with SessionLocal() as session:
-        rows = session.scalars(select(Project).order_by(Project.updated_at.desc(), Project.name)).all()
+        workspace, _ = require_active_workspace(session, request)
+        rows = session.scalars(select(Project).where(Project.workspace_id == workspace.id).order_by(Project.updated_at.desc(), Project.name)).all()
         return [_project_payload(item) for item in rows]
 
 
 @app.post("/api/projects", status_code=201)
-def create_project(file: UploadFile = File(...)):
+def create_project(request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
     project_id = uuid4()
     workspace_path = f"projects/project-{project_id}"
     staging_path = f"projects/.staging-{project_id}"
     try:
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
         result = extract_project_archive(file.file, settings.workspace_root, staging_path)
         root = Path(settings.workspace_root).resolve()
         destination = root / workspace_path
         result_path = root / staging_path
         result_path.rename(destination)
         with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
             project = Project(
                 id=project_id,
+                workspace_id=workspace.id,
                 name=_safe_project_name(file.filename),
                 workspace_path=workspace_path,
                 original_filename=Path(file.filename).name[:255],
@@ -408,7 +458,7 @@ def create_project(file: UploadFile = File(...)):
 
 
 @app.put("/api/projects/{project_id}/archive")
-def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
+def update_project_archive(project_id: UUID, request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
     with SessionLocal() as session:
@@ -455,7 +505,7 @@ def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
 
 
 @app.patch("/api/projects/{project_id}")
-def rename_project(project_id: UUID, payload: ProjectRename):
+def rename_project(project_id: UUID, payload: ProjectRename, request: Request):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
@@ -471,7 +521,7 @@ def rename_project(project_id: UUID, payload: ProjectRename):
 
 
 @app.delete("/api/projects/{project_id}", status_code=204)
-def delete_project(project_id: UUID):
+def delete_project(project_id: UUID, request: Request):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
@@ -490,7 +540,7 @@ def delete_project(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/history")
-def project_history(project_id: UUID):
+def project_history(project_id: UUID, request: Request):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
@@ -512,7 +562,7 @@ def project_history(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/files")
-def list_project_files(project_id: UUID):
+def list_project_files(project_id: UUID, request: Request):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
@@ -547,6 +597,7 @@ def preview_project_file(
     project_id: UUID,
     path: str = Query(min_length=1, max_length=1000),
     start_line: int = Query(default=1, ge=1),
+    request: Request = None,
 ):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
@@ -587,7 +638,7 @@ def preview_project_file(
 
 
 @app.get("/api/projects/{project_id}/download")
-def download_project_archive(project_id: UUID):
+def download_project_archive(project_id: UUID, request: Request):
     """Export a project without VCS metadata, symlinks, or likely credentials."""
     max_archive_bytes = 1024 * 1024 * 1024
     temporary_path = None
@@ -662,7 +713,7 @@ def download_project_archive(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/file/download")
-def download_project_file(project_id: UUID, path: str = Query(min_length=1, max_length=1000)):
+def download_project_file(project_id: UUID, request: Request, path: str = Query(min_length=1, max_length=1000)):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
@@ -1905,7 +1956,7 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
 
 
 @app.post("/api/projects/{project_id}/reports/{run_id}", status_code=201)
-def save_run_report_to_project(project_id: UUID, run_id: UUID):
+def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         run = session.get(WorkflowRun, run_id)
