@@ -268,7 +268,7 @@ def test_claim_recovers_stale_running_run_without_heartbeat(monkeypatch):
             assert recovered.status == "running"
             assert recovered.locked_by == "replacement-worker"
             assert recovered.heartbeat_at is not None
-            assert recovered.started_at > stale_started
+            assert recovered.started_at.replace(tzinfo=timezone.utc) > stale_started
     finally:
         engine.dispose()
 
