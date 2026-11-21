@@ -2401,14 +2401,6 @@ class PresetCloneRequest(BaseModel):
     name: str | None = Field(default=None, max_length=200)
 
 
-def _require_template_publish_token(provided_token: str) -> None:
-    configured_token = settings.template_publish_token
-    if not configured_token:
-        raise HTTPException(status_code=503, detail="Template publishing is not configured")
-    if not provided_token or not hmac.compare_digest(provided_token, configured_token):
-        raise HTTPException(status_code=401, detail="Invalid template publishing token")
-
-
 @app.get("/api/presets")
 def list_builtin_presets():
     try:
@@ -2497,11 +2489,11 @@ def get_workflow_template(template_id: UUID):
 
 @app.post("/api/templates/publish", status_code=201)
 def publish_workflow_template(payload: TemplatePublishRequest, x_template_publish_token: str = Header(default="", alias="X-Template-Publish-Token")):
-    _require_template_publish_token(x_template_publish_token)
     with SessionLocal() as session:
         workflow = session.get(Workflow, payload.workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_template_publish_token, workflow.workspace_id, "template:publish")
         version = session.scalar(select(WorkflowVersion).where(
             WorkflowVersion.workflow_id == payload.workflow_id
         ).order_by(WorkflowVersion.version.desc()).limit(1))
