@@ -1,6 +1,6 @@
 """Workspace-scoped API token management and validation."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 from uuid import UUID
@@ -132,7 +132,7 @@ def create_api_token(workspace_id: UUID, payload: ApiTokenCreate, request: Reque
             name=payload.name,
             token_hash=token_digest(raw_token),
             scopes=payload.scopes,
-            expires_at=payload.expires_at,
+            expires_at=payload.expires_at or (datetime.now(timezone.utc) + timedelta(days=90)),
         )
         db.add(row)
         db.flush()
