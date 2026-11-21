@@ -282,3 +282,21 @@ containers cannot accidentally use separate temporary directories.
 ### Safe project asset preview
 
 The project workspace previews PNG, JPEG, WebP, GIF and PDF files through `GET /api/projects/{project_id}/preview?path=...`. Preview is limited to 20 MiB per file. SVG, HTML and other active content are intentionally not rendered.
+
+
+## Built-in SCA rule packs
+
+The dependency scanner exposes repository-owned SCA packs through `GET /api/rule-packs?analyzer=sca`:
+
+- `sca-maven-core` — Maven and Gradle dependency checks against the pinned local `data/maven-advisories.json` snapshot.
+- `sca-spring-boot` — extends the core pack and adds the curated Spring Boot starter catalog from `data/spring-boot-starters.json`. Starter metadata classifies a dependency; it does not create vulnerability findings.
+
+The `scan.sca` node configuration is schema-driven:
+
+- `rule_packs` selects one or more compatible built-in packs;
+- `advisory_db` accepts only the repository-owned `maven-advisories` database identifier (no arbitrary path or URL);
+- `starter_pack` selects the optional Spring Boot starter catalog;
+- `include_dev` controls Maven test/provided/system scopes and Gradle test configurations;
+- `use_lockfile` controls Gradle lockfile version resolution and transitive lockfile entries.
+
+Pack metadata and inheritance are validated at API startup. Pack content is treated as data: no rule file, build script, Maven or Gradle task is executed. SCA findings retain their ecosystem identifier, and Spring Boot starter classification is attached only to an advisory finding for a matching starter coordinate.
