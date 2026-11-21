@@ -270,6 +270,7 @@ def _assert_workspace_backfill(connection):
         "workspaces",
         "organization_memberships",
         "workspace_memberships",
+        "api_tokens",
     }.issubset(tables)
 
     project = connection.execute(
@@ -352,7 +353,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0008_workspace_tenancy")
+        _assert_revision(connection, "0009_workspace_api_tokens")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
         _assert_rate_limit_schema(connection, present=True)
@@ -367,7 +368,7 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
         _run_alembic(database_url, "downgrade", "0007_login_rate_limits")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0008_workspace_tenancy")
+        _assert_revision(connection, "0009_workspace_api_tokens")
         _assert_workspace_backfill(connection)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
