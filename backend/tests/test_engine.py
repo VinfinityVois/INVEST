@@ -41,6 +41,29 @@ def test_workspace_source_runs_secrets_scanner_and_merges_findings(tmp_path, mon
     assert "VeryStrongPasswordValue123" not in str(result)
 
 
+
+def test_downstream_is_blocked_when_upstream_source_is_unconfigured():
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {}},
+            {"id": "scan", "type": "scan.secrets"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["outputs"]["source"]["status"] == "configuration_required"
+    assert result["outputs"]["scan"]["status"] == "blocked"
+    scan_trace = next(item for item in result["trace"] if item["node_id"] == "scan")
+    assert scan_trace["diagnostic_level"] == "blocked"
+    assert scan_trace["reason_code"] == "UPSTREAM_SOURCE_UNAVAILABLE"
+
+
 def test_unconfigured_source_is_reported_as_partial_with_actionable_status():
     graph = WorkflowGraph(
         nodes=[
@@ -488,7 +511,7 @@ def test_scanner_cache_expires_after_ttl_and_rescans(tmp_path, monkeypatch):
     assert expired["cache_metadata"]["scan"]["cached_at"] != expired_metadata["scan"]["cached_at"]
 
 
-def test_workflow_delivers_ai_report_to_webhook_node(tmp_path, monkeypatch):
+def test_workflow_scans_gates_and_delivers_ai_report_to_webhook(tmp_path, monkeypatch):
     import app.workflows.engine as engine
 
     project = tmp_path / "sample"
@@ -496,8 +519,8 @@ def test_workflow_delivers_ai_report_to_webhook_node(tmp_path, monkeypatch):
     (project / "App.kt").write_text("class App {}", encoding="utf-8")
     monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [{
-        "fingerprint": "finding-1", "rule_id": "demo.secret", "severity": "HIGH",
-        "path": "App.kt", "line": 1, "message": "Demo finding",
+        "fingerprint": "finding-1", "rule_id": "demo.secret", "severity": "CRITICAL",
+        "path": "App.kt", "line": 1, "message": "Synthetic critical finding",
     }])
     monkeypatch.setattr(engine, "explain_findings", lambda findings, _config: {
         "status": "completed", "findings": findings,
@@ -511,25 +534,31 @@ def test_workflow_delivers_ai_report_to_webhook_node(tmp_path, monkeypatch):
     ) or {"http_status": 200, "delivered": True})
 
     graph = WorkflowGraph(
-        name="Webhook end-to-end",
+        name="Security scan, gate and notification",
         nodes=[
             {"id": "trigger", "type": "trigger.manual"},
             {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
             {"id": "scan", "type": "scan.secrets"},
+            {"id": "merge", "type": "findings.merge"},
+            {"id": "gate", "type": "ci.gate"},
             {"id": "ai", "type": "ai.explain"},
             {"id": "notify", "type": "notify.webhook", "config": {"url": "https://webhook.site/demo-id"}},
         ],
         edges=[
             {"id": "e1", "source": "trigger", "target": "source"},
             {"id": "e2", "source": "source", "target": "scan"},
-            {"id": "e3", "source": "scan", "target": "ai"},
-            {"id": "e4", "source": "ai", "target": "notify"},
+            {"id": "e3", "source": "scan", "target": "merge"},
+            {"id": "e4", "source": "merge", "target": "gate"},
+            {"id": "e5", "source": "scan", "target": "ai"},
+            {"id": "e6", "source": "ai", "target": "notify"},
         ],
     )
 
     result = execute_graph(graph, registry)
 
-    assert result["status"] == "completed"
+    assert result["status"] == "failed"
+    assert result["security_gate"]["decision"] == "BLOCK"
+    assert result["outputs"]["gate"]["status"] == "blocked"
     assert delivered["url"] == "https://webhook.site/demo-id"
     assert delivered["payload"]["summary"]["total_findings"] == 1
     assert delivered["payload"]["ai_summary"]
@@ -749,3 +778,92 @@ def test_logic_compare_count_operator_uses_total_finding_count(tmp_path, monkeyp
     assert result["outputs"]["compare"]["branch"] == "true"
     assert len(result["outputs"]["compare"]["matched_findings"]) == 2
     assert result["outputs"]["compare"]["unmatched_findings"] == []
+
+
+
+def test_scanner_config_filters_test_paths_and_low_confidence_findings():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"path": "src/main/App.kt", "confidence": 0.9},
+        {"path": "src/test/AppTest.kt", "confidence": 0.99},
+        {"path": "src/main/Weak.kt", "confidence": 0.2},
+    ]
+
+    filtered = _filter_scanner_findings(
+        findings, {"include_tests": False, "min_confidence": 0.4}, "sast"
+    )
+
+    assert filtered == [findings[0]]
+
+
+def test_scanner_config_can_include_tests_and_zero_confidence_threshold():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"path": "src/main/App.kt", "confidence": 0.1},
+        {"path": "src/test/AppTest.kt", "confidence": 0.2},
+    ]
+
+    filtered = _filter_scanner_findings(
+        findings, {"include_tests": True, "min_confidence": 0}, "secrets"
+    )
+
+    assert filtered == findings
+
+
+def test_sast_rule_pack_filters_findings_to_selected_rule_ids():
+    from app.workflows.engine import _filter_scanner_findings
+
+    findings = [
+        {"rule_id": "kotlin.jdbc.sql-injection", "severity": "LOW", "confidence": 0.96},
+        {"rule_id": "kotlin.spring.idor.unscoped-object-read", "severity": "LOW", "confidence": 0.84},
+    ]
+    filtered = _filter_scanner_findings(findings, {"rule_packs": ["sast-injection"]}, "sast")
+    assert [item["rule_id"] for item in filtered] == ["kotlin.jdbc.sql-injection"]
+    assert filtered[0]["severity"] == "HIGH"
+    assert filtered[0]["cwe"] == ["CWE-89"]
+
+
+
+def test_ai_provider_failure_keeps_scanner_results_and_marks_run_partial(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    (project / "application.yml").write_text("spring: {}\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda *_args, **_kwargs: [
+        {"fingerprint": "finding-1", "rule_id": "TEST_SECRET", "severity": "HIGH", "path": "application.yml", "line": 1}
+    ])
+    monkeypatch.setattr(engine, "explain_findings", lambda findings, _config: {
+        "status": "failed",
+        "message": "AI provider timeout",
+        "findings": findings,
+        "explanations": [],
+        "analyzed_count": len(findings),
+        "explained_count": 0,
+    })
+
+    graph = WorkflowGraph(
+        name="AI provider outage",
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "ai", "type": "ai.explain"},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "ai"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "partial"
+    assert result["outputs"]["scan"]["summary"]["total"] == 1
+    assert result["outputs"]["ai"]["status"] == "failed"
+    assert result["outputs"]["ai"]["findings"][0]["fingerprint"] == "finding-1"
+    assert result["trace"][-1]["diagnostic_level"] == "error"

@@ -6,6 +6,7 @@ import hmac
 import json
 import re
 import tomllib
+from functools import lru_cache
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -14,9 +15,10 @@ from app.scanners.secrets import MAX_FILE_BYTES, MAX_FILES, SKIP_DIRS
 
 DATA_FILE = Path(__file__).resolve().parents[3] / "data" / "maven-advisories.json"
 SPRING_BOOT_BOM_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-managed-versions.json"
+SPRING_BOOT_STARTERS_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-starters.json"
 DEPENDENCY_CALL = re.compile(
     r"(?P<call>\b[A-Za-z_]\w*\s*\(\s*(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
-    r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
+    r"|\badd\s*\(\s*['\"](?P<add_configuration>[^'\"]+)['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
     re.MULTILINE | re.DOTALL,
 )
 COORDINATE = re.compile(r"^([^:\s]+):([^:\s]+)(?::([^:\s]+))?$")
@@ -99,10 +101,20 @@ def _load_lockfile_entries(path: Path) -> list[tuple[str, str, str, int]]:
     return entries
 
 
-def _load_lockfile(path: Path) -> dict[tuple[str, str], str]:
+def _is_dev_configuration(value: str | None) -> bool:
+    name = (value or "").replace("-", "").replace("_", "").lower()
+    return name.startswith(("test", "androidtest", "kaptTest".lower(), "testfixtures")) or "testcompile" in name or "testruntime" in name
+
+
+def _load_lockfile(path: Path, include_dev: bool = True) -> dict[tuple[str, str], str]:
     """Return only unambiguous versions; configurations may resolve differently."""
     versions: dict[tuple[str, str], set[str]] = {}
-    for group, artifact, version, _line in _load_lockfile_entries(path):
+    rows = (_read_text(path) or "").splitlines()
+    for group, artifact, version, line in _load_lockfile_entries(path):
+        if not include_dev and line <= len(rows):
+            configurations = [item.strip() for item in rows[line - 1].split("=", 1)[1].split(",") if item.strip()] if "=" in rows[line - 1] else []
+            if configurations and all(_is_dev_configuration(item) for item in configurations):
+                continue
         versions.setdefault((group, artifact), set()).add(version)
     return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
 
@@ -341,7 +353,7 @@ def _spring_boot_bom_versions(build_text: str, constants: dict[str, str], snapsh
     return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
 
 
-def _make_finding(group: str, artifact: str, version: str, advisory: dict, path: str, line: int) -> dict:
+def _make_finding(group: str, artifact: str, version: str, advisory: dict, path: str, line: int, ecosystem: str = 'Maven') -> dict:
     rule_id = f"sca.maven.{group}.{artifact}.{advisory['id']}"
     identity = f"{rule_id}:{path}:{line}:{version}"
     fingerprint = hmac.new(settings.app_secret_key.encode(), identity.encode(), hashlib.sha256).hexdigest()
@@ -352,6 +364,7 @@ def _make_finding(group: str, artifact: str, version: str, advisory: dict, path:
         "rule_id": rule_id,
         "class": "dependency-vulnerability",
         "category": "SCA",
+        "ecosystem": ecosystem,
         "path": path,
         "line": line,
         "severity": advisory.get("severity", "MEDIUM"),
@@ -541,7 +554,7 @@ def _maven_parent_context(pom_path, project, snapshots, visited=None, depth=0):
     parent_managed.update(_maven_managed(parent_path, parent_pom, parent_properties, snapshots, project))
     return parent_properties, parent_managed
 
-def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None, include_dev: bool = True) -> list[dict]:
     project = Path(root).resolve()
     advisories = _load_advisories(advisories_path)
     bom_snapshots = _load_spring_boot_boms()
@@ -570,13 +583,14 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
                 artifact = _maven_resolve(_maven_text(dep, "artifactId"), section_properties)
                 version = _maven_resolve(_maven_text(dep, "version"), section_properties)
                 version = version or managed.get((group, artifact))
-                if not group or not artifact or not version:
+                scope = _maven_text(dep, "scope") or "compile"
+                if not group or not artifact or not version or (not include_dev and scope in {"test", "provided", "system"}):
                     continue
                 line_match = re.search(rf"<(?:[\w.-]+:)?groupId>\s*{re.escape(group)}\s*</(?:[\w.-]+:)?groupId>\s*<(?:[\w.-]+:)?artifactId>\s*{re.escape(artifact)}\s*</", source)
                 line = source.count("\n", 0, line_match.start()) + 1 if line_match else 1
                 for advisory in advisories.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative, line)
+                        finding = _make_finding(group, artifact, version, advisory, relative, line, ecosystem="Maven")
                         findings.setdefault(finding["fingerprint"], finding)
         if on_progress:
             try:
@@ -591,9 +605,12 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         for line_no, line in enumerate(source.splitlines(), 1):
             for match in MAVEN_TREE_COORDINATE.finditer(line):
                 group, artifact, version = match.group("group", "artifact", "version")
+                scope = match.group("scope")
+                if not include_dev and scope in {"test", "provided", "system"}:
+                    continue
                 for advisory in advisories.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative, line_no)
+                        finding = _make_finding(group, artifact, version, advisory, relative, line_no, ecosystem="Maven")
                         findings.setdefault(finding["fingerprint"], finding)
         if on_progress:
             try:
@@ -603,13 +620,55 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
     return sorted(findings.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
-def scan_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
-    combined = scan_gradle_project(root, advisories_path=advisories_path, on_progress=on_progress)
-    combined.extend(scan_maven_project(root, advisories_path=advisories_path, on_progress=on_progress))
+@lru_cache(maxsize=1)
+def _load_spring_boot_starters() -> dict[str, dict]:
+    try:
+        payload = json.loads(SPRING_BOOT_STARTERS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if payload.get("formatVersion") != 1 or payload.get("ecosystem") != "Maven":
+        return {}
+    return {
+        item["artifact"]: item
+        for item in payload.get("starters", [])
+        if isinstance(item, dict) and isinstance(item.get("artifact"), str)
+    }
+
+
+def scan_project(
+    root: str | Path,
+    advisories_path: Path | None = None,
+    on_progress=None,
+    include_dev: bool = True,
+    use_lockfile: bool = True,
+    ecosystems: list[str] | None = None,
+    starter_pack: str = "none",
+) -> list[dict]:
+    selected = set(ecosystems or ["Maven", "Gradle"])
+    combined = []
+    if "Gradle" in selected:
+        combined.extend(scan_gradle_project(
+            root, advisories_path=advisories_path, on_progress=on_progress,
+            include_dev=include_dev, use_lockfile=use_lockfile,
+        ))
+    if "Maven" in selected:
+        combined.extend(scan_maven_project(
+            root, advisories_path=advisories_path, on_progress=on_progress,
+            include_dev=include_dev,
+        ))
+    if starter_pack == "spring-boot-starters":
+        catalog = _load_spring_boot_starters()
+        for finding in combined:
+            if finding.get("group") == "org.springframework.boot" and finding.get("artifact") in catalog:
+                starter = catalog[finding["artifact"]]
+                finding["starter"] = {
+                    "title": starter.get("title", finding["artifact"]),
+                    "category": starter.get("category", "other"),
+                }
     return sorted({x["fingerprint"]: x for x in combined}.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
-def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None, include_dev: bool = True, use_lockfile: bool = True) -> list[dict]:
     project = Path(root).resolve()
     advisory_index = _load_advisories(advisories_path)
     bom_snapshots = _load_spring_boot_boms()
@@ -629,8 +688,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
 
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
-        lockfile_path = _find_project_lockfile(build_file.parent, project)
-        locked = _load_lockfile(lockfile_path) if lockfile_path else {}
+        lockfile_path = _find_project_lockfile(build_file.parent, project) if use_lockfile else None
+        locked = _load_lockfile(lockfile_path, include_dev=include_dev) if lockfile_path else {}
         if lockfile_path:
             lockfile_paths.add(lockfile_path)
         managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
@@ -641,11 +700,15 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
             # Version-catalog accessors: default/custom catalogs and add("configuration", libs.alias).
             alias_pattern = re.compile(
                 r"\b[A-Za-z_]\w*\s*\(\s*(?P<catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
-                r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
+                r"|\badd\s*\(\s*['\"](?P<add_configuration>[^'\"]+)['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
             )
             for alias_match in alias_pattern.finditer(block):
+                configuration_match = re.search(r"([A-Za-z_]\w*)\s*\(\s*$", block[:alias_match.start()])
+                configuration = configuration_match.group(1) if configuration_match else alias_match.group("add_configuration")
+                if not include_dev and _is_dev_configuration(configuration):
+                    continue
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
-                accessor = alias_match.group(2) or alias_match.group(4)
+                accessor = alias_match.group(2) or alias_match.group(5)
                 normalized = _catalog_alias_key(accessor.lstrip("."))
                 catalog = catalogs.get(catalog_name, {})
                 candidates = [entry for key, entry in catalog.items() if key == normalized]
@@ -660,10 +723,14 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                         continue
                     for advisory in advisory_index.get((group, artifact), []):
                         if _affected(version, advisory.get("ranges", [])):
-                            finding = _make_finding(group, artifact, version, advisory, relative_path, line)
+                            finding = _make_finding(group, artifact, version, advisory, relative_path, line, ecosystem="Gradle")
                             findings.setdefault(finding["fingerprint"], finding)
 
             for match in DEPENDENCY_CALL.finditer(block):
+                call_name = re.match(r"\s*([A-Za-z_]\w*)", match.group("call") or "")
+                configuration = call_name.group(1) if call_name else match.group("add_configuration")
+                if not include_dev and _is_dev_configuration(configuration):
+                    continue
                 coordinate = match.group("coordinate") or match.group("add_coordinate")
                 if not coordinate:
                     continue
@@ -684,7 +751,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 line = build_text.count("\n", 0, block_start + coordinate_start) + 1
                 for advisory in advisory_index.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative_path, line)
+                        finding = _make_finding(group, artifact, version, advisory, relative_path, line, ecosystem="Gradle")
                         findings.setdefault(finding["fingerprint"], finding)
         if on_progress:
             try:
@@ -693,14 +760,19 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 pass
 
     # Scan each lockfile once, after collecting direct coordinates from every module.
-    for lockfile_path in sorted(lockfile_paths):
+    for lockfile_path in sorted(lockfile_paths) if use_lockfile else []:
         lockfile_relative = lockfile_path.relative_to(project).as_posix()
+        lock_rows = (_read_text(lockfile_path) or "").splitlines()
         for group, artifact, version, lock_line in _load_lockfile_entries(lockfile_path):
             if (group, artifact) in declared_coordinates:
                 continue
+            if not include_dev and lock_line <= len(lock_rows):
+                configurations = [item.strip() for item in lock_rows[lock_line - 1].split("=", 1)[1].split(",") if item.strip()] if "=" in lock_rows[lock_line - 1] else []
+                if configurations and all(_is_dev_configuration(item) for item in configurations):
+                    continue
             for advisory in advisory_index.get((group, artifact), []):
                 if _affected(version, advisory.get("ranges", [])):
-                    finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line)
+                    finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line, ecosystem="Gradle")
                     findings.setdefault(finding["fingerprint"], finding)
 
     return sorted(findings.values(), key=lambda item: (item["path"], item["line"], item["rule_id"]))

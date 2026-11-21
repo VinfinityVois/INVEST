@@ -24,7 +24,7 @@ class ExplanationGatewayError(RuntimeError):
 def _endpoint(base_url: str) -> str:
     base = base_url.strip().rstrip("/")
     parsed = urlparse(base)
-    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "host.docker.internal"}:
         raise ExplanationGatewayError("LLM_BASE_URL должен использовать HTTPS (для localhost разрешён HTTP).")
     if not parsed.netloc or not parsed.hostname:
         raise ExplanationGatewayError("LLM_BASE_URL имеет неверный формат.")
@@ -102,7 +102,11 @@ def _safe_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
 def _provider_error(exc: Exception) -> str:
     if isinstance(exc, httpx.TimeoutException):
-        return "AI-провайдер не ответил за 25 секунд. Проверьте доступность сервиса и повторите запуск."
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
+        return (
+            f"AI-провайдер не ответил за {timeout_seconds:g} секунд. "
+            "Проверьте доступность сервиса и повторите запуск."
+        )
     if isinstance(exc, httpx.ConnectError):
         return "Не удалось подключиться к LLM_BASE_URL. Проверьте адрес, DNS, сеть и доступность провайдера из контейнера worker."
     if isinstance(exc, httpx.NetworkError):
@@ -236,10 +240,19 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         ensure_ascii=False,
         separators=(",", ":"),
     )
+    try:
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
+    except (TypeError, ValueError):
+        timeout_seconds = 90.0
+    try:
+        max_tokens = max(512, min(int(settings.llm_max_tokens), 4096))
+    except (TypeError, ValueError):
+        max_tokens = 1400
+
     request_payload = {
         "model": settings.llm_model,
         "temperature": 0.1,
-        "max_tokens": 3500,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -258,7 +271,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         request_attempts += 1
         response = httpx.post(
             endpoint, headers=headers, json=request_payload,
-            timeout=httpx.Timeout(25.0, connect=5.0),
+            timeout=httpx.Timeout(timeout_seconds, connect=5.0),
         )
         # Some OpenAI-compatible servers do not implement response_format.
         http_status = response.status_code
@@ -267,7 +280,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             request_attempts += 1
             response = httpx.post(
                 endpoint, headers=headers, json=fallback_payload,
-                timeout=httpx.Timeout(25.0, connect=5.0),
+                timeout=httpx.Timeout(timeout_seconds, connect=5.0),
             )
             http_status = response.status_code
         response.raise_for_status()

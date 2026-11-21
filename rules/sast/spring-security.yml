@@ -1,0 +1,20 @@
+pack_id: sast-spring-security
+title: Spring security configuration
+version: 1
+analyzer: sast
+rules:
+  - id: kotlin.tls.hostname-verification-disabled
+    severity: MEDIUM
+    confidence: 0.99
+    cwe: [CWE-295]
+    description: TLS hostname verification accepts every host
+  - id: kotlin.spring.credentialed-cors-wildcard
+    severity: MEDIUM
+    confidence: 0.94
+    cwe: [CWE-942]
+    description: Credentialed CORS uses a wildcard origin
+  - id: kotlin.spring.public-sensitive-route
+    severity: HIGH
+    confidence: 0.88
+    cwe: [CWE-862]
+    description: Sensitive route is exposed through permitAll

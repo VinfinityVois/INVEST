@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from time import perf_counter
 
 from app.config import settings
+from app.rules_loader import rule_packs
 from app.ai.explanations import explain_findings
 from app.notifications.webhook import WebhookDeliveryError, build_notification_payload, deliver_webhook
 from app.policies.security_gate import evaluate_security_gate
@@ -26,10 +27,264 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.4"
+SCANNER_CACHE_VERSION = "2026-11-21.8"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
+
+
+def _condition_context(parents: list[dict]) -> dict:
+    findings = []
+    for parent in parents:
+        if isinstance(parent, dict):
+            findings.extend(
+                item for item in parent.get("findings", [])
+                if isinstance(item, dict)
+            )
+
+    severities = {}
+    for finding in findings:
+        level = str(finding.get("severity", "UNKNOWN")).upper()
+        severities[level] = severities.get(level, 0) + 1
+
+    return {
+        "findings": findings,
+        "finding_count": len(findings),
+        "critical_count": severities.get("CRITICAL", 0),
+        "high_count": severities.get("HIGH", 0),
+        "medium_count": severities.get("MEDIUM", 0),
+        "low_count": severities.get("LOW", 0),
+        "info_count": severities.get("INFO", 0),
+        "severity_counts": severities,
+    }
+
+
+def _condition_value(context: dict, field: str):
+    value = context
+    for part in field.split("."):
+        if isinstance(value, dict):
+            value = value.get(part)
+        elif isinstance(value, (list, tuple)) and part.isdigit():
+            index = int(part)
+            value = value[index] if index < len(value) else None
+        else:
+            return None
+    return value
+
+
+def _evaluate_condition(
+    config: dict,
+    parents: list[dict],
+) -> tuple[bool, str | None]:
+    import math
+    import regex
+
+    if not isinstance(config, dict):
+        return False, "Конфигурация условия должна быть объектом."
+
+    field = config.get("field", "finding_count")
+    operator = config.get("operator", "gt")
+    expected = config.get("value", 0)
+
+    if (
+        not isinstance(field, str)
+        or not field
+        or len(field) > 160
+    ):
+        return False, "Некорректное поле условия."
+
+    if not isinstance(operator, str):
+        return False, "Оператор условия должен быть строкой."
+
+    context = _condition_context(parents)
+    actual = _condition_value(context, field)
+
+    if operator == "exists":
+        return actual is not None, None
+
+    if operator in {"eq", "ne"}:
+        matched = actual == expected
+
+        if operator == "ne":
+            matched = not matched
+
+        return matched, None
+
+    if operator in {"contains", "not_contains"}:
+        if not isinstance(actual, (str, list, tuple, dict, set)):
+            return (
+                False,
+                "Операция contains требует строку или коллекцию.",
+            )
+
+        try:
+            matched = expected in actual
+        except (TypeError, ValueError):
+            return (
+                False,
+                "Некорректное значение для операции contains.",
+            )
+
+        if operator == "not_contains":
+            matched = not matched
+
+        return matched, None
+
+    if operator == "regex":
+        if (
+            not isinstance(actual, str)
+            or not isinstance(expected, str)
+            or len(expected) > 256
+            or len(actual) > 8192
+        ):
+            return (
+                False,
+                "Некорректное регулярное выражение или входная строка.",
+            )
+
+        try:
+            matched = regex.search(
+                expected,
+                actual,
+                timeout=0.05,
+            ) is not None
+
+            return matched, None
+
+        except TimeoutError:
+            return (
+                False,
+                "Превышено допустимое время выполнения регулярного выражения.",
+            )
+
+        except regex.error as exc:
+            return (
+                False,
+                "Некорректное регулярное выражение: " + str(exc),
+            )
+
+    if operator in {"gt", "gte", "lt", "lte"}:
+        try:
+            left = float(actual)
+            right = float(expected)
+        except (TypeError, ValueError, OverflowError):
+            return (
+                False,
+                "Для сравнения укажите значения числовых типов.",
+            )
+
+        if not math.isfinite(left) or not math.isfinite(right):
+            return (
+                False,
+                "Числовое сравнение не принимает NaN и Infinity.",
+            )
+
+        comparisons = {
+            "gt": left > right,
+            "gte": left >= right,
+            "lt": left < right,
+            "lte": left <= right,
+        }
+
+        return comparisons[operator], None
+
+    return (
+        False,
+        "Неизвестный оператор условия: " + operator,
+    )
+def _active_parent_ids(edges, outputs: dict) -> list[str]:
+    active = []
+    for edge in edges:
+        parent_output = outputs.get(edge.source)
+        if parent_output is None or parent_output.get("status") in {
+            "skipped", "failed", "configuration_required", "blocked", "cancelled"
+        }:
+            continue
+        selected_branch = parent_output.get("branch")
+        has_split_findings = (
+            "matched_findings" in parent_output
+            and "unmatched_findings" in parent_output
+        )
+        if (
+            selected_branch
+            and not has_split_findings
+            and edge.source_handle
+            and edge.source_handle != selected_branch
+        ):
+            continue
+        active.append(edge.source)
+    return list(dict.fromkeys(active))
+
+
+
+def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -> list[dict]:
+    """Apply only presentation-independent scanner options declared in the node schema."""
+    minimum = config.get("min_confidence", 0.4)
+    try:
+        minimum = float(minimum)
+    except (TypeError, ValueError):
+        minimum = 0.0
+    include_tests = config.get("include_tests", True) is True
+    if minimum < 0 or minimum > 1:
+        minimum = 0.0
+    test_markers = {"test", "tests", "androidtest", "testfixtures"}
+    rule_metadata = {}
+    if scanner == "sast" and "rule_packs" in config:
+        packs = rule_packs.resolve(config.get("rule_packs"), analyzer="sast")
+        rule_metadata = {
+            item["id"]: item
+            for pack in packs
+            for item in pack.get("rules", [])
+        }
+    filtered = []
+    for finding in findings:
+        if float(finding.get("confidence", 1.0) if finding.get("confidence") is not None else 1.0) < minimum:
+            continue
+        if scanner in {"secrets", "sast"} and not include_tests:
+            parts = {part.lower() for part in PurePosixPath(str(finding.get("path", ""))).parts}
+            if parts & test_markers:
+                continue
+        if scanner == "sast" and rule_metadata:
+            metadata = rule_metadata.get(finding.get("rule_id"))
+            if metadata is None:
+                continue
+            finding = {
+                **finding,
+                "severity": metadata.get("severity", finding.get("severity")),
+                "confidence": metadata.get("confidence", finding.get("confidence")),
+                "cwe": metadata.get("cwe", finding.get("cwe")),
+            }
+        filtered.append(finding)
+    return filtered
+
+
+def _scan_sca_project(root: Path, config: dict, on_progress=None) -> list[dict]:
+    selected = config.get("rule_packs") or ["sca-spring-boot"]
+    packs = rule_packs.resolve(selected, analyzer="sca")
+    databases = {pack.get("advisory_db") for pack in packs}
+    configured_database = config.get("advisory_db", "maven-advisories")
+    if databases != {"maven-advisories"} or configured_database != "maven-advisories":
+        raise WorkflowExecutionError("Selected SCA packs do not share a supported advisory database")
+    ecosystems = sorted({ecosystem for pack in packs for ecosystem in pack.get("ecosystems", [])})
+    include_dev = config.get("include_dev")
+    if include_dev is None:
+        include_dev = any(pack.get("include_dev", True) for pack in packs)
+    use_lockfile = config.get("use_lockfile")
+    if use_lockfile is None:
+        use_lockfile = any(pack.get("use_lockfile", True) for pack in packs)
+    starter_pack = config.get("starter_pack")
+    if starter_pack is None:
+        starter_pack = next((pack.get("starter_pack") for pack in packs if pack.get("starter_pack") not in {None, "none"}), "none")
+    if starter_pack not in {"none", "spring-boot-starters"}:
+        raise WorkflowExecutionError("Unsupported SCA starter catalog")
+    return scan_project(
+        root,
+        on_progress=on_progress,
+        include_dev=include_dev is True,
+        use_lockfile=use_lockfile is True,
+        ecosystems=ecosystems,
+        starter_pack=starter_pack,
+    )
 
 
 def _source_fingerprint(root: Path) -> str:
@@ -276,10 +531,26 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         cache_hit = False
         cache_bypass_reason = None
         parents = []
+        active_edge_handles = []
         for parent_id, source_handle in incoming_edge_handles[node_id]:
             parent_output = outputs.get(parent_id)
-            if parent_output is None:
+            if parent_output is None or parent_output.get("status") in {
+                "skipped", "failed", "configuration_required", "blocked", "cancelled"
+            }:
                 continue
+            selected_branch = parent_output.get("branch")
+            has_split_findings = (
+                "matched_findings" in parent_output
+                and "unmatched_findings" in parent_output
+            )
+            if (
+                selected_branch
+                and not has_split_findings
+                and source_handle
+                and source_handle != selected_branch
+            ):
+                continue
+            active_edge_handles.append((parent_id, source_handle))
             if source_handle == "true" and "matched_findings" in parent_output:
                 parent_output = {**parent_output, "findings": parent_output["matched_findings"]}
             elif source_handle == "false" and "unmatched_findings" in parent_output:
@@ -317,7 +588,41 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             except Exception:
                 pass
 
-        if node.type in {"trigger.manual", "trigger.schedule"}:
+        if incoming_edge_handles[node_id] and not active_edge_handles:
+            upstream_outputs = [
+                outputs.get(parent_id)
+                for parent_id, _ in incoming_edge_handles[node_id]
+            ]
+            blocking_parent = next((
+                parent for parent in upstream_outputs
+                if isinstance(parent, dict)
+                and parent.get("status") in {
+                    "failed", "configuration_required", "blocked", "cancelled"
+                }
+            ), None)
+            if blocking_parent is not None:
+                parent_status = blocking_parent.get("status")
+                reason_code = (
+                    "UPSTREAM_SOURCE_UNAVAILABLE"
+                    if node.type.startswith("scan.")
+                    else "UPSTREAM_CONFIGURATION_REQUIRED"
+                    if parent_status == "configuration_required"
+                    else "UPSTREAM_EXECUTION_FAILED"
+                    if parent_status == "failed"
+                    else "UPSTREAM_STEP_BLOCKED"
+                )
+                output = {
+                    "status": "blocked",
+                    "message": (
+                        "Блок заблокирован: предыдущий источник или этап "
+                        "не завершился успешно."
+                    ),
+                    "reason_code": reason_code,
+                }
+            else:
+                # A successful conditional node selected another output handle.
+                output = {"status": "skipped"}
+        elif node.type in {"trigger.manual", "trigger.schedule"}:
             output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":
             relative_path = node.config.get("path")
@@ -397,11 +702,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     cache_hit = True
                 else:
                     if node.type == "scan.secrets":
-                        raw_findings = scan_directory(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(scan_directory(source_root, on_progress=report_scanner_progress, selected_rule_packs=node.config.get("rule_packs", ["secrets-core"])), node.config, "secrets")
                     elif node.type == "scan.sca":
-                        raw_findings = scan_project(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(_scan_sca_project(source_root, node.config, on_progress=report_scanner_progress), node.config, "sca")
                     else:
-                        raw_findings = scan_kotlin_project(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(scan_kotlin_project(source_root, on_progress=report_scanner_progress), node.config, "sast")
                     findings = [enrich_finding(item, source_root) for item in raw_findings]
                     output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
                     try:
@@ -421,7 +726,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_project(artifacts[source_node], on_progress=report_scanner_progress)]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(_scan_sca_project(artifacts[source_node], node.config, on_progress=report_scanner_progress), node.config, "sca")]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
             source_node = next(
@@ -430,7 +735,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_kotlin_project(artifacts[source_node], on_progress=report_scanner_progress)]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(scan_kotlin_project(artifacts[source_node], on_progress=report_scanner_progress), node.config, "sast")]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "findings.merge":
             merged = []
@@ -448,7 +753,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             for finding in merged:
                 unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
             try:
-                evaluation = evaluate_security_gate(list(unique.values()), node.config, finding_states)
+                gate_config = dict(node.config)
+                policy_id = gate_config.get("policy_pack")
+                if policy_id:
+                    policy = rule_packs.resolve([policy_id], analyzer="policy")[0]
+                    gate_config = {**gate_config, **policy}
+                evaluation = evaluate_security_gate(list(unique.values()), gate_config, finding_states)
                 output = {
                     "status": "blocked" if evaluation["blocked"] else "completed",
                     "decision": evaluation["decision"],
@@ -543,7 +853,24 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 except (ValueError, TypeError):
                     output = {"status": "failed", "message": "Для числового сравнения укажите числовое значение и поле.", "findings": findings}
         elif node.type == "logic.if":
-            output = {"status": "completed", "branch": "false"}
+            matched, error = _evaluate_condition(node.config, parents)
+            if error:
+                output = {
+                    "status": "failed",
+                    "reason_code": "INVALID_CONDITION",
+                    "message": error,
+                    "branch": "false",
+                }
+            else:
+                output = {
+                    "status": "completed",
+                    "branch": "true" if matched else "false",
+                    "condition": {
+                        "field": node.config.get("field", "finding_count"),
+                        "operator": node.config.get("operator", "gt"),
+                        "matched": matched,
+                    },
+                }
         elif node.type == "ai.explain":
             merged = []
             for parent in parents:
@@ -682,13 +1009,19 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 # Progress reporting must never break a security scan.
                 pass
 
+    # AI explanations enrich scanner evidence but must never invalidate a completed
+    # security scan or hide its findings when an external provider is unavailable.
     failed = any(
-        item.get("status") == "failed"
+        (item.get("status") == "failed" and nodes[node_id].type != "ai.explain")
         or (nodes[node_id].type == "ci.gate" and item.get("status") == "blocked")
         for node_id, item in outputs.items()
     )
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
-    status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
+    enrichment_degraded = any(
+        nodes[node_id].type == "ai.explain" and item.get("status") == "failed"
+        for node_id, item in outputs.items()
+    )
+    status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending or enrichment_degraded else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
     source_manifests = {node_id: _source_file_manifest(root) for node_id, root in artifacts.items()}

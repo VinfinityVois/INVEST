@@ -1,19 +1,27 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow, Background, Controls, MiniMap, Handle, Position, addEdge, reconnectEdge,
+  ReactFlow, Background, Controls, MiniMap, Handle, Position, BaseEdge, getBezierPath, addEdge, reconnectEdge,
   useEdgesState, useNodesState,
   type Connection, type Edge, type Node, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import UserManagement from "./UserManagement";
+import WorkspaceManager from "./WorkspaceManager";
+import DashboardPanel from "./DashboardPanel";
+import FindingCollaboration from "./FindingCollaboration";
 import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, FolderOpen, FileText, Pencil, ChevronRight, Download,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2, BarChart3, Clock3, FolderCode, ShieldCheck, GitMerge, Package, ShieldAlert, Webhook,
 } from "lucide-react";
 
-type Manifest = { type: string; title: string; category: string; description: string; config_schema?: Record<string, unknown> };
+type PortManifest = { name: string; data_type: string };
+type ConfigSchemaProperty = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number; minLength?: number; maxLength?: number; minItems?: number; maxItems?: number; pattern?: string; items?: ConfigSchemaProperty; format?: string; properties?: Record<string, ConfigSchemaProperty>; required?: string[] };
+type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { type?: string; title?: string; description?: string; required?: string[]; properties?: Record<string, ConfigSchemaProperty>; [key: string]: unknown } };
+type RulePack = { id: string; title: string; analyzer: string; version: number; rule_count: number; extends: string[] };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
+type WorkspaceSummary = { id: string; name: string; organization_id: string; organization_name: string; role: "admin" | "editor" | "analyst" | "viewer"; is_default: boolean; active: boolean };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
@@ -22,7 +30,7 @@ type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" }
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
 type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
-type FindingLifecycle = { state: "open" | "accepted_risk" | "fixed" | "false_positive"; reason: string; expires_at?: string | null };
+type FindingLifecycle = { state: "open" | "in_progress" | "resolved" | "accepted_risk" | "false_positive"; reason: string; expires_at?: string | null; assigned_to_user_id?: string | null };
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
@@ -68,10 +76,15 @@ type Telemetry = {
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number; cached?: boolean; cache_bypass_reason?: string; cache_age_seconds?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
+  error?: string | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
 type FlowNode = Node<NodeData>;
+
+const getSchemaDefaults = (manifest?: Manifest): Record<string, unknown> => Object.fromEntries(
+  Object.entries(manifest?.config_schema?.properties || {}).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default]),
+);
 
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
@@ -95,11 +108,40 @@ const highlightCodeLine = (source: string): React.ReactNode[] => {
 };
 
 
-const categoryMeta: Record<string, { label: string; tone: string }> = {
-  Trigger: { label: "Триггер", tone: "blue" }, Source: { label: "Источник", tone: "cyan" },
-  Security: { label: "Security", tone: "violet" }, Logic: { label: "Логика", tone: "amber" },
-  AI: { label: "AI", tone: "pink" }, Notify: { label: "Уведомления", tone: "green" },
-  CI: { label: "CI / Gate", tone: "green" },
+const categoryMeta: Record<string, { label: string; eyebrow: string; tone: string; color: string }> = {
+  Trigger: { label: "Триггеры", eyebrow: "TRIGGERS", tone: "amber", color: "#F59E0B" },
+  Source: { label: "Источники", eyebrow: "SOURCES", tone: "sky", color: "#0EA5E9" },
+  Security: { label: "Безопасность", eyebrow: "SECURITY", tone: "emerald", color: "#10B981" },
+  Logic: { label: "Логика и поток", eyebrow: "LOGIC / FLOW", tone: "violet", color: "#8B5CF6" },
+  AI: { label: "AI-анализ", eyebrow: "INTELLIGENCE", tone: "fuchsia", color: "#D946EF" },
+  CI: { label: "CI/CD · Gate", eyebrow: "QUALITY GATES", tone: "rose", color: "#F43F5E" },
+  Notify: { label: "Уведомления", eyebrow: "NOTIFICATIONS", tone: "sky", color: "#0EA5E9" },
+};
+const nodeIcon = (type: string, category: string) => {
+  switch (type) {
+    case "trigger.manual": return <Zap size={15}/>;
+    case "trigger.schedule": return <Clock3 size={15}/>;
+    case "source.upload": return <FolderCode size={15}/>;
+    case "source.git": return <GitBranch size={15}/>;
+    case "scan.secrets": return <ShieldCheck size={15}/>;
+    case "scan.sca": return <Package size={15}/>;
+    case "scan.sast": return <Code2 size={15}/>;
+    case "findings.merge": return <GitMerge size={15}/>;
+    case "ai.explain": return <Sparkles size={15}/>;
+    case "ci.gate": return <ShieldAlert size={15}/>;
+    case "notify.webhook": return <Webhook size={15}/>;
+    default: return category === "Security" ? <ShieldCheck size={15}/> : category === "Source" ? <FolderCode size={15}/> : category === "Trigger" ? <Zap size={15}/> : category === "AI" ? <Sparkles size={15}/> : category === "Logic" ? <GitMerge size={15}/> : category === "CI" ? <ShieldAlert size={15}/> : <Workflow size={15}/>;
+  }
+};
+const categoryColor = (category?: string) => categoryMeta[category || ""]?.color || "#64748B";
+const portColor = (dataType: string) => {
+  const type = dataType.toLowerCase();
+  if (type.includes("event")) return "#F59E0B";
+  if (type.includes("source")) return "#0EA5E9";
+  if (type.includes("finding")) return "#10B981";
+  if (type.includes("report")) return "#D946EF";
+  if (type.includes("gate")) return "#F43F5E";
+  return "#8B5CF6";
 };
 const seedNodes: FlowNode[] = [
   { id: "trigger", type: "workflow", position: { x: 70, y: 190 }, data: { label: "Manual trigger", nodeType: "trigger.manual", category: "Trigger", description: "Ручной запуск проверки по кнопке «Запустить».", config: {} } },
@@ -137,13 +179,13 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "completed" ? "success"
     : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
-    <Handle type="target" position={Position.Left} />
+    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: portColor(port.data_type), boxShadow: "0 0 9px " + portColor(port.data_type) + "88" }} />)}
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
-    <div className="node-main"><div className="node-symbol">{data.category === "Security" ? <Shield size={17} /> : data.category === "Source" ? <GitBranch size={17} /> : data.category === "Trigger" ? <Zap size={17} /> : data.category === "AI" ? <Bot size={17} /> : <Workflow size={17} />}</div>
+    <div className="node-main"><div className="node-symbol">{nodeIcon(data.nodeType, data.category)}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
     <details className="node-description-details nodrag"><summary>О БЛОКЕ <ChevronDown size={10} /></summary><p>{data.description}</p></details>
     {hasExecutionOutput && <section className={"node-output node-output-" + outputTone}>
-      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? "!" : outputTone === "success" ? "✓" : outputTone === "active" ? "…" : outputTone === "warning" ? "⚙" : "·"}</i></div>
+      <div className="node-output-heading"><span>РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ</span><i>{outputTone === "danger" ? <CircleX size={13}/> : outputTone === "success" ? <CircleCheck size={13}/> : outputTone === "active" ? <LoaderCircle size={13} className="node-output-spinner"/> : outputTone === "warning" ? <CircleAlert size={13}/> : <MinusCircle size={13}/>}</i></div>
       {data.executionDetail && <p>{data.executionDetail}</p>}
       {data.executionProgress != null && <div className="node-live-progress" aria-label={`Прогресс сканирования: ${Math.round(data.executionProgress)}%`}><div><span>СКАНИРОВАНИЕ ФАЙЛОВ</span><b>{Math.round(data.executionProgress)}%</b></div><i><span style={{ width: `${data.executionProgress}%` }} /></i>{data.executionProgressLabel && <small title={data.executionProgressLabel}>{data.executionProgressLabel}</small>}</div>}
        {(data.executionDuration != null || data.executionCount != null || data.executionCoverage != null) && <div className="node-execution-metrics">
@@ -156,22 +198,252 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       </div>}
       {data.executionNotes?.map((note, index) => <div className="node-ai-note" key={index}><b>AI · {index + 1}</b><span>{note}</span></div>)}
     </section>}
-    <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">●</span></div>
-    <Handle type="source" position={Position.Right} />
+    {(data.inputPorts?.length || data.outputPorts?.length) && ((data.inputPorts?.length || 0) > 1 || (data.outputPorts?.length || 0) > 1) && <div className="node-port-list">
+      {(data.inputPorts || []).map(port => <span key={"input-" + port.name}><b>IN</b>{port.name}<i>{port.data_type}</i></span>)}
+      {(data.outputPorts || []).map(port => <span key={"output-" + port.name}><b>OUT</b>{port.name}<i>{port.data_type}</i></span>)}
+    </div>}
+    <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
+    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
   </div>;
 }
+function CategoryEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style }: import("@xyflow/react").EdgeProps<Edge<{ sourceColor?: string; targetColor?: string }>>) {
+  const [edgePath] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
+  const gradientId = "workflow-edge-" + id.replace(/[^a-zA-Z0-9_-]/g, "-");
+  return <>
+    <defs><linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor={data?.sourceColor || "#64748B"}/>
+      <stop offset="100%" stopColor={data?.targetColor || "#64748B"}/>
+    </linearGradient></defs>
+    <BaseEdge path={edgePath} style={{ ...style, stroke: "url(#" + gradientId + ")", strokeWidth: 2.2, filter: "drop-shadow(0 0 4px " + (data?.sourceColor || "#64748B") + "55)" }}/>
+  </>;
+}
 const nodeTypes = { workflow: memo(WorkflowNode) };
+const edgeTypes = { category: memo(CategoryEdge) };
+
+type AuthUser = { id: string; email: string; is_admin: boolean };
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, {
+    ...init,
+    credentials: init?.credentials ?? "same-origin",
+  });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("invest:unauthorized"));
+  }
+  return response;
+}
 
 export default function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch("/api/auth/me", {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then(async response => {
+        if (response.ok) {
+          setUser(await response.json() as AuthUser);
+          return;
+        }
+        if (response.status !== 401) {
+          throw new Error("Сервис авторизации временно недоступен.");
+        }
+      })
+      .catch(reason => {
+        if (!controller.signal.aborted) {
+          setError(String(reason instanceof Error ? reason.message : reason));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setChecking(false);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setPassword("");
+      setError("Сессия завершена. Войдите снова.");
+      setChecking(false);
+    };
+
+    window.addEventListener("invest:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("invest:unauthorized", handleUnauthorized);
+  }, []);
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitting) return;
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(response.status === 401
+          ? "Неверный email или пароль."
+          : typeof data.detail === "string" ? data.detail : "Не удалось выполнить вход.");
+        return;
+      }
+
+      setUser(data as AuthUser);
+      setPassword("");
+      setError("");
+    } catch {
+      setError("Не удалось связаться с сервером. Проверьте подключение.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Не удалось завершить сессию.");
+      setUser(null);
+      setPassword("");
+      setError("");
+    } catch {
+      setError("Не удалось связаться с сервером для выхода.");
+    }
+  };
+
+  if (checking) {
+    return <main className="auth-screen"><section className="auth-card">
+      <div className="auth-mark">INVEST</div>
+      <h1>Проверка сессии</h1>
+      <p>Защищённое подключение к рабочей области</p>
+      <div className="auth-loader" />
+    </section></main>;
+  }
+
+  if (!user) {
+    return <main className="auth-screen">
+      <section className="auth-card">
+        <div className="auth-mark">INVEST <span>／ AI SECURITY WORKFLOW</span></div>
+        <div className="auth-eyebrow">SECURE WORKSPACE</div>
+        <h1>Вход в систему</h1>
+        <p>Введите учётные данные для доступа к рабочей области.</p>
+        <form className="auth-form" onSubmit={handleLogin}>
+          <label htmlFor="invest-auth-email">EMAIL</label>
+          <input
+            id="invest-auth-email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={event => setEmail(event.target.value)}
+            maxLength={320}
+            required
+          />
+          <label htmlFor="invest-auth-password">ПАРОЛЬ</label>
+          <input
+            id="invest-auth-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={event => setPassword(event.target.value)}
+            maxLength={1024}
+            required
+          />
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Проверка…" : "Войти"}
+          </button>
+        </form>
+        <div className="auth-footnote">SESSION PROTECTED  HTTPONLY COOKIE</div>
+      </section>
+    </main>;
+  }
+
+  return <AuthenticatedApp user={user} onUserUpdated={setUser} onLogout={() => { void handleLogout(); }} />;
+}
+
+function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; onUserUpdated: (user: AuthUser) => void; onLogout: () => void }) {
+  const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [userManagementTab, setUserManagementTab] = useState<"profile" | "users">("profile");
+  useEffect(() => {
+    window.localStorage.setItem("invest.theme", theme);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      apiFetch("/api/workspaces").then(response => {
+        if (!response.ok) throw new Error("Не удалось загрузить рабочие области.");
+        return response.json();
+      }),
+      apiFetch("/api/workspaces/active").then(response => {
+        if (!response.ok) throw new Error("Не удалось определить активную рабочую область.");
+        return response.json();
+      }),
+    ]).then(([workspaceData, activeData]) => {
+      if (!active) return;
+      setWorkspaces(workspaceData.items || []);
+      setActiveWorkspaceId(activeData.id || "");
+      setWorkspaceError("");
+    }).catch(error => {
+      if (active) setWorkspaceError(error instanceof Error ? error.message : "Ошибка загрузки Workspace.");
+    });
+    return () => { active = false; };
+  }, [user.id]);
+
+  const switchWorkspace = async (workspaceId: string) => {
+    if (!workspaceId || workspaceId === activeWorkspaceId || workspaceSwitching) return;
+    setWorkspaceSwitching(true);
+    setWorkspaceError("");
+    try {
+      const response = await apiFetch("/api/workspaces/" + workspaceId + "/switch", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось переключить Workspace.");
+      setActiveWorkspaceId(data.id);
+      window.location.reload();
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Ошибка переключения Workspace.");
+      setWorkspaceSwitching(false);
+    }
+  };
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
+  const [rulePacks, setRulePacks] = useState<RulePack[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Подключение к API…");
   const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
   const [result, setResult] = useState("Граф готов к проверке.");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
+  const [sourcePreviewOpen, setSourcePreviewOpen] = useState(false);
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
   const [sourcePreviewError, setSourcePreviewError] = useState("");
@@ -237,16 +509,35 @@ export default function App() {
   const [configError, setConfigError] = useState("");
   const [scheduleStatus, setScheduleStatus] = useState<{enabled:boolean;configured:boolean;cron?:string;timezone?:string;next_run_at?:string|null;last_run_at?:string|null} | null>(null);
   const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
+  const [templateItems, setTemplateItems] = useState<Array<{id:string;name:string;description:string;category:string;node_count:number;created_at?:string}>>([]);
+  const [presetItems, setPresetItems] = useState<Array<{id:string;name:string;description:string;category:string;node_count:number;setup_required:string[]}>>([]);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("Все");
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateBusyId, setTemplateBusyId] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState("");
+  const [aiGraphOpen, setAiGraphOpen] = useState(false);
+  const [aiGraphPrompt, setAiGraphPrompt] = useState("");
+  const [aiGraphBusy, setAiGraphBusy] = useState(false);
+  const [workflowDraftName, setWorkflowDraftName] = useState("");
+  const [workflowDirty, setWorkflowDirty] = useState(true);
+  const [bottomDrawerOpen, setBottomDrawerOpen] = useState(false);
+  const [aiGraphError, setAiGraphError] = useState("");
+
+
   const [edgeLabel, setEdgeLabel] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"properties" | "findings" | "telemetry">("properties");
+  const [leftTab, setLeftTab] = useState<"nodes" | "projects">("nodes");
   const [projectFolderOpen, setProjectFolderOpen] = useState(true);
   const [componentsFolderOpen, setComponentsFolderOpen] = useState(true);
 
   useEffect(() => {
     if (!workflowId) { setScheduleStatus(null); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/schedule")
+    apiFetch("/api/workflows/" + workflowId + "/schedule")
       .then(response => response.ok ? response.json() : null)
       .then(data => { if (active) setScheduleStatus(data); })
       .catch(() => { if (active) setScheduleStatus(null); });
@@ -254,16 +545,30 @@ export default function App() {
   }, [workflowId]);
 
   useEffect(() => {
-    fetch("/api/projects")
+    apiFetch("/api/rule-packs")
+      .then(response => response.ok ? response.json() : [])
+      .then((data: RulePack[]) => setRulePacks(data))
+      .catch(() => setRulePacks([]));
+  }, []);
+
+  useEffect(() => {
+    apiFetch("/api/projects")
       .then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Project[]) => setProjects(data))
       .catch(() => setResult("Не удалось загрузить библиотеку проектов."));
   }, []);
 
   useEffect(() => {
-    fetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
-    fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then((data: Manifest[]) => { setManifests(data); setNotice("API подключён · реестр компонентов синхронизирован"); })
+    apiFetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
+    apiFetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then((data: Manifest[]) => {
+        setManifests(data);
+        setNodes(current => current.map(node => {
+          const manifest = data.find(item => item.type === node.data.nodeType);
+          return manifest ? { ...node, data: { ...node.data, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } } : node;
+        }));
+        setNotice("API подключён · реестр компонентов синхронизирован");
+      })
       .catch(() => setNotice("API недоступен · проверьте backend :8000"));
   }, []);
 
@@ -271,7 +576,7 @@ export default function App() {
     if (!workflowId) { setSecurityTrend(null); return; }
     let active = true;
     setSecurityTrendLoading(true);
-    fetch("/api/workflows/" + workflowId + "/security-trend?limit=30")
+    apiFetch("/api/workflows/" + workflowId + "/security-trend?limit=30")
       .then(response => { if (!response.ok) throw new Error("Не удалось загрузить историю безопасности"); return response.json(); })
       .then((data: SecurityTrend) => { if (active) setSecurityTrend(data); })
       .catch(() => { if (active) setSecurityTrend(null); })
@@ -282,7 +587,7 @@ export default function App() {
   useEffect(() => {
     if (!workflowId) { setTelemetry(null); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/telemetry/latest")
+    apiFetch("/api/workflows/" + workflowId + "/telemetry/latest")
       .then(response => response.ok ? response.json() : null)
       .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
       .catch(() => { if (active) setTelemetry(null); });
@@ -292,7 +597,7 @@ export default function App() {
   useEffect(() => {
     if (!workflowId) { setFindingStates({}); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/finding-states")
+    apiFetch("/api/workflows/" + workflowId + "/finding-states")
       .then(response => response.ok ? response.json() : [])
       .then((rows: Array<FindingLifecycle & { fingerprint: string }>) => {
         if (active) setFindingStates(Object.fromEntries(rows.map(row => [row.fingerprint, row])));
@@ -304,7 +609,7 @@ export default function App() {
   useEffect(() => {
     if (!lastRunId) return;
     let active = true;
-    fetch("/api/runs/" + lastRunId + "/telemetry")
+    apiFetch("/api/runs/" + lastRunId + "/telemetry")
       .then(response => response.ok ? response.json() : null)
       .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
       .catch(() => undefined);
@@ -314,12 +619,12 @@ export default function App() {
   const refreshWorkflowRuns = async (id: string) => {
     setRunHistoryLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + id + "/runs");
+      const response = await apiFetch("/api/workflows/" + id + "/runs");
       if (!response.ok) throw new Error("Не удалось загрузить историю запусков");
       const rows = await response.json() as WorkflowRunSummary[];
       const summaries = await Promise.all(rows.slice(0, 12).map(async run => {
         try {
-          const telemetryResponse = await fetch("/api/runs/" + run.id + "/telemetry");
+          const telemetryResponse = await apiFetch("/api/runs/" + run.id + "/telemetry");
           if (!telemetryResponse.ok) return run;
           const data = await telemetryResponse.json() as Telemetry;
           return { ...run, total_findings: data.total_findings, severity: data.severity, cache: data.cache };
@@ -343,7 +648,7 @@ export default function App() {
   const refreshWorkflowVersions = async (id: string) => {
     setVersionsLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + id + "/versions");
+      const response = await apiFetch("/api/workflows/" + id + "/versions");
       if (!response.ok) throw new Error("Не удалось загрузить версии workflow");
       setWorkflowVersions(await response.json() as WorkflowVersionSummary[]);
     } catch { setWorkflowVersions([]); }
@@ -354,7 +659,7 @@ export default function App() {
     if (!workflowId || fromVersion === toVersion) return;
     setVersionDiffLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/versions/compare?from_version=" + fromVersion + "&to_version=" + toVersion);
+      const response = await apiFetch("/api/workflows/" + workflowId + "/versions/compare?from_version=" + fromVersion + "&to_version=" + toVersion);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сравнить версии");
       setWorkflowVersionDiff(data as WorkflowVersionDiff);
@@ -365,7 +670,7 @@ export default function App() {
   const restoreWorkflowVersion = async (version: number) => {
     if (!workflowId || !window.confirm("Восстановить версию " + version + "? Текущая конфигурация останется в истории.")) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/versions/" + version + "/restore", { method: "POST" });
+      const response = await apiFetch("/api/workflows/" + workflowId + "/versions/" + version + "/restore", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось восстановить версию");
       setResult("Версия " + version + " восстановлена как новая версия " + data.version + ". Перезагрузите workflow, чтобы применить граф.");
@@ -378,7 +683,7 @@ export default function App() {
     setRunCompareLoading(true);
     try {
       const params = new URLSearchParams({ from_run: runCompareFrom, to_run: runCompareTo });
-      const response = await fetch("/api/workflows/" + workflowId + "/runs/compare?" + params.toString());
+      const response = await apiFetch("/api/workflows/" + workflowId + "/runs/compare?" + params.toString());
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сравнить запуски");
       setRunComparison(data as RunComparison);
@@ -391,8 +696,8 @@ export default function App() {
   const openHistoricalRun = async (run: WorkflowRunSummary) => {
     try {
       const [findingResponse, telemetryResponse] = await Promise.all([
-        fetch("/api/runs/" + run.id + "/findings"),
-        fetch("/api/runs/" + run.id + "/telemetry"),
+        apiFetch("/api/runs/" + run.id + "/findings"),
+        apiFetch("/api/runs/" + run.id + "/telemetry"),
       ]);
       if (!findingResponse.ok || !telemetryResponse.ok) throw new Error("Не удалось открыть выбранный запуск");
       const [rows, data] = await Promise.all([findingResponse.json(), telemetryResponse.json()]);
@@ -408,14 +713,14 @@ export default function App() {
   const saveRunReportToProject = async (run: WorkflowRunSummary) => {
     if (!activeProject) return;
     try {
-      const response = await fetch("/api/projects/" + activeProject.id + "/reports/" + run.id, { method: "POST" });
+      const response = await apiFetch("/api/projects/" + activeProject.id + "/reports/" + run.id, { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сохранить отчёт");
       setResult("Отчёт сохранён в " + activeProject.name + " · " + data.path);
       await refreshProjects();
       const [filesResponse, historyResponse] = await Promise.all([
-        fetch("/api/projects/" + activeProject.id + "/files"),
-        fetch("/api/projects/" + activeProject.id + "/history"),
+        apiFetch("/api/projects/" + activeProject.id + "/files"),
+        apiFetch("/api/projects/" + activeProject.id + "/history"),
       ]);
       if (filesResponse.ok) setProjectFiles(((await filesResponse.json()).files || []) as ProjectFile[]);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json() as ProjectHistoryEntry[]);
@@ -424,7 +729,7 @@ export default function App() {
 
   const cancelWorkflowRun = async (run: WorkflowRunSummary) => {
     try {
-      const response = await fetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
+      const response = await apiFetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось отменить запуск");
       setResult(data.status === "cancelled" ? "Запуск отменён до старта." : "Отмена запрошена. Текущий блок завершится, затем workflow остановится.");
@@ -434,7 +739,7 @@ export default function App() {
 
   const retryWorkflowRun = async (run: WorkflowRunSummary) => {
     try {
-      const response = await fetch("/api/runs/" + run.id + "/retry", { method: "POST" });
+      const response = await apiFetch("/api/runs/" + run.id + "/retry", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось повторить запуск");
       setResult("Создан повторный запуск · " + data.run_id);
@@ -460,7 +765,7 @@ export default function App() {
     const controller = new AbortController();
     setSourcePreview(null); setSourcePreviewLoading(true); setSourcePreviewError("");
     const params = new URLSearchParams({ start_line: String(sourceWindowStart), end_line: String(sourceWindowStart + 99) });
-    fetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
+    apiFetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
       .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Не удалось открыть исходник"); return data as SourcePreview; })
       .then(data => { setSourcePreview(data); setSourcePreviewError(""); })
       .catch(error => { if (!(error instanceof DOMException && error.name === "AbortError")) { setSourcePreview(null); setSourcePreviewError(error instanceof Error ? error.message : String(error)); } })
@@ -524,25 +829,56 @@ export default function App() {
   }, [selectedNodeId, nodes.find(n => n.id === selectedNodeId)?.data.config]);
   useEffect(() => { setEdgeLabel(selectedEdge?.label?.toString() || ""); }, [selectedEdgeId, selectedEdge?.label]);
 
+  const isValidConnection = useCallback((connection: Edge | Connection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return false;
+    const sourceNode = nodes.find(node => node.id === connection.source);
+    const targetNode = nodes.find(node => node.id === connection.target);
+    if (!sourceNode || !targetNode) return false;
+    const sourceManifest = manifests.find(item => item.type === sourceNode.data.nodeType);
+    const targetManifest = manifests.find(item => item.type === targetNode.data.nodeType);
+    if (!sourceManifest || !targetManifest) return false;
+    const sourcePorts = sourceManifest.outputs || [];
+    const targetPorts = targetManifest.inputs || [];
+    const sourcePort = sourcePorts.length === 1 ? sourcePorts[0] : sourcePorts.find(port => port.name === connection.sourceHandle);
+    const targetPort = targetPorts.length === 1 ? targetPorts[0] : targetPorts.find(port => port.name === connection.targetHandle);
+    return Boolean(sourcePort && targetPort && sourcePort.data_type === targetPort.data_type);
+  }, [nodes, manifests]);
   const onConnect = useCallback((connection: Connection) => {
+    if (!isValidConnection(connection)) {
+      setResult("Связь отклонена: выбери совместимые выходной и входной порты одного типа данных.");
+      return;
+    }
     setEdges(current => addEdge({ ...connection, id: "edge-" + Date.now(), type: "smoothstep", animated: false, className: "edge-idle", style: { stroke: "#6686a5", strokeWidth: 2 } }, current));
-    setSelectedNodeId(null); setSelectedEdgeId(null);
-  }, [setEdges]);
+    setWorkflowDirty(true); setSelectedNodeId(null); setSelectedEdgeId(null);
+  }, [setEdges, isValidConnection]);
   const onReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
+    if (!isValidConnection(newConnection)) {
+      setResult("Связь не переназначена: типы портов несовместимы.");
+      return;
+    }
     setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false }));
-  }, [setEdges]);
+    setWorkflowDirty(true);
+  }, [setEdges, isValidConnection]);
+  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    onNodesChange(changes);
+    if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
+  }, [onNodesChange]);
+  const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
+    onEdgesChange(changes);
+    if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
+  }, [onEdgesChange]);
 
   const addNode = (manifest: Manifest) => {
     const id = manifest.type + "-" + Date.now();
     const position = { x: 180 + (nodes.length % 3) * 245, y: 90 + Math.floor(nodes.length / 3) * 145 };
-    const initialConfig = manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {};
-    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig } };
-    setNodes(current => [...current, node]); setSelectedNodeId(id); setSelectedEdgeId(null);
+    const initialConfig = getSchemaDefaults(manifest);
+    const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } };
+    setNodes(current => [...current, node]); setWorkflowDirty(true); setSelectedNodeId(id); setSelectedEdgeId(null);
   };
-  const updateNode = (id: string, patch: Partial<NodeData>) => setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node));
+  const updateNode = (id: string, patch: Partial<NodeData>) => { setWorkflowDirty(true); setNodes(current => current.map(node => node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)); };
   const deleteSelectedNode = () => {
     if (!selectedNodeId) return;
-    setNodes(current => current.filter(node => node.id !== selectedNodeId));
+    setWorkflowDirty(true); setNodes(current => current.filter(node => node.id !== selectedNodeId));
     setEdges(current => current.filter(edge => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
     setSelectedNodeId(null);
   };
@@ -550,13 +886,105 @@ export default function App() {
     if (!selectedNode) return;
     const id = selectedNode.data.nodeType + "-" + Date.now();
     const copy: FlowNode = { ...selectedNode, id, position: { x: selectedNode.position.x + 55, y: selectedNode.position.y + 55 }, selected: false, data: { ...selectedNode.data, config: { ...selectedNode.data.config } } };
-    setNodes(current => [...current, copy]); setSelectedNodeId(id);
+    setNodes(current => [...current, copy]); setWorkflowDirty(true); setSelectedNodeId(id);
   };
   const replaceSelectedNode = (type: string) => {
     if (!selectedNode) return;
     const manifest = manifests.find(item => item.type === type);
     if (!manifest) return;
-    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
+    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: getSchemaDefaults(manifest) });
+  };
+  const renderSchemaFields = () => {
+    if (!selectedNode) return null;
+    const manifest = manifests.find(item => item.type === selectedNode.data.nodeType);
+    const schema = manifest?.config_schema;
+    const properties = schema?.properties || {};
+    const required = new Set(schema?.required || []);
+    const entries = Object.entries(properties);
+    if (!entries.length) return <p className="edit-hint">Для этого блока параметры не требуются.</p>;
+    const setField = (key: string, value: unknown) => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, [key]: value } });
+    const clearField = (key: string) => {
+      const next = { ...selectedNode.data.config };
+      delete next[key];
+      updateNode(selectedNode.id, { config: next });
+    };
+    const optionIndex = (options: unknown[], value: unknown) => {
+      const index = options.findIndex(option => Object.is(option, value));
+      return index < 0 ? "" : String(index);
+    };
+    return <div className="schema-config-fields">
+      {schema?.description && <p className="edit-hint">{schema.description}</p>}
+      {entries.map(([key, field]) => {
+        const configured = selectedNode.data.config[key];
+        const value = configured ?? field.default ?? (field.type === "boolean" ? false : field.type === "array" ? [] : "");
+        const label = field.title || key.replace(/_/g, " ");
+        const id = "config-" + selectedNode.id + "-" + key;
+        const requiredField = required.has(key);
+        const missing = field.default === undefined && (configured === undefined || configured === null || configured === "" || (Array.isArray(configured) && configured.length === 0));
+        const constraintError = field.type === "array" && Array.isArray(value) && field.minItems !== undefined && value.length < field.minItems ? "Недостаточно значений"
+          : field.type === "array" && Array.isArray(value) && field.maxItems !== undefined && value.length > field.maxItems ? "Слишком много значений"
+          : (field.type === "string" || !field.type) && typeof value === "string" && field.minLength !== undefined && value.length < field.minLength && value.length > 0 ? "Значение слишком короткое"
+          : (field.type === "string" || !field.type) && typeof value === "string" && field.maxLength !== undefined && value.length > field.maxLength ? "Значение слишком длинное"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.minimum !== undefined && value < field.minimum ? "Значение меньше минимума"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.maximum !== undefined && value > field.maximum ? "Значение больше максимума"
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.exclusiveMinimum !== undefined && value <= field.exclusiveMinimum ? "Значение должно быть больше " + field.exclusiveMinimum
+          : (field.type === "number" || field.type === "integer") && typeof value === "number" && field.exclusiveMaximum !== undefined && value >= field.exclusiveMaximum ? "Значение должно быть меньше " + field.exclusiveMaximum
+          : field.pattern && typeof value === "string" && value && !new RegExp(field.pattern).test(value) ? "Формат значения не соответствует шаблону"
+          : "";
+        const constraints = [
+          field.minimum !== undefined ? "мин. " + field.minimum : "",
+          field.maximum !== undefined ? "макс. " + field.maximum : "",
+          field.minLength !== undefined ? "от " + field.minLength + " симв." : "",
+          field.maxLength !== undefined ? "до " + field.maxLength + " симв." : "",
+          field.minItems !== undefined ? "не менее " + field.minItems + " знач." : "",
+          field.maxItems !== undefined ? "не более " + field.maxItems + " знач." : "",
+        ].filter(Boolean).join(" · ");
+        return <div className="schema-config-field" key={key}>
+          <label className="field-label" htmlFor={id}>{label}{requiredField && <span className="schema-required"> *</span>}</label>
+          {key === "policy_pack" && rulePacks.some(pack => pack.analyzer === "policy") ? <select id={id} value={String(value)} onChange={event => setField(key, event.target.value)}>{rulePacks.filter(pack => pack.analyzer === "policy").map(pack => <option key={pack.id} value={pack.id}>{pack.title}</option>)}</select>
+          : field.enum ? <select id={id} value={optionIndex(field.enum, value)} onChange={event => {
+            if (event.target.value === "") { clearField(key); return; }
+            const option = field.enum?.[Number(event.target.value)];
+            if (option !== undefined) setField(key, option);
+          }}>
+            {!requiredField && <option value="">Не задано</option>}
+            {field.enum.map((option, index) => <option key={index} value={String(index)}>{String(option)}</option>)}
+          </select> : field.type === "boolean" ? <label className="schema-checkbox"><input id={id} type="checkbox" checked={Boolean(value)} onChange={event => setField(key, event.target.checked)}/><span>{Boolean(value) ? "Включено" : "Отключено"}</span></label>
+          : field.type === "integer" || field.type === "number" ? <input id={id} type="number" step={field.type === "integer" ? 1 : "any"} min={field.minimum ?? field.exclusiveMinimum} max={field.maximum ?? field.exclusiveMaximum} value={value === "" ? "" : Number(value)} onChange={event => {
+            if (event.target.value === "") { clearField(key); return; }
+            const parsed = Number(event.target.value);
+            if (Number.isFinite(parsed) && (field.type !== "integer" || Number.isInteger(parsed))) setField(key, parsed);
+          }}/>
+          : field.type === "array" && key === "rule_packs" && rulePacks.some(pack => pack.analyzer === (selectedNode.data.nodeType === "scan.secrets" ? "secrets" : selectedNode.data.nodeType === "scan.sast" ? "sast" : "sca")) ? <div className="schema-array-options">{rulePacks.filter(pack => pack.analyzer === (selectedNode.data.nodeType === "scan.secrets" ? "secrets" : selectedNode.data.nodeType === "scan.sast" ? "sast" : "sca")).map(pack => {
+            const selected = Array.isArray(value) && value.includes(pack.id);
+            return <label key={pack.id} title={pack.extends.length ? "Наследует: " + pack.extends.join(", ") : undefined}><input type="checkbox" checked={selected} onChange={event => {
+              const current = Array.isArray(value) ? value.filter(item => typeof item === "string") as string[] : [];
+              setField(key, event.target.checked ? [...current, pack.id] : current.filter(item => item !== pack.id));
+            }}/><span>{pack.title} <small>({pack.rule_count})</small></span></label>;
+          })}</div>
+          : field.type === "array" && field.items?.enum ? <div className="schema-array-options">{field.items.enum.map((option, index) => {
+            const selected = Array.isArray(value) && value.some(item => Object.is(item, option));
+            return <label key={index}><input type="checkbox" checked={selected} onChange={event => {
+              const current = Array.isArray(value) ? value : [];
+              setField(key, event.target.checked ? [...current, option] : current.filter(item => !Object.is(item, option)));
+            }}/><span>{String(option)}</span></label>;
+          })}</div>
+          : field.type === "array" ? <textarea id={id} rows={3} value={Array.isArray(value) ? value.join("\n") : ""} placeholder="Одно значение на строку" onChange={event => {
+            const lines = event.target.value.split("\n").map(item => item.trim()).filter(Boolean);
+            const itemType = field.items?.type || "string";
+            const parsed = lines.map(item => itemType === "integer" ? Number.parseInt(item, 10) : itemType === "number" ? Number(item) : item);
+            if (parsed.every(item => itemType === "string" || (typeof item === "number" && Number.isFinite(item) && (itemType !== "integer" || Number.isInteger(item))))) setField(key, parsed);
+          }}/>
+          : field.type === "object" ? <textarea id={id} rows={4} className="schema-json-fallback" value={JSON.stringify(value, null, 2)} spellCheck={false} onChange={event => {
+            try { const parsed = JSON.parse(event.target.value); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) setField(key, parsed); } catch { /* Keep the last valid object until JSON is complete. */ }
+          }}/>
+          : <input id={id} type={field.format === "password" ? "password" : field.format === "uri" || field.format === "url" ? "url" : field.format === "email" ? "email" : "text"} value={String(value)} minLength={field.minLength} maxLength={field.maxLength} pattern={field.pattern} placeholder={field.format === "uri" || field.format === "url" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri" && field.format !== "url"} onChange={event => setField(key, event.target.value)}/>}
+          {field.description && <small className="schema-field-help">{field.description}</small>}
+          {constraints && <small className="schema-field-constraints">{constraints}</small>}
+          {requiredField && missing ? <small className="schema-field-error">Обязательное поле</small> : constraintError ? <small className="schema-field-error">{constraintError}</small> : null}
+        </div>;
+      })}
+    </div>;
   };
   const saveNodeConfig = () => {
     if (!selectedNode) return;
@@ -568,31 +996,84 @@ export default function App() {
   };
   const deleteSelectedEdge = () => {
     if (!selectedEdgeId) return;
-    setEdges(current => current.filter(edge => edge.id !== selectedEdgeId)); setSelectedEdgeId(null);
+    setEdges(current => current.filter(edge => edge.id !== selectedEdgeId)); setWorkflowDirty(true); setSelectedEdgeId(null);
   };
-  const updateEdgeEndpoint = (field: "source" | "target", value: string) => {
-    if (!selectedEdgeId) return;
-    setEdges(current => current.map(edge => edge.id === selectedEdgeId ? { ...edge, [field]: value } : edge));
-  };
-
   const graph = useMemo(() => ({
-    name: activeProject?.name || "Security pipeline",
+    name: workflowDraftName || activeProject?.name || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
   }), [nodes, edges, activeProject?.name]);
 
 
   const refreshProjects = async () => {
-    const response = await fetch("/api/projects");
+    const response = await apiFetch("/api/projects");
     if (!response.ok) throw new Error("Не удалось обновить библиотеку проектов");
     setProjects(await response.json());
+  };
+  const resetProjectRunState = () => {
+    setFindings([]);
+    setSelectedFinding(null);
+    setFindingStates({});
+    setFindingHistory({});
+    setFindingQuery("");
+    setFindingSeverity("Все");
+    setFindingLifecycleFilter("Все");
+    setTelemetry(null);
+    setLastRunId(null);
+    window.localStorage.removeItem("invest.lastRunId");
+    setWorkflowRuns([]);
+    setWorkflowVersions([]);
+    setWorkflowVersionDiff(null);
+    setCompareVersion(null);
+    setRunComparison(null);
+    setRunCompareFrom("");
+    setRunCompareTo("");
+    setSecurityTrend(null);
+    setSourcePreview(null);
+    setSourcePreviewOpen(false);
+    setSourcePreviewError("");
+    setSourceWindowStart(1);
+    setSelectedEdgeId(null);
+    setTraceFilter("all");
+    setNodes(current => current.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        executionStatus: "idle",
+        executionDetail: "",
+        executionNotes: [],
+        executionSeverity: undefined,
+        executionDuration: undefined,
+        executionCount: undefined,
+        executionCoverage: undefined,
+        executionProgress: undefined,
+        executionProgressLabel: undefined,
+      },
+    })));
+  };
+  const clearProjectModules = () => {
+    if (!window.confirm("Очистить модули текущего workflow? Сам проект и все его файлы останутся в библиотеке.")) return;
+    resetProjectRunState();
+    const sourceConfig = activeProject ? { path: activeProject.workspace_path } : {};
+    const resetNodes = seedNodes.map(node => node.id === "source"
+      ? { ...node, data: { ...node.data, label: activeProject?.name || node.data.label, config: sourceConfig } }
+      : { ...node, data: { ...node.data, executionStatus: "idle" as const, executionDetail: "", executionNotes: [] } });
+    setNodes(resetNodes);
+    setEdges(seedEdges);
+    setSelectedNodeId("source");
+    setSelectedEdgeId(null);
+    setWorkflowId(null);
+    setWorkflowDraftName(activeProject?.name || "Security pipeline");
+    setWorkflowDirty(true);
+    setResult("Модули workflow очищены. Проект и его файлы сохранены.");
+    setShowResult(true);
   };
   const uploadProjectArchive = async (file: File | undefined, projectId?: string) => {
     if (!file) return;
     setUploading(true); setUploadingProjectId(projectId || "new");
     try {
       const form = new FormData(); form.append("file", file);
-      const response = await fetch(projectId ? `/api/projects/${projectId}/archive` : "/api/projects", {
+      const response = await apiFetch(projectId ? `/api/projects/${projectId}/archive` : "/api/projects", {
         method: projectId ? "PUT" : "POST", body: form,
       });
       const data = await response.json();
@@ -601,7 +1082,7 @@ export default function App() {
       if (activeProject?.id === data.id) {
         setActiveProject(data);
         setProjectVisualPreview(null);
-        const filesResponse = await fetch(`/api/projects/${data.id}/files`);
+        const filesResponse = await apiFetch(`/api/projects/${data.id}/files`);
         if (filesResponse.ok) {
           const updatedFiles = ((await filesResponse.json()).files || []) as ProjectFile[];
           setProjectFiles(updatedFiles);
@@ -612,7 +1093,7 @@ export default function App() {
           })));
         }
         setProjectFilePreview(null);
-        const historyResponse = await fetch(`/api/projects/${data.id}/history`);
+        const historyResponse = await apiFetch(`/api/projects/${data.id}/history`);
         if (historyResponse.ok) setProjectHistory(await historyResponse.json());
       }
       setResult((projectId ? "Проект обновлён" : "Проект добавлен") + " · " + data.name + " · " + data.file_count + " файлов");
@@ -622,11 +1103,20 @@ export default function App() {
   const openProject = async (project: Project) => {
     setProjectFilesLoading(true);
     try {
-      const response = await fetch(`/api/projects/${project.id}/files`);
+      const response = await apiFetch(`/api/projects/${project.id}/files`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть проект");
+      resetProjectRunState();
       setActiveProject(data.project || project);
       setProjectFiles(data.files || []);
+      setProjectFileQuery("");
+      setExpandedProjectDirs(new Set());
+      setProjectContentQuery("");
+      setProjectContentResults([]);
+      setProjectHistoryOpen(false);
+      setEditorFind("");
+      setEditorReplace("");
+      setEditorJumpLine("");
       setProjectFilePreview(null);
       setProjectVisualPreview(null);
       setProjectEditorTabs([]);
@@ -634,7 +1124,7 @@ export default function App() {
       setProjectDraft("");
       setProjectEditing(false);
       setProjectHistoryOpen(false);
-      const historyResponse = await fetch(`/api/projects/${project.id}/history`);
+      const historyResponse = await apiFetch(`/api/projects/${project.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
       else setProjectHistory([]);
       const sourceNode = nodes.find(node => node.data.category === "Source");
@@ -653,6 +1143,18 @@ export default function App() {
       setResult("Невозможно применить проект: добавь на граф блок-источник.");
       return;
     }
+    resetProjectRunState();
+    setProjectWorkspaceOpen(false);
+    setProjectFiles([]);
+    setProjectFilePreview(null);
+    setProjectVisualPreview(null);
+    setProjectEditorTabs([]);
+    setActiveEditorTab(null);
+    setProjectHistory([]);
+    setProjectHistoryOpen(false);
+    setProjectFileQuery("");
+    setProjectContentQuery("");
+    setProjectContentResults([]);
     updateNode(sourceNode.id, {
       nodeType: "source.upload",
       label: project.name,
@@ -670,7 +1172,7 @@ export default function App() {
     const name = window.prompt("Новое название проекта:", project.name);
     if (name === null || !name.trim()) return;
     try {
-      const response = await fetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
+      const response = await apiFetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось переименовать проект");
       await refreshProjects();
@@ -685,7 +1187,7 @@ export default function App() {
   const deleteProject = async (project: Project) => {
     if (!window.confirm(`Удалить проект «${project.name}» и все его файлы? Это действие необратимо.`)) return;
     try {
-      const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Не удалось удалить проект");
       await refreshProjects();
       if (activeProject?.id === project.id) {
@@ -713,7 +1215,7 @@ export default function App() {
       if (imageTypes.has(suffix) || isPdf) {
         const params = new URLSearchParams({ path: file.path });
         const url = `/api/projects/${activeProject.id}/preview?${params}`;
-        const response = await fetch(url, { method: "HEAD" });
+        const response = await apiFetch(url, { method: "HEAD" });
         if (!response.ok) {
           const message = response.headers.get("content-type")?.includes("application/json")
             ? (await response.json()).detail : "Не удалось открыть файл";
@@ -728,7 +1230,7 @@ export default function App() {
         return;
       }
       const params = new URLSearchParams({ path: file.path, start_line: String(startLine) });
-      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`);
+      const response = await apiFetch(`/api/projects/${activeProject.id}/file?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
       setProjectVisualPreview(null);
@@ -750,7 +1252,7 @@ export default function App() {
     setProjectContentSearching(true);
     try {
       const params = new URLSearchParams({ q: projectContentQuery.trim() });
-      const response = await fetch(`/api/projects/${activeProject.id}/search?${params}`);
+      const response = await apiFetch(`/api/projects/${activeProject.id}/search?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Поиск не выполнен");
       setProjectContentResults(data.results || []);
@@ -835,7 +1337,7 @@ export default function App() {
     setProjectSaving(true);
     try {
       const params = new URLSearchParams({ path: projectFilePreview.path });
-      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`, {
+      const response = await apiFetch(`/api/projects/${activeProject.id}/file?${params}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft }),
       });
       const data = await response.json();
@@ -845,7 +1347,7 @@ export default function App() {
       setProjectEditorTabs(tabs => tabs.map(tab => tab.path === savedPath ? { ...tab, baseline: projectDraft, draft: projectDraft, editing: false } : tab));
       await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size }, 1, true);
       setResult("Файл сохранён · " + data.path);
-      const historyResponse = await fetch(`/api/projects/${activeProject.id}/history`);
+      const historyResponse = await apiFetch(`/api/projects/${activeProject.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
     } catch (error) { setResult("Ошибка сохранения: " + String(error)); }
     finally { setProjectSaving(false); }
@@ -855,7 +1357,7 @@ export default function App() {
     setUploading(true); setFindings([]);
     try {
       const form = new FormData(); form.append("file", file);
-      const response = await fetch("/api/sources/upload", { method: "POST", body: form });
+      const response = await apiFetch("/api/sources/upload", { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
       const sourceNode = nodes.find(node => node.data.category === "Source");
@@ -865,12 +1367,169 @@ export default function App() {
     finally { setUploading(false); }
   };
   const persistWorkflow = async () => {
-    const response = await fetch(workflowId ? "/api/workflows/" + workflowId : "/api/workflows", {
+    const response = await apiFetch(workflowId ? "/api/workflows/" + workflowId : "/api/workflows", {
       method: workflowId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(JSON.stringify(data));
-    setWorkflowId(data.id); return data.id as string;
+    setWorkflowId(data.id); setWorkflowDirty(false); return data.id as string;
+  };
+  const loadTemplateLibrary = async () => {
+    setTemplateLoading(true);
+    setTemplateError("");
+    try {
+      const params = new URLSearchParams();
+      if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
+      if (templateSearch.trim()) params.set("q", templateSearch.trim());
+      const [response, presetResponse] = await Promise.all([
+        apiFetch("/api/templates" + (params.toString() ? "?" + params.toString() : "")),
+        apiFetch("/api/presets"),
+      ]);
+      const [data, presets] = await Promise.all([response.json(), presetResponse.json()]);
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
+      if (!presetResponse.ok) throw new Error(typeof presets.detail === "string" ? presets.detail : "Не удалось загрузить встроенные presets");
+      setTemplateItems(Array.isArray(data) ? data : []);
+      setPresetItems(Array.isArray(presets) ? presets : []);
+    } catch (error) {
+      setTemplateError(String(error));
+      setTemplateItems([]);
+      setPresetItems([]);
+    } finally { setTemplateLoading(false); }
+  };
+  useEffect(() => {
+    if (templateLibraryOpen) void loadTemplateLibrary();
+  }, [templateLibraryOpen, templateCategory]);
+  useEffect(() => {
+    if (!templateLibraryOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTemplateLibraryOpen(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [templateLibraryOpen]);
+  useEffect(() => {
+    if (!aiGraphOpen || aiGraphBusy) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAiGraphOpen(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [aiGraphOpen, aiGraphBusy]);
+  const cloneTemplateIntoEditor = async (templateId: string) => {
+    setTemplateBusyId(templateId);
+    setTemplateError("");
+    try {
+      const response = await apiFetch("/api/templates/" + templateId + "/clone", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const loaded = await apiFetch("/api/workflows/" + data.id);
+      const workflow = await loaded.json();
+      if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
+      setWorkflowId(workflow.id);
+      setWorkflowDraftName(workflow.name || "");
+      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic", description: manifest?.description || "",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
+          },
+        } as FlowNode;
+      }));
+      setEdges(workflow.graph.edges || []);
+      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
+      setSelectedEdgeId(null);
+      setTemplateLibraryOpen(false);
+      setResult("Шаблон скопирован в новый workflow · " + workflow.name + ". Перед запуском проверь конфигурацию источника и webhook.");
+      setShowResult(true);
+    } catch (error) {
+      setTemplateError(String(error));
+    } finally { setTemplateBusyId(null); }
+  };
+  const clonePresetIntoEditor = async (presetId: string) => {
+    setTemplateBusyId("preset:" + presetId);
+    setTemplateError("");
+    try {
+      const response = await apiFetch("/api/presets/" + presetId + "/clone", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const loaded = await apiFetch("/api/workflows/" + data.id);
+      const workflow = await loaded.json();
+      if (!loaded.ok || !workflow.graph) throw new Error("Preset скопирован, но граф не удалось загрузить");
+      setWorkflowId(workflow.id);
+      setWorkflowDraftName(workflow.name || "");
+      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic", description: manifest?.description || "",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
+          },
+        } as FlowNode;
+      }));
+      setEdges(workflow.graph.edges || []);
+      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
+      setSelectedEdgeId(null);
+      setTemplateLibraryOpen(false);
+      setResult("Создан workflow из preset «" + workflow.name + "». Укажи разрешённый Git URL в блоке Git repository, затем сохрани и запускай вручную или через CI Gate.");
+      setShowResult(true);
+    } catch (error) {
+      setTemplateError(String(error));
+    } finally { setTemplateBusyId(null); }
+  };
+  const generateGraphFromPrompt = async () => {
+    if (aiGraphPrompt.trim().length < 10) {
+      setAiGraphError("Опиши задачу минимум в 10 символах.");
+      return;
+    }
+    setAiGraphBusy(true);
+    setAiGraphError("");
+    try {
+      const response = await apiFetch("/api/workflows/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiGraphPrompt.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const generatedNodes = (data.graph?.nodes || []).map((node: {id:string;type:string;position:{x:number;y:number};config:Record<string,unknown>}) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic",
+            description: manifest?.description || "AI-generated draft block.",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [], executionStatus: "idle",
+            executionDetail: "Черновик создан AI · требуется проверка конфигурации",
+          },
+        };
+      });
+      const generatedEdges = (data.graph?.edges || []).map((edge: {id:string;source:string;target:string;source_handle?:string|null;target_handle?:string|null}) => ({
+        id: edge.id, source: edge.source, target: edge.target,
+        sourceHandle: edge.source_handle || undefined, targetHandle: edge.target_handle || undefined,
+        type: "smoothstep",
+      }));
+      if (!generatedNodes.length) throw new Error("AI вернул пустой граф.");
+      setNodes(generatedNodes);
+      setEdges(generatedEdges);
+      setWorkflowId(null);
+      setWorkflowDraftName(data.graph.name || "AI workflow draft");
+      setSelectedNodeId(generatedNodes[0].id);
+      setSelectedEdgeId(null);
+      setAiGraphOpen(false);
+      setResult("AI создал черновик · " + (data.graph.name || "workflow") + ". Проверь блоки и соединения, затем нажми «Проверить» и «Сохранить». Запуск не выполнялся.");
+      setShowResult(true);
+    } catch (error) {
+      setAiGraphError(String(error));
+    } finally { setAiGraphBusy(false); }
   };
   const saveWorkflow = async () => {
     setBusy(true);
@@ -882,7 +1541,7 @@ export default function App() {
     setScheduleBusy(true);
     try {
       const id = await persistWorkflow();
-      const response = await fetch("/api/workflows/" + id + "/schedule", {
+      const response = await apiFetch("/api/workflows/" + id + "/schedule", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
@@ -900,7 +1559,7 @@ export default function App() {
   const validateWorkflow = async () => {
     setBusy(true);
     try {
-      const response = await fetch("/api/workflows/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph) });
+      const response = await apiFetch("/api/workflows/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph) });
       const data = await response.json(); setResult(JSON.stringify(data, null, 2)); setShowResult(true);
     } catch { setResult("Не удалось связаться с API. Проверьте backend."); setShowResult(true); }
     finally { setBusy(false); }
@@ -910,7 +1569,7 @@ export default function App() {
     try {
       const id = await persistWorkflow();
       const endpoint = selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs";
-      const response = await fetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
+      const response = await apiFetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
       const queued = await response.json();
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
@@ -932,7 +1591,7 @@ export default function App() {
           try {
             for (let attempt = 0; attempt < 300; attempt += 1) {
               await new Promise(resolveWait => window.setTimeout(resolveWait, 1000));
-              const response = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+              const response = await apiFetch("/api/runs/" + queued.run_id + "/telemetry");
               if (!response.ok) throw new Error("Не удалось получить телеметрию задания");
               const data: Telemetry = await response.json();
               setTelemetry(data);
@@ -954,22 +1613,42 @@ export default function App() {
         };
         stream.onerror = () => { void fallback(); };
       });
-      const findingsResponse = await fetch("/api/runs/" + queued.run_id + "/findings");
+      const findingsResponse = await apiFetch("/api/runs/" + queued.run_id + "/findings");
       if (findingsResponse.ok) setFindings(await findingsResponse.json());
-      const telemetryResponse = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+      const telemetryResponse = await apiFetch("/api/runs/" + queued.run_id + "/telemetry");
       if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
-      setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
-      if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.");
+      if (completed.status === "failed") {
+        const nodeErrors = Object.entries(completed.node_results || {})
+          .filter(([, item]) => ["failed", "configuration_required", "blocked"].includes(String(item.status || "")))
+          .map(([nodeId, item]) => nodeId + ": " + (item.message || item.status));
+        const traceErrors = (completed.trace || [])
+          .filter(item => item.diagnostic_level === "error" || item.diagnostic_level === "blocked" || item.status === "failed")
+          .map(item => [item.node_id, item.message || item.reason].filter(Boolean).join(": "));
+        const details = Array.from(new Set([completed.error, ...nodeErrors, ...traceErrors].filter((item): item is string => Boolean(item && item.trim()))));
+        setResult("Проверка завершилась с ошибкой.\n" + (details.length ? details.join("\n") : "Worker завершил запуск без диагностического сообщения. Откройте журнал worker для подробностей."));
+      } else {
+        setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
+      }
       await refreshWorkflowRuns(id);
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
+  const refreshFindingStates = async () => {
+    if (!workflowId) return;
+    try {
+      const response = await apiFetch("/api/workflows/" + workflowId + "/finding-states");
+      if (!response.ok) return;
+      const rows = await response.json() as Array<FindingLifecycle & { fingerprint: string }>;
+      setFindingStates(Object.fromEntries(rows.map(row => [row.fingerprint, row])));
+    } catch { /* Keep the last known lifecycle state if refresh fails. */ }
+  };
+
   const updateFindingLifecycle = async (finding: Finding, state: FindingLifecycle["state"]) => {
     if (!workflowId || !finding.fingerprint) return;
     const reason = window.prompt("Причина изменения статуса уязвимости:", state === "open" ? "Повторная проверка" : "");
     if (reason === null || !reason.trim()) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
+      const response = await apiFetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state, reason: reason.trim() }),
       });
@@ -982,7 +1661,7 @@ export default function App() {
   const loadFindingHistory = async (fingerprint: string) => {
     if (!workflowId) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
+      const response = await apiFetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
       if (!response.ok) throw new Error("Не удалось загрузить историю");
       const history = await response.json();
       setFindingHistory(current => ({ ...current, [fingerprint]: history }));
@@ -1001,8 +1680,9 @@ export default function App() {
       const lifecycle = item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open";
       const lifecycleMatch = findingLifecycleFilter === "Все"
         || (findingLifecycleFilter === "Открытые" && lifecycle === "open")
+        || (findingLifecycleFilter === "В работе" && lifecycle === "in_progress")
         || (findingLifecycleFilter === "Принятый риск" && lifecycle === "accepted_risk")
-        || (findingLifecycleFilter === "Исправленные" && lifecycle === "fixed")
+        || (findingLifecycleFilter === "Исправленные" && lifecycle === "resolved")
         || (findingLifecycleFilter === "Ложные срабатывания" && lifecycle === "false_positive");
       return lifecycleMatch
         && (findingSeverity === "Все" || item.severity.toUpperCase() === findingSeverity)
@@ -1010,9 +1690,50 @@ export default function App() {
     });
     const groups = new Map<string, Finding[]>();
     for (const item of visible) { const path = item.path || "Файл не указан"; groups.set(path, [...(groups.get(path) || []), item]); }
-    return Array.from(groups, ([path, items]) => ({ path, items: items.sort((a,b) => (a.line || 0) - (b.line || 0)) })).sort((a,b) => a.path.localeCompare(b.path));
+    const severityRank = (severity: string) => ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 } as Record<string, number>)[severity.toUpperCase()] ?? 5;
+    const result = Array.from(groups, ([path, items]) => ({
+      path,
+      items: items.sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || (a.line || 0) - (b.line || 0)),
+    }));
+    return result.sort((a, b) => {
+      const aPriority = Math.min(...a.items.map(item => severityRank(item.severity)));
+      const bPriority = Math.min(...b.items.map(item => severityRank(item.severity)));
+      return aPriority - bPriority || a.path.localeCompare(b.path);
+    });
   }, [findings, findingQuery, findingSeverity, findingLifecycleFilter, findingStates]);
   const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
+  const exportVisibleFindingsCsv = () => {
+    const columns = ["fingerprint", "severity", "lifecycle", "rule_id", "path", "line", "message", "why_it_matters", "recommendation", "cve", "cwe"];
+    const safeCell = (value: unknown) => {
+      let text = value == null ? "" : Array.isArray(value) ? value.join("; ") : String(value);
+      // Prevent spreadsheet formula execution when a report is opened in Excel or similar tools.
+      if (/^[\\s]*[=+@-]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""').replace(/\\r?\\n/g, " ") + '"';
+    };
+    const rows = orderedVisibleFindings.map(item => [
+      item.fingerprint,
+      item.severity,
+      item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open",
+      item.rule_id,
+      item.path,
+      item.line,
+      item.message,
+      item.why_it_matters,
+      item.recommendation,
+      item.cve,
+      item.cwe,
+    ]);
+    const csv = "\\uFEFF" + [columns, ...rows].map(row => row.map(safeCell).join(",")).join("\\r\\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "invest-findings-" + (lastRunId || "latest").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
   const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
   const selectAdjacentFinding = (direction: -1 | 1) => { const next = orderedVisibleFindings[selectedFindingIndex + direction]; if (next) { setSelectedFinding(next); setSourceWindowStart(Math.max(1, (next.line || 1) - 40)); } };
   const toggleFindingSource = (finding: Finding) => {
@@ -1065,23 +1786,63 @@ export default function App() {
     return <button key={item.path} className={"project-file-row project-leaf-row" + (projectFilePreview?.path === item.path ? " selected" : "")} style={{ paddingLeft: 24 + depth * 13 }} onClick={() => file && void openProjectFile(file)}><FileText size={12}/><span title={item.path}>{item.name}</span><small>{(item.size || 0) < 1024 ? (item.size || 0) + " B" : ((item.size || 0) / 1024).toFixed(0) + " KB"}</small></button>;
   });
 
-  return <main className="shell">
+  return <main className="shell" data-theme={theme}>
     <header className="topbar">
-      <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>INVEST <span>／</span> SECURITY WORKFLOW</b><small>VISUAL SECURITY AUTOMATION PLATFORM</small></div></div>
+      <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
-      <div className="actions"><span className="revision"><GitBranch size={13} /> feat / platform-foundation</span>
+      <div className="workspace-context" title={workspaceError || "Активная рабочая область"}>
+        <span>WORKSPACE</span>
+        <select aria-label="Активная рабочая область" value={activeWorkspaceId} disabled={workspaceSwitching || workspaces.length < 2} onChange={event => void switchWorkspace(event.target.value)}>
+          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.organization_name} / {workspace.name}</option>)}
+          {workspaces.length === 0 && <option value="">Нет доступных Workspace</option>}
+        </select>
+        {workspaceSwitching && <i className="workspace-spinner" />}
+      </div>
+      <button className="ghost account-profile-trigger" type="button" onClick={() => { setUserManagementTab("profile"); setUserManagementOpen(true); }} title="Личный профиль, пароль и сессии"><Shield size={13}/> Мой профиль</button>
+      {user?.is_admin && <button className="ghost account-users-trigger" type="button" onClick={() => { setUserManagementTab("users"); setUserManagementOpen(true); }} title="Управление пользователями"><Users size={13}/> Пользователи</button>}
+      <button className="ghost dashboard-open-trigger" type="button" onClick={() => setDashboardOpen(true)} title="Аналитика активного Workspace"><BarChart3 size={13}/> Обзор</button>
+      <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Workspace</button>
+      <div className="actions">
+        <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
+        <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
         <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
         <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
-        <button className="run-selected" disabled={busy || !selectedNodeId} onClick={() => selectedNodeId && void runWorkflow([selectedNodeId])}><Zap size={13} /> Блок</button><button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="ghost" disabled={busy} title="Игнорировать кэш и выполнить полное сканирование" onClick={() => void runWorkflow(undefined, true)}><RefreshCw size={13} /> Полный анализ</button>
+        <button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === "light" ? "dark" : "light")} title={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"} aria-label={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"}>{theme === "light" ? <Moon size={16}/> : <Sun size={16}/>}</button>
+         <div className="app-menu-wrap">
+           <button className="icon-button app-menu-trigger" type="button" onClick={() => setAppMenuOpen(value => !value)} aria-label="Открыть меню приложения" aria-expanded={appMenuOpen} title="Меню приложения"><Menu size={16}/></button>
+           {appMenuOpen && <div className="app-menu" role="menu">
+             <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Быстрые действия</small></div>
+             <button role="menuitem" disabled={busy || !selectedNodeId} onClick={() => { setAppMenuOpen(false); if (selectedNodeId) void runWorkflow([selectedNodeId]); }}><Zap size={15}/><span><b>Запустить выбранный блок</b><small>Выполнить только выделенную ноду</small></span></button>
+             <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void runWorkflow(undefined, true); }}><RefreshCw size={15}/><span><b>Полный анализ</b><small>Игнорировать кэш и пересканировать проект</small></span></button>
+             <div className="app-menu-divider"/>
+             <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Навигация</small></div>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Projects library</b><small>Исходные проекты и файлы</small></span></button>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны</b><small>Готовые security-сценарии</small></span></button>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); const ai = nodes.find(node => node.data.nodeType === "ai.explain"); if (ai) { setSelectedNodeId(ai.id); setSelectedEdgeId(null); setRightCollapsed(false); setInspectorTab("properties"); } else setAiGraphOpen(true); }}><Activity size={15}/><span><b>AI profile</b><small>Провайдер и параметры объяснений</small></span></button>
+             <div className="app-menu-divider"/>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><LockKeyhole size={15}/><span><b>Безопасность аккаунта</b><small>Пароль и активные сессии</small></span></button>
+             {user?.is_admin && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><Users size={15}/><span><b>Пользователи и доступы</b><small>Создание, роли и блокировка</small></span></button>}
+             <div className="app-menu-divider"/>
+             <a role="menuitem" href="/api/v1/docs" target="_blank" rel="noreferrer" onClick={() => setAppMenuOpen(false)}><BookOpen size={15}/><span><b>Документация API</b><small>OpenAPI reference</small></span></a>
+             <button role="menuitem" onClick={() => { setTheme(value => value === "light" ? "dark" : "light"); setAppMenuOpen(false); }}>{theme === "light" ? <Moon size={15}/> : <Sun size={15}/>}<span><b>Оформление</b><small>{theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}</small></span></button>
+           </div>}
+         </div>
       </div>
     </header>
+    <div className="desktop-recommendation"><Activity size={14}/><span>Для полноценной работы с графом рекомендуется экран от 1280 px. На узких экранах панели доступны в адаптированном режиме.</span></div>
+    <WorkspaceManager open={workspaceManagerOpen} onClose={() => setWorkspaceManagerOpen(false)} onChanged={() => window.location.reload()} />
+    <DashboardPanel open={dashboardOpen} onClose={() => setDashboardOpen(false)} />
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
       <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>
         {leftCollapsed ? <button className="collapsed-rail" onClick={() => setLeftCollapsed(false)} title="Развернуть библиотеку блоков" aria-label="Развернуть библиотеку блоков"><PanelLeftOpen size={17} /><span>БЛОКИ</span></button> : <>
-        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Библиотека блоков</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
-        <p className="panel-intro">Добавляй компоненты на холст. Настройки, замена и удаление доступны в инспекторе выбранного блока.</p>
+        <div className="panel-heading"><div><div className="eyebrow">WORKFLOW BUILDER</div><h3><Workflow size={17} /> Рабочая область</h3></div><div className="panel-heading-actions"><span className="counter">{manifests.length}</span><button className="icon-button collapse-control" onClick={() => setLeftCollapsed(true)} title="Свернуть библиотеку блоков" aria-label="Свернуть библиотеку блоков"><PanelLeftClose size={14} /></button></div></div>
+        <div className="left-rail-tabs" role="tablist" aria-label="Разделы рабочей области">
+          <button type="button" role="tab" aria-selected={leftTab === "nodes"} className={leftTab === "nodes" ? "active" : ""} onClick={() => setLeftTab("nodes")}><Code2 size={14}/> Nodes</button>
+          <button type="button" role="tab" aria-selected={leftTab === "projects"} className={leftTab === "projects" ? "active" : ""} onClick={() => { setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={14}/> Projects <span>{projects.length}</span></button>
+        </div>
+        <p className="panel-intro">{leftTab === "nodes" ? "Компоненты security workflow. Добавляй блоки на холст и настраивай их справа." : "Проекты, исходные архивы и файлы для анализа."}</p>
         <div className="searchbox"><Search size={14} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Найти блок или назначение…" /><kbd>/</kbd></div>
-        <section className={"palette-folder" + (projectFolderOpen ? " folder-open" : "")}>
+        {leftTab === "projects" && <section className={"palette-folder" + (projectFolderOpen ? " folder-open" : "")}>
           <button className="palette-folder-head project-folder-head" onClick={() => setProjectFolderOpen(value => !value)} aria-expanded={projectFolderOpen}>
             <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><FolderOpen size={15}/><b>ПРОЕКТЫ / PROJECT LIBRARY</b></span>
             <small>{projects.length}</small>
@@ -1095,6 +1856,7 @@ export default function App() {
               <div className="project-library-main"><div className="project-folder-icon"><FolderOpen size={15}/></div><div className="project-library-copy"><b title={project.name}>{project.name}</b><small>{project.file_count} файлов · {(project.expanded_bytes / 1048576).toFixed(1)} MiB</small></div></div>
               <div className="project-library-actions">
                 <button title="Открыть файлы и историю проекта" onClick={() => void openProject(project)}><FolderOpen size={12}/>Открыть</button><button className="project-apply-button" title="Подключить проект как источник текущего workflow" onClick={() => applyProject(project)}><Check size={12}/>Применить</button>
+                {activeProject?.id === project.id && <button title="Очистить модули workflow, не удаляя проект и его файлы" onClick={clearProjectModules}><Layers3 size={12}/>Очистить модули</button>}
                 <label title="Обновить содержимое ZIP"><RefreshCw size={12}/><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0], project.id); event.currentTarget.value = ""; }}/></label>
                 <button title="Переименовать" onClick={() => void renameProject(project)}><Pencil size={12}/></button>
                 <button title="Удалить проект" className="project-delete" onClick={() => void deleteProject(project)}><Trash2 size={12}/></button>
@@ -1117,87 +1879,109 @@ export default function App() {
           <small className="upload-hint">Только HTTPS и точное совпадение с ALLOWED_TARGETS в корневом .env. Клонирование выполняется worker при запуске.</small>
         </div>
           </div>}
-        </section>
-        <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
+        </section>}
+        {leftTab === "nodes" && <section className={"palette-folder components-folder" + (componentsFolderOpen ? " folder-open" : "")}>
           <button className="palette-folder-head components-folder-head" onClick={() => setComponentsFolderOpen(value => !value)} aria-expanded={componentsFolderOpen}>
             <span className="palette-folder-leading"><ChevronRight size={13} className="palette-folder-chevron"/><Code2 size={15}/><b>КОМПОНЕНТЫ API</b></span>
             <small>{manifests.length}</small>
           </button>
           {componentsFolderOpen && <div className="palette-folder-body">
           <div className="category-filters">{categories.map(item => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
-        {filtered.map(manifest => <article className="library-item" key={manifest.type}>
-          <div className="library-main"><div className={"library-icon tone-" + (categoryMeta[manifest.category] || {tone:"slate"}).tone}><Code2 size={15} /></div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
-          <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{categoryMeta[manifest.category]?.label || manifest.category} · тип: {manifest.type}</span></details>
-        </article>)}
+        {(["Trigger","Source","Security","Logic","AI","CI","Notify"]).map(groupKey => {
+          const group = categoryMeta[groupKey];
+          const items = filtered.filter(item => item.category === groupKey);
+          const total = manifests.filter(item => item.category === groupKey).length;
+          if (!items.length) return null;
+          return <section className={"node-family node-family-" + group.tone} key={groupKey}>
+            <div className="node-family-heading"><span><i/>{group.label}<small>// {group.eyebrow}</small></span><b>{total} БЛОК{total === 1 ? "" : total < 5 ? "А" : "ОВ"}</b></div>
+            {items.map(manifest => <article className={"library-item tone-" + group.tone} key={manifest.type}>
+              <div className="library-main"><div className={"library-icon tone-" + group.tone}>{nodeIcon(manifest.type, manifest.category)}</div><div className="library-copy"><b>{manifest.title}</b><small>{manifest.type}</small></div><button className="add-node" title="Добавить блок на холст" onClick={() => addNode(manifest)}><Plus size={15} /></button></div>
+              <details className="node-help"><summary><CircleHelp size={12} /> Что делает блок <ChevronDown size={12} /></summary><p>{manifest.description}</p><span>{group.label} · тип: {manifest.type}</span></details>
+            </article>)}
+          </section>;
+        })}
         {!manifests.length && <div className="empty-library">Загружаем реестр компонентов API…</div>}
         {manifests.length > 0 && filtered.length === 0 && <div className="empty-library">Ничего не найдено.</div>}
         <div className="palette-note"><LockKeyhole size={14} /><span>Код репозитория анализируется как данные, без запуска его скриптов.</span></div>
           </div>}
-        </section>
+        </section>}
         </>}
       </aside>
 
       <section className="editor">
-        <div className="editor-head"><div><span className="eyebrow">EDITOR / WORKFLOW 001</span><h1>Security pipeline</h1><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
+        <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
-        <div className="flow"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onReconnect={onReconnect}
+        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, type: "category", data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+          onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
           edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
-          <Background color="#31445c" gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => node.type === "workflow" ? "#426b91" : "#526176"} /><Controls />
+          <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
         </ReactFlow></div>
-        <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span></div>
+        {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
+          <div className="workflow-bottom-drawer-head">
+            <div><span className="section-caption">EXECUTION LOG</span><b>Последние запуски</b><small>{workflowRuns.length} записей в истории</small></div>
+            <div><button type="button" onClick={() => { setRightCollapsed(false); setInspectorTab("telemetry"); }}>Подробная телеметрия</button><button type="button" className="drawer-close" onClick={() => setBottomDrawerOpen(false)} aria-label="Закрыть журнал"><X size={14}/></button></div>
+          </div>
+          {workflowRuns.length ? <div className="workflow-bottom-run-list">{workflowRuns.slice(0, 5).map((run, index) => <button type="button" className={"workflow-bottom-run" + (run.id === lastRunId ? " is-current" : "")} key={run.id} onClick={() => { if (run.id !== lastRunId) void openHistoricalRun(run); }}>
+            <span className="workflow-bottom-run-index">#{workflowRuns.length - index}</span>
+            <span className={"workflow-bottom-run-status state-" + run.status}><i/>{run.status === "completed" ? "Успешно" : run.status === "partial" ? "Частично" : run.status === "failed" ? "Ошибка" : run.status === "running" ? "В работе" : run.status === "queued" ? "В очереди" : run.status === "cancelling" ? "Отмена" : run.status === "cancelled" ? "Отменён" : run.status}</span>
+            <span className="workflow-bottom-run-date">{formatDate(run.finished_at || run.started_at || run.queued_at)}</span>
+            <b>{run.total_findings ?? "—"} находок</b>
+            <span className="workflow-bottom-run-open">{run.id === lastRunId ? "Текущий" : "Открыть"}</span>
+          </button>)}</div> : <p className="workflow-bottom-empty">{runHistoryLoading ? "Загружаем историю запусков…" : "Запусков пока нет. История появится после первого выполнения workflow."}</p>}
+        </section>}
+        <div className="flow-foot"><span><Activity size={13} /> {telemetry?.status === "running" ? "ВЫПОЛНЕНИЕ ГРАФА" : telemetry?.status === "completed" ? "ГРАФ ЗАВЕРШЁН" : telemetry?.status === "failed" ? "ОШИБКА ВЫПОЛНЕНИЯ" : "РЕДАКТОР ГРАФА"} <i /> {telemetry ? `${telemetry.completed_nodes || 0}/${telemetry.total_nodes || nodes.length} шагов` : "Сетка 22 px"}</span><span>{telemetry?.current_node ? `Сейчас: ${telemetry.current_node}` : telemetry?.scanner_progress ? `Файлы: ${telemetry.scanner_progress.files_scanned}/${telemetry.scanner_progress.total_files}` : "Связь можно выбрать и перетащить за конец для переназначения"}</span><button type="button" className={"workflow-drawer-toggle" + (bottomDrawerOpen ? " is-open" : "")} aria-expanded={bottomDrawerOpen} onClick={() => setBottomDrawerOpen(value => !value)}><Activity size={12}/> Запуски <b>{workflowRuns.length}</b><ChevronDown size={12}/></button></div>
       </section>
 
       <aside className={"panel inspector" + (rightCollapsed ? " is-collapsed" : "")}>
         {rightCollapsed ? <button className="collapsed-rail" onClick={() => setRightCollapsed(false)} title="Развернуть инспектор" aria-label="Развернуть инспектор"><PanelRightOpen size={17} /><span>ИНСПЕКТОР</span></button> : <>
-        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / EDITOR</div><h3><Activity size={17} /> Свойства элемента</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
+        <div className="inspector-top"><div><div className="eyebrow">INSPECTOR / CONTEXT</div><h3><Activity size={17} /> Инспектор</h3></div><div className="panel-heading-actions"><button className="icon-button collapse-control" onClick={() => setRightCollapsed(true)} title="Свернуть инспектор" aria-label="Свернуть инспектор"><PanelRightClose size={14} /></button><button className="icon-button" title={showResult ? "Свернуть результат" : "Показать результат"} onClick={() => setShowResult(value => !value)}>{showResult ? <X size={14} /> : <ChevronDown size={14} />}</button></div></div>
+        <div className="inspector-tabs" role="tablist" aria-label="Разделы инспектора">
+          <button type="button" role="tab" aria-selected={inspectorTab === "properties"} className={inspectorTab === "properties" ? "tab-active" : ""} onClick={() => setInspectorTab("properties")}>Свойства</button>
+          <button type="button" role="tab" aria-selected={inspectorTab === "findings"} className={inspectorTab === "findings" ? "tab-active" : ""} onClick={() => setInspectorTab("findings")}>Findings <span>{findings.length}</span></button>
+          <button type="button" role="tab" aria-selected={inspectorTab === "telemetry"} className={inspectorTab === "telemetry" ? "tab-active" : ""} onClick={() => setInspectorTab("telemetry")}>Telemetry</button>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "properties"}>
         {selectedNode && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ БЛОКА</div>
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
           <label className="field-label">Заменить тип блока<select value={selectedNode.data.nodeType} onChange={event => replaceSelectedNode(event.target.value)}><option value={selectedNode.data.nodeType}>{selectedNode.data.nodeType}</option>{manifests.filter(item => item.type !== selectedNode.data.nodeType).map(item => <option key={item.type} value={item.type}>{item.title} · {item.type}</option>)}</select></label>
           {selectedNode.data.nodeType === "logic.compare" ? <>
-            <div className="ai-node-guide"><div><Activity size={15}/><b>COMPARE · ФИЛЬТР НАХОДОК</b></div><p>Разделяет входящие findings на true и false. Подключайте downstream-ноды к соответствующему выходному порту.</p></div>
-            <label className="field-label">Поле<select value={String(selectedNode.data.config.field || "severity")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, field: event.target.value } })}>
-              <option value="severity">Severity</option><option value="rule_id">Rule ID</option><option value="path">Путь файла</option><option value="category">Категория</option><option value="message">Сообщение</option><option value="cve">CVE</option><option value="cwe">CWE</option><option value="count">Количество находок</option>
-            </select></label>
-            <label className="field-label">Оператор<select value={String(selectedNode.data.config.operator || "equals")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, operator: event.target.value } })}>
-              <option value="equals">Равно</option><option value="not_equals">Не равно</option><option value="contains">Содержит</option><option value="not_contains">Не содержит</option><option value="greater_than">Больше</option><option value="greater_or_equal">Больше или равно</option><option value="less_than">Меньше</option><option value="less_or_equal">Меньше или равно</option>
-            </select></label>
-            <label className="field-label">Значение<input value={String(selectedNode.data.config.value ?? "")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, value: event.target.value } })} maxLength={256} placeholder="HIGH / 3 / CVE-…" spellCheck={false}/></label>
-            <p className="edit-hint">Для числовых операторов используйте числовое поле или «Количество находок». Значение сравнения ограничено 256 символами.</p>
-          </> : selectedNode.data.nodeType === "ai.explain" ? <>
+            <div className="ai-node-guide"><div><Activity size={15}/><b>COMPARE · ФИЛЬТР НАХОДОК</b></div><p>Разделяет входящие findings на true и false. Параметры автоматически построены по config_schema реестра.</p></div>
+            {renderSchemaFields()}
+          </>: selectedNode.data.nodeType === "ai.explain" ? <>
             <div className="ai-node-guide"><div><Bot size={16}/><b>AI-АНАЛИЗАТОР · {aiProvider?.configured ? (aiProvider.endpoint_valid ? "КОНФИГУРАЦИЯ НАЙДЕНА" : "ОШИБКА АДРЕСА") : "ТРЕБУЕТ НАСТРОЙКИ"}</b></div><p>Получает находки из блока Merge findings. Ключ API хранится только в корневом .env и не вводится здесь.</p><div className="ai-provider-checks"><span className={aiProvider?.base_url_set ? "is-ready" : ""}>BASE URL {aiProvider?.base_url_set ? "✓" : "—"}</span><span className={aiProvider?.model_set ? "is-ready" : ""}>MODEL {aiProvider?.model_set ? "✓" : "—"}</span><span className={aiProvider?.api_key_set ? "is-ready" : ""}>API KEY {aiProvider?.api_key_set ? "✓" : "—"}</span></div>{aiProvider?.endpoint_error && <p className="ai-provider-error">{aiProvider.endpoint_error}</p>}{!aiProvider?.configured && <ol><li>Добавь LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневой .env</li><li>Перезапусти api и worker</li><li>Запусти workflow после настройки</li></ol>}{aiProvider?.configured && aiProvider?.endpoint_valid && <div className="ai-provider-ready-note"><b>Конфигурация загружена.</b> Повторно добавлять параметры не нужно. Запусти workflow: результат реального обращения к модели появится в статусе этого блока.</div>}{aiNodeResult && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ ЗАПУСК: {aiNodeResult.status === "completed" ? "ЗАВЕРШЁН" : aiNodeResult.status === "failed" ? "ОШИБКА" : aiNodeResult.status === "configuration_required" ? "НЕТ КОНФИГУРАЦИИ" : String(aiNodeResult.status).toUpperCase()}</b>{aiNodeResult.status === "failed" && <p>{aiNodeResult.message || "Проверь логи worker."}</p>}{aiNodeResult.status === "completed" && <p>Объяснено: {aiNodeResult.explained_count ?? 0} из {aiNodeResult.analyzed_count ?? aiNodeResult.total_findings ?? 0} · покрытие {Math.round((aiNodeResult.coverage ?? 0) * 100)}% · без объяснения: {aiNodeResult.unexplained_count ?? 0} · пропущено лимитом: {aiNodeResult.skipped_count ?? 0}.</p>}{aiNodeResult.status === "failed" && <p>Проанализировано до ошибки: {aiNodeResult.analyzed_count ?? 0} · не обработано лимитом: {aiNodeResult.skipped_count ?? 0}.</p>}{aiNodeResult.model && <small>Модель ответа: {aiNodeResult.model} · провайдер: {aiNodeResult.provider || "OpenAI-compatible"}</small>}</div>}<small>Модель: {aiProvider?.model || "не задана"} · ключ не отображается и не передаётся в браузер</small></div>
-            <label className="field-label">Язык объяснений<select value={String(selectedNode.data.config.language || "ru")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, language: event.target.value } })}><option value="ru">Русский</option><option value="en">English</option></select></label>
-            <label className="field-label">Максимум находок<input type="number" min={1} max={25} value={Number(selectedNode.data.config.max_findings ?? 20)} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, max_findings: Math.max(1, Math.min(25, Number(event.target.value) || 1)) } })}/></label>
+            {renderSchemaFields()}
             <p className="edit-hint">AI не меняет severity, не создаёт новые уязвимости и не влияет на Security Gate. Ветка AI независима от проверки политики.</p>
           </> : selectedNode.data.nodeType === "notify.webhook" ? <>
             <div className="ai-node-guide"><div><Zap size={15}/><b>WEBHOOK · ДОСТАВКА УВЕДОМЛЕНИЯ</b></div><p>Отправляет JSON-сводку после AI explanation. В уведомление не включаются исходный код, code context и masked values.</p></div>
-            <label className="field-label">HTTPS URL webhook.site<input value={String(selectedNode.data.config.url || "")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, url: event.target.value } })} placeholder="https://webhook.site/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autoComplete="off" spellCheck={false}/></label>
+            {renderSchemaFields()}
             <p className="edit-hint">Разрешённый домен задаётся через NOTIFY_WEBHOOK_ALLOWED_HOSTS в корневом .env. Только HTTPS:443, без redirects.</p>
             {telemetry?.node_results?.[selectedNode.id]?.message && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ РЕЗУЛЬТАТ: {String(telemetry.node_results[selectedNode.id].status || "unknown").toUpperCase()}</b><p>{telemetry.node_results[selectedNode.id].message}</p></div>}
           </> : selectedNode.data.nodeType === "trigger.schedule" ? <>
             <div className="ai-node-guide"><div><Activity size={15}/><b>SCHEDULE · АВТОМАТИЧЕСКИЙ ЗАПУСК</b></div><p>Worker проверяет наступление времени по расписанию и ставит workflow в обычную очередь запусков. Код проекта не запускается.</p></div>
-            <label className="field-label">Cron · 5 полей<input value={String(selectedNode.data.config.cron || "*/5 * * * *")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, cron: event.target.value } })} placeholder="*/5 * * * *" spellCheck={false}/></label>
-            <label className="field-label">Часовой пояс IANA<input value={String(selectedNode.data.config.timezone || "UTC")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, timezone: event.target.value } })} placeholder="Europe/Amsterdam" spellCheck={false}/></label>
+            {renderSchemaFields()}
             <div className="ai-provider-run-state"><b>СОСТОЯНИЕ: {scheduleStatus?.enabled ? "ВКЛЮЧЕНО" : "ОТКЛЮЧЕНО"}</b>{scheduleStatus?.next_run_at && <p>Следующий запуск: {formatDate(scheduleStatus.next_run_at)}</p>}{scheduleStatus?.last_run_at && <small>Последний запуск: {formatDate(scheduleStatus.last_run_at)}</small>}</div>
             <button className="save-config" disabled={scheduleBusy || busy} onClick={() => void updateSchedule(true)}>{scheduleBusy ? "СОХРАНЕНИЕ…" : "Сохранить и включить расписание"}</button>
             <button className="ghost" disabled={scheduleBusy || !scheduleStatus?.enabled} onClick={() => void updateSchedule(false)}>Отключить расписание</button>
             <p className="edit-hint">Примеры: <code>*/5 * * * *</code> — каждые 5 минут; <code>0 9 * * 1-5</code> — будни в 09:00. Часовой пояс влияет на локальное время.</p>
           </> : <>
-            <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
+            {renderSchemaFields()}
+            <details className="schema-advanced-config"><summary>Расширенная конфигурация JSON</summary>
+              <label className="field-label">JSON<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
+              <button className="ghost" onClick={saveNodeConfig}>Применить JSON</button>
+            </details>
           </>}
-          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
+          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && !manifests.find(item => item.type === selectedNode.data.nodeType)?.config_schema && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
         {selectedEdge && <section className="edit-section">
           <div className="section-caption">РЕДАКТИРОВАНИЕ СВЯЗИ</div>
-          <label className="field-label">Откуда (источник)<select value={selectedEdge.source} onChange={event => updateEdgeEndpoint("source", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
-          <label className="field-label">Куда (получатель)<select value={selectedEdge.target} onChange={event => updateEdgeEndpoint("target", event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{node.data.label} · {node.id}</option>)}</select></label>
-          <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); }} placeholder="например: success" /></label>
+          <div className="edge-endpoint-readonly"><span><small>ИСТОЧНИК</small><b>{nodes.find(node => node.id === selectedEdge.source)?.data.label || selectedEdge.source}</b></span><i>→</i><span><small>ПОЛУЧАТЕЛЬ</small><b>{nodes.find(node => node.id === selectedEdge.target)?.data.label || selectedEdge.target}</b></span><p>Чтобы изменить маршрут, перетащи конец связи на совместимый порт другой ноды.</p></div>
+          <label className="field-label">Подпись связи<input value={edgeLabel} onChange={event => { setEdgeLabel(event.target.value); setEdges(current => current.map(edge => edge.id === selectedEdge.id ? { ...edge, label: event.target.value } : edge)); setWorkflowDirty(true); }} placeholder="например: success" /></label>
           <div className="edge-flow-diagnostics">
             <div className="section-caption">ДИАГНОСТИКА ПОТОКА</div>
             {(() => {
@@ -1225,7 +2009,8 @@ export default function App() {
           <p className="edit-hint">Также можно создать связь, потянув линию от правого порта одного блока к левому порту другого. Перетащи конец существующей связи, чтобы перенаправить её.</p>
         </section>}
         {!selectedNode && !selectedEdge && <div className="empty-inspector"><Workflow size={26} /><b>Ничего не выбрано</b><p>Выбери блок или линию на холсте. Здесь появятся доступные настройки и действия.</p></div>}
-        <div className="inspector-tabs"><span className="tab-active">Результаты</span><span className="tab-state">{busy ? "RUNNING" : "IDLE"}</span></div>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "telemetry"}>
         <div className="runtime"><div><Bot size={18} /></div><section><b>Workflow runtime</b><small>Исполнитель графа API</small></section><label className={busy ? "running" : ""}>{busy ? "RUNNING" : "READY"}</label></div>
         <section className="telemetry-card">
           <div className="telemetry-heading"><div><div className="section-caption">RUN TELEMETRY</div><b>Последний запуск</b></div><span className={"telemetry-status status-" + (telemetry?.status || "empty")}>{telemetry?.status === "completed" ? "УСПЕШНО" : telemetry?.status === "partial" ? "ЧАСТИЧНО" : telemetry?.status === "failed" ? "ОШИБКА" : telemetry?.status === "running" ? "В РАБОТЕ" : telemetry?.status === "queued" ? "В ОЧЕРЕДИ" : "НЕТ ДАННЫХ"}</span></div>
@@ -1245,7 +2030,7 @@ export default function App() {
               <div><span>АНАЛИЗ ФАЙЛОВ</span><b>{telemetry.scanner_progress.files_scanned} / {telemetry.scanner_progress.total_files}</b></div>
               <div className="scanner-file-track"><i style={{ width: telemetry.scanner_progress.total_files ? Math.min(100, telemetry.scanner_progress.files_scanned / telemetry.scanner_progress.total_files * 100) + "%" : "0%" }} /></div>
               <small>Сейчас: {telemetry.scanner_progress.current_file}</small>
-            </div>}
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); onLogout(); }}><LockKeyhole size={15}/><span><b>Выйти</b><small>Завершить текущую сессию</small></span></button>            </div>}
             {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
               <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>{telemetry.cache && telemetry.cache.scanner_blocks > 0 && <div className="cache-telemetry-strip"><span><b>{telemetry.cache.cache_hits}</b> из {telemetry.cache.scanner_blocks} сканеров взято из кэша</span><span>{Math.round(telemetry.cache.hit_rate * 100)}% повторного использования</span><small>Срок актуальности: {Math.round(telemetry.cache.ttl_seconds / 3600)} ч</small></div>}
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
@@ -1414,26 +2199,36 @@ export default function App() {
             {item.version === workflowVersions[0].version && <em>ТЕКУЩАЯ</em>}
           </div>)}</div> : <p className="run-history-empty">{versionsLoading ? "Загружаем версии…" : "Сохранённые версии появятся здесь."}</p>}
         </section>
+        </div>
+        <div className="inspector-tab-panel" hidden={inspectorTab !== "findings"}>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
           <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
-          <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
+          <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","В работе","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
           <span>{orderedVisibleFindings.length} / {findings.length}</span>
+          <button type="button" className="ghost" disabled={orderedVisibleFindings.length === 0} onClick={exportVisibleFindingsCsv} title="Экспортировать текущую выборку без исходного кода и секретных значений"><Download size={12}/> CSV</button>
           <div className="finding-lifecycle-summary" aria-label="Распределение находок по статусам">
             <span className="is-open">{findingLifecycleCounts.open || 0} открыто</span>
             <span className="is-risk">{findingLifecycleCounts.accepted_risk || 0} риск</span>
-            <span className="is-fixed">{findingLifecycleCounts.fixed || 0} исправлено</span>
+            <span className="is-in-progress">{findingLifecycleCounts.in_progress || 0} в работе</span>
+            <span className="is-fixed">{findingLifecycleCounts.resolved || 0} исправлено</span>
             <span className="is-false">{findingLifecycleCounts.false_positive || 0} FP</span>
           </div>
         </div>}
         {findings.length === 0 ? <p className="empty-findings">После запуска здесь появятся находки SAST, SCA и Secrets Scanner.</p> : findingGroups.length === 0 ? <p className="empty-findings">По текущим фильтрам ничего не найдено.</p> :
           findingGroups.map(group => <section className="finding-file-group" key={group.path}>
             <div className="finding-file-heading"><Code2 size={13}/><b>{group.path}</b><span>{group.items.length} · находок</span></div>
-            {group.items.map((finding, index) => <article className="finding" key={finding.id || finding.rule_id + index}>
-            <div><strong>{finding.rule_id}</strong><label>{finding.severity}</label></div>
-            <small className="finding-location">{finding.path}{finding.line ? ":" + finding.line : ""}</small>
-            <p>{finding.message || "Потенциальная проблема; проверьте контекст."}</p>
+            {group.items.map((finding, index) => <article className="finding finding-table-item" key={finding.id || finding.rule_id + index}>
+            <button type="button" className={"finding-table-row" + (selectedFinding?.fingerprint === finding.fingerprint ? " is-selected" : "")} onClick={() => { setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding); setSourcePreviewOpen(false); setSourceWindowStart(Math.max(1, (finding.line || 1) - 40)); }} aria-expanded={selectedFinding?.fingerprint === finding.fingerprint}>
+              <span className={"finding-table-severity severity-" + finding.severity.toLowerCase()}>{finding.severity}</span>
+              <b>{finding.rule_id}</b>
+              <small>{finding.path}{finding.line ? ":" + finding.line : ""}</small>
+              <span className="finding-table-message">{finding.message || "Потенциальная проблема; проверьте контекст."}</span>
+              <ChevronDown size={13}/>
+            </button>
+            {selectedFinding?.fingerprint === finding.fingerprint && <div className="finding-detail">
+            <div className="finding-detail-heading"><b>Детали находки</b><span>{finding.severity} · {finding.rule_id}</span></div>
             {finding.why_it_matters && <div className="finding-explanation"><b>ПОЧЕМУ ЭТО ПРОБЛЕМА</b><p>{finding.why_it_matters}</p></div>}
             {finding.recommendation && <div className="finding-remediation"><b>КАК ИСПРАВИТЬ</b><p>{finding.recommendation}</p></div>}
             {finding.ai_explanation && <div className="finding-ai-explanation">
@@ -1457,10 +2252,10 @@ export default function App() {
             </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
-            <button className="source-preview-toggle" onClick={() => setSelectedFinding(current => current?.fingerprint === finding.fingerprint ? null : finding)}>
-              <Code2 size={13} /> {selectedFinding?.fingerprint === finding.fingerprint ? "Скрыть исходник" : "Открыть исходник"}
+            <button className="source-preview-toggle" onClick={() => setSourcePreviewOpen(value => !value)}>
+              <Code2 size={13} /> {sourcePreviewOpen ? "Скрыть исходник" : "Открыть исходник"}
             </button>
-            {selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
+            {sourcePreviewOpen && selectedFinding?.fingerprint === finding.fingerprint && <div className="source-code-preview">
               <div className="source-code-head"><span>{finding.path}</span><div className="source-code-nav"><button disabled={selectedFindingIndex <= 0} onClick={() => selectAdjacentFinding(-1)} title="Предыдущая находка">←</button><b>{selectedFindingIndex >= 0 ? `${selectedFindingIndex + 1} / ${orderedVisibleFindings.length}` : `СТРОКА ${finding.line || "—"}`}</b><button disabled={selectedFindingIndex < 0 || selectedFindingIndex >= orderedVisibleFindings.length - 1} onClick={() => selectAdjacentFinding(1)} title="Следующая находка">→</button></div></div>
               {sourcePreviewLoading && <p className="source-loading">Загружаю проверенный фрагмент файла…</p>}
               {sourcePreviewError && <p className="source-preview-error">{sourcePreviewError}</p>}
@@ -1470,14 +2265,23 @@ export default function App() {
             {finding.fingerprint && <div className="finding-lifecycle">
               <label>Статус
                 <select value={findingStates[finding.fingerprint]?.state || "open"} onChange={event => void updateFindingLifecycle(finding, event.target.value as FindingLifecycle["state"])}>
-                  <option value="open">Открыта</option><option value="accepted_risk">Принятый риск</option><option value="fixed">Исправлена</option><option value="false_positive">Ложное срабатывание</option>
+                  <option value="open">Открыта</option><option value="in_progress">В работе</option><option value="resolved">Исправлена</option><option value="accepted_risk">Принятый риск</option><option value="false_positive">Ложное срабатывание</option>
                 </select>
               </label>
               <button className="history-button" onClick={() => void loadFindingHistory(finding.fingerprint!)}>История</button>
               {findingHistory[finding.fingerprint] && <div className="finding-history">{findingHistory[finding.fingerprint].length ? findingHistory[finding.fingerprint].map((entry, index) => <p key={index}><b>{String(entry.details.new_state || "изменение")}</b> · {formatDate(entry.created_at)}<small>{String(entry.details.reason || "")}</small></p>) : <small>Изменений пока нет.</small>}</div>}
             </div>}
+            {finding.fingerprint && workflowId && <FindingCollaboration
+              workflowId={workflowId}
+              fingerprint={finding.fingerprint}
+              currentUserId={user.id}
+              assignedToUserId={findingStates[finding.fingerprint]?.assigned_to_user_id}
+              onAssignedChange={() => { void refreshFindingStates(); }}
+            />}
+            </div>}
           </article>)}
           </section>)}
+        </div>
         {showResult && <section className="result-section"><div className="result-title"><span>Последний ответ API</span><AlertTriangle size={13} /></div><pre>{result}</pre></section>}
         <div className="safe"><Shield size={16} /><div><b>Изолированный анализ</b><p>Проект не запускается. ZIP проверяется, Git ограничен allowlist. Секреты маскируются.</p></div></div>
         </>}
@@ -1533,6 +2337,49 @@ export default function App() {
           </div>
         </aside>}
         <footer className="project-workspace-footer"><span>READ-ONLY SOURCE VIEW · SECRET MASKING ENABLED</span><span>Запуск анализа доступен на основном холсте</span></footer>
+      </section>
+    </div>}
+    {aiGraphOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !aiGraphBusy) setAiGraphOpen(false); }}>
+      <section className="template-library-dialog ai-graph-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-graph-title">
+        <header className="template-library-header">
+          <div><span className="eyebrow">AI WORKFLOW DRAFT</span><h2 id="ai-graph-title"><Sparkles size={18}/> Создать граф по описанию</h2><p>AI предложит только блоки из реестра INVEST. Граф будет проверен, но не сохранён и не запущен.</p></div>
+          <button className="icon-button" onClick={() => !aiGraphBusy && setAiGraphOpen(false)} aria-label="Закрыть"><X size={16}/></button>
+        </header>
+        <div className="ai-graph-form">
+          <label htmlFor="ai-graph-prompt">ОПИШИ, ЧТО ДОЛЖЕН ДЕЛАТЬ WORKFLOW</label>
+          <textarea id="ai-graph-prompt" value={aiGraphPrompt} maxLength={2000} onChange={event => setAiGraphPrompt(event.target.value)} placeholder="Например: создай pipeline для проверки Kotlin/Spring Boot проекта: источник из Git, поиск секретов, SCA зависимостей, Kotlin SAST, объединение находок и Security Gate…" />
+          <div className="ai-graph-guidance"><span>{aiGraphPrompt.length}/2000</span><span>Не добавляй API-ключи, приватные URL и учётные данные.</span></div>
+          {aiGraphError && <div className="template-library-error"><AlertTriangle size={14}/><span>{aiGraphError}</span></div>}
+          <div className="ai-graph-actions"><button className="ghost" disabled={aiGraphBusy} onClick={() => setAiGraphOpen(false)}>Отмена</button><button className="template-card-clone" disabled={aiGraphBusy || aiGraphPrompt.trim().length < 10} onClick={() => void generateGraphFromPrompt()}><Sparkles size={13}/>{aiGraphBusy ? "Создаю черновик…" : "Сгенерировать граф"}</button></div>
+        </div>
+      </section>
+    </div>}
+    {userManagementOpen && user && <UserManagement key={userManagementTab} initialTab={userManagementTab} isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onProfileUpdated={onUserUpdated} onClose={() => setUserManagementOpen(false)} />}
+    {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
+      <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
+        <header className="template-library-header">
+          <div><span className="eyebrow">WORKFLOW CATALOG</span><h2 id="template-library-title"><Library size={18}/> Каталог workflow</h2><p>Встроенные presets и опубликованные шаблоны. Создание копии не запускает анализ.</p></div>
+          <button className="icon-button" onClick={() => setTemplateLibraryOpen(false)} aria-label="Закрыть библиотеку"><X size={16}/></button>
+        </header>
+        <div className="template-library-tools">
+          <label className="template-library-search"><Search size={14}/><input value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void loadTemplateLibrary(); }} placeholder="Поиск шаблона…"/><button onClick={() => void loadTemplateLibrary()}><SearchCheck size={13}/> Найти</button></label>
+          <div className="template-category-filters">{["Все","general","security","ci","kotlin","secrets"].map(item => <button key={item} className={templateCategory === item ? "active" : ""} onClick={() => setTemplateCategory(item)}>{item === "Все" ? "Все категории" : item}</button>)}</div>
+        </div>
+        {templateError && <div className="template-library-error"><AlertTriangle size={14}/><span>{templateError}</span><button onClick={() => void loadTemplateLibrary()}>Повторить</button></div>}
+        <div className="template-library-list">
+          {templateLoading ? <div className="template-library-empty">Загружаем каталог…</div> : <>
+            {presetItems.map(item => <article className="template-library-card" key={"preset:" + item.id}>
+              <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>BUILT-IN · {item.category}</span></div><p>{item.description}</p><small>{item.node_count} блоков · требуется настроить: {item.setup_required.join(", ") || "ничего"}</small></div>
+              <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void clonePresetIntoEditor(item.id)}>{templateBusyId === "preset:" + item.id ? "Создание…" : "Создать workflow"}</button>
+            </article>)}
+            {templateItems.map(item => <article className="template-library-card" key={item.id}>
+              <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>{item.category}</span></div><p>{item.description || "Описание не добавлено."}</p><small>{item.node_count} блоков · опубликован {formatDate(item.created_at)}</small></div>
+              <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void cloneTemplateIntoEditor(item.id)}>{templateBusyId === item.id ? "Копирование…" : "Клонировать"}</button>
+            </article>)}
+            {!presetItems.length && !templateItems.length && <div className="template-library-empty"><Library size={25}/><b>Ничего не найдено</b><span>Попробуй изменить поиск или категорию.</span></div>}
+          </>}
+        </div>
+        <footer className="template-library-footer"><span>SAFE CLONE · NO AUTO EXECUTION</span><button onClick={() => setTemplateLibraryOpen(false)}>Закрыть</button></footer>
       </section>
     </div>}
     <footer><span>INVEST · AI SECURITY WORKFLOW</span><span>EDITOR · 0.7.0</span></footer>

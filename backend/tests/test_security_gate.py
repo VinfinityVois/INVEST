@@ -78,3 +78,41 @@ def test_fixed_state_does_not_hide_a_finding_that_is_still_detected():
         finding_states={"fixed-1": {"state": "fixed"}},
     )
     assert result["decision"] == "BLOCK"
+
+
+def test_builtin_policy_packs_expose_expected_gate_thresholds():
+    from app.rules_loader import rule_packs
+
+    bank = rule_packs.resolve(["bank-strict"], analyzer="policy")[0]
+    startup = rule_packs.resolve(["startup-lenient"], analyzer="policy")[0]
+    secrets = rule_packs.resolve(["secrets-zero"], analyzer="policy")[0]
+
+    assert bank["block_on"] == ["CRITICAL", "HIGH"]
+    assert startup["block_on"] == ["CRITICAL"]
+    assert secrets["block_on"] == ["CRITICAL", "HIGH", "MEDIUM"]
+    assert bank["fail_on_unfixed"] is True
+
+
+def test_fail_on_unfixed_policy_ignores_findings_marked_fixed():
+    from app.policies.security_gate import evaluate_security_gate
+
+    finding = {"fingerprint": "fp-fixed", "rule_id": "test.rule", "severity": "HIGH"}
+    result = evaluate_security_gate(
+        [finding],
+        {"block_on": ["HIGH"], "warn_on": [], "fail_on_unfixed": True},
+        {"fp-fixed": {"state": "fixed"}},
+    )
+    assert result["decision"] == "PASS"
+    assert result["counts"]["HIGH"] == 0
+
+
+def test_named_policy_profiles_drive_gate_thresholds():
+    from app.rules_loader import rule_packs
+    from app.policies.security_gate import evaluate_security_gate
+
+    high_only = [{"fingerprint": "high", "severity": "HIGH", "rule_id": "demo.high"}]
+    bank = rule_packs.resolve(["bank-strict"], analyzer="policy")[0]
+    startup = rule_packs.resolve(["startup-lenient"], analyzer="policy")[0]
+    assert evaluate_security_gate(high_only, bank)["decision"] == "BLOCK"
+    assert evaluate_security_gate(high_only, startup)["decision"] == "WARN"
+    assert startup["warn_on"] == ["HIGH", "MEDIUM", "LOW", "INFO"]

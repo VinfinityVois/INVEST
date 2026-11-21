@@ -40,6 +40,7 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     def fake_post(url, **kwargs):
         captured["url"] = url
         captured["payload"] = kwargs["json"]
+        captured["timeout"] = kwargs["timeout"]
         return FakeResponse({
             "choices": [{
                 "message": {
@@ -73,6 +74,8 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     }])
 
     assert captured["url"] == "https://llm.example/v1/chat/completions"
+    assert captured["timeout"].read == 90.0
+    assert captured["payload"]["max_tokens"] == 1400
     prompt = captured["payload"]["messages"][1]["content"]
     assert "must-not-be-sent" not in prompt
     assert "masked_value" not in prompt
@@ -319,3 +322,25 @@ def test_gateway_returns_machine_readable_provider_failure(monkeypatch):
     assert result["provider_http_status"] == 429
     assert result["provider_attempts"] == 1
     assert "never-expose-this" not in json.dumps(result)
+
+
+def test_gateway_allows_http_host_docker_internal_for_local_ollama(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "http://host.docker.internal:11434/v1")
+    monkeypatch.setattr(settings, "llm_model", "qwen2.5:3b")
+    monkeypatch.setattr(settings, "llm_api_key", "ollama")
+
+    status = explanations.provider_configuration()
+
+    assert status["configured"] is True
+    assert status["endpoint_valid"] is True
+    assert status["base_url"] == "http://host.docker.internal:11434/v1"
+
+
+def test_gateway_still_rejects_plain_http_for_other_hosts(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "http://192.168.1.20:11434/v1")
+    monkeypatch.setattr(settings, "llm_model", "qwen2.5:3b")
+    monkeypatch.setattr(settings, "llm_api_key", "ollama")
+
+    status = explanations.provider_configuration()
+
+    assert status["endpoint_valid"] is False

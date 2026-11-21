@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "ecosystem": "Maven",
+  "framework": "Spring Boot",
+  "snapshot": {
+    "date": "2026-11-21",
+    "source": "https://docs.spring.io/spring-boot/reference/using/build-systems.html",
+    "notes": "Curated artifact-name catalog for classification only; it is not an advisory database and does not assert that a starter is vulnerable."
+  },
+  "starters": [
+    {"artifact": "spring-boot-starter", "title": "Core", "category": "core"},
+    {"artifact": "spring-boot-starter-test", "title": "Testing", "category": "testing"},
+    {"artifact": "spring-boot-starter-web", "title": "Web", "category": "web"},
+    {"artifact": "spring-boot-starter-webmvc", "title": "Web MVC", "category": "web"},
+    {"artifact": "spring-boot-starter-webflux", "title": "Reactive Web", "category": "web"},
+    {"artifact": "spring-boot-starter-security", "title": "Security", "category": "security"},
+    {"artifact": "spring-boot-starter-oauth2-client", "title": "OAuth2 Client", "category": "security"},
+    {"artifact": "spring-boot-starter-oauth2-resource-server", "title": "OAuth2 Resource Server", "category": "security"},
+    {"artifact": "spring-boot-starter-data-jpa", "title": "JPA", "category": "data"},
+    {"artifact": "spring-boot-starter-data-jdbc", "title": "JDBC", "category": "data"},
+    {"artifact": "spring-boot-starter-data-mongodb", "title": "MongoDB", "category": "data"},
+    {"artifact": "spring-boot-starter-data-redis", "title": "Redis", "category": "data"},
+    {"artifact": "spring-boot-starter-jdbc", "title": "JDBC", "category": "data"},
+    {"artifact": "spring-boot-starter-validation", "title": "Validation", "category": "validation"},
+    {"artifact": "spring-boot-starter-actuator", "title": "Actuator", "category": "operations"},
+    {"artifact": "spring-boot-starter-cache", "title": "Cache", "category": "operations"},
+    {"artifact": "spring-boot-starter-batch", "title": "Batch", "category": "integration"},
+    {"artifact": "spring-boot-starter-integration", "title": "Integration", "category": "integration"},
+    {"artifact": "spring-boot-starter-mail", "title": "Mail", "category": "integration"},
+    {"artifact": "spring-boot-starter-amqp", "title": "AMQP", "category": "messaging"},
+    {"artifact": "spring-boot-starter-artemis", "title": "Artemis", "category": "messaging"},
+    {"artifact": "spring-boot-starter-kafka", "title": "Kafka", "category": "messaging"},
+    {"artifact": "spring-boot-starter-rsocket", "title": "RSocket", "category": "messaging"},
+    {"artifact": "spring-boot-starter-graphql", "title": "GraphQL", "category": "api"},
+    {"artifact": "spring-boot-starter-thymeleaf", "title": "Thymeleaf", "category": "templating"},
+    {"artifact": "spring-boot-starter-freemarker", "title": "FreeMarker", "category": "templating"},
+    {"artifact": "spring-boot-starter-mustache", "title": "Mustache", "category": "templating"},
+    {"artifact": "spring-boot-starter-web-services", "title": "Web Services", "category": "api"}
+  ]
+}

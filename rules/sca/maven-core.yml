@@ -1,0 +1,12 @@
+pack_id: sca-maven-core
+title: Maven and Gradle core
+description: Local Maven advisory snapshot for Maven POMs, Gradle declarations, version catalogs and lockfiles.
+version: 1
+analyzer: sca
+ecosystems:
+  - Maven
+  - Gradle
+advisory_db: maven-advisories
+starter_pack: none
+include_dev: true
+use_lockfile: true

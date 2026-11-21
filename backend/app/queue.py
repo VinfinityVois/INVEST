@@ -12,18 +12,21 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from croniter import croniter
 
 from app.db import SessionLocal
+from app.scheduler import next_run_time
 from app.models import AuditLog, Finding, FindingState, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
+from app.security.rate_limit import cleanup_expired_rate_limits
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 
 logger = logging.getLogger("secworkflow.queue")
 STALE_AFTER = timedelta(minutes=2)
 HEARTBEAT_INTERVAL = 15
+RATE_LIMIT_CLEANUP_INTERVAL = 300.0
 
 
 def make_worker_id() -> str:
@@ -38,8 +41,7 @@ def claim_next_run(worker_id: str) -> str | None:
             update(WorkflowRun)
             .where(
                 WorkflowRun.status == "cancelling",
-                WorkflowRun.heartbeat_at.is_not(None),
-                WorkflowRun.heartbeat_at < now - STALE_AFTER,
+                func.coalesce(WorkflowRun.heartbeat_at, WorkflowRun.started_at) < now - STALE_AFTER,
             )
             .values(status="cancelled", finished_at=now, locked_by=None, heartbeat_at=None, error="Cancellation finalized after worker heartbeat expired")
         )
@@ -47,8 +49,7 @@ def claim_next_run(worker_id: str) -> str | None:
             update(WorkflowRun)
             .where(
                 WorkflowRun.status == "running",
-                WorkflowRun.heartbeat_at.is_not(None),
-                WorkflowRun.heartbeat_at < now - STALE_AFTER,
+                func.coalesce(WorkflowRun.heartbeat_at, WorkflowRun.started_at) < now - STALE_AFTER,
             )
             .values(status="queued", locked_by=None, started_at=None, heartbeat_at=None)
         )
@@ -214,10 +215,17 @@ def process_run(run_id: str, worker_id: str) -> None:
             ).all()
             now = datetime.now(timezone.utc)
             for lifecycle in lifecycle_rows:
+                expiry = lifecycle.expires_at
+                if expiry is not None and (
+                    expiry.tzinfo is None or expiry.utcoffset() is None
+                ):
+                    # SQLite may return naive datetimes for timezone columns.
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+
                 expired_risk = (
                     lifecycle.state == "accepted_risk"
-                    and lifecycle.expires_at is not None
-                    and lifecycle.expires_at <= now
+                    and expiry is not None
+                    and expiry <= now
                 )
                 reappeared_fixed = lifecycle.state == "fixed"
                 if expired_risk or reappeared_fixed:
@@ -260,10 +268,14 @@ def process_run(run_id: str, worker_id: str) -> None:
 
 
 
-def _next_schedule_at(expression: str, timezone_name: str, base_time: datetime | None = None) -> datetime:
-    zone = ZoneInfo(timezone_name)
-    base = (base_time or datetime.now(timezone.utc)).astimezone(zone)
-    return croniter(expression, base).get_next(datetime).astimezone(timezone.utc)
+def _next_schedule_at(
+    expression: str,
+    timezone_name: str,
+    base_time: datetime | None = None,
+) -> datetime:
+    """Backward-compatible wrapper around the shared scheduler utility."""
+    return next_run_time(expression, timezone_name, base_time)
+
 
 def enqueue_due_schedules(limit: int = 10) -> int:
     """Atomically enqueue due cron workflows and advance each schedule."""
@@ -311,18 +323,42 @@ def enqueue_due_schedules(limit: int = 10) -> int:
         session.commit()
     return enqueued
 
+def cleanup_rate_limit_counters() -> int:
+    """Remove one bounded batch of expired login counters."""
+    with SessionLocal() as session:
+        deleted = cleanup_expired_rate_limits(session, batch_size=500)
+        session.commit()
+
+    if deleted:
+        logger.info("Cleaned up %d expired login rate-limit counters", deleted)
+
+    return deleted
+
+
 def run_worker(poll_interval: float = 2.0) -> None:
     worker_id = make_worker_id()
+    last_rate_limit_cleanup = 0.0
+
     logger.info("Worker %s started", worker_id)
+
     while True:
         try:
             enqueue_due_schedules()
+
+            now = time.monotonic()
+            if now - last_rate_limit_cleanup >= RATE_LIMIT_CLEANUP_INTERVAL:
+                cleanup_rate_limit_counters()
+                last_rate_limit_cleanup = now
+
             run_id = claim_next_run(worker_id)
+
             if run_id is None:
                 time.sleep(poll_interval)
                 continue
+
             logger.info("Worker %s claimed run %s", worker_id, run_id)
             process_run(run_id, worker_id)
+
         except Exception:
             logger.exception("Queue polling failed")
             time.sleep(max(poll_interval, 2.0))

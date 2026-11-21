@@ -6,10 +6,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && useradd --create-home --uid 10001 appuser \
     && mkdir -p /workspace \
     && chown -R appuser:appuser /workspace
-COPY requirements.txt .
+COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app ./app
-COPY alembic.ini ./alembic.ini
-COPY alembic ./alembic
+COPY backend/app ./app
+COPY presets ./presets
+# RulePackRegistry resolves these repository-root catalogs from /rules and /data.
+COPY rules /rules
+COPY data /data
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 USER appuser
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]
