@@ -12,7 +12,9 @@ depends_on = None
 
 
 def _uuid():
-    return str(uuid.uuid4())
+    # SQLAlchemy Uuid stores UUIDs as 32-character hex on SQLite and native
+    # UUID on PostgreSQL; PostgreSQL also accepts the hyphen-free form.
+    return uuid.uuid4().hex
 
 
 def upgrade():
@@ -79,10 +81,10 @@ def upgrade():
         ), {"id": workspace_id, "org": org_id})
         bind.execute(sa.text(
             "INSERT INTO organization_memberships (id, organization_id, user_id, role) VALUES (:id, :org, :user, 'owner')"
-        ), {"id": _uuid(), "org": org_id, "user": user["id"]})
+        ), {"id": _uuid(), "org": org_id, "user": uuid.UUID(str(user["id"])).hex})
         bind.execute(sa.text(
             "INSERT INTO workspace_memberships (id, workspace_id, user_id, role) VALUES (:id, :workspace, :user, 'admin')"
-        ), {"id": _uuid(), "workspace": workspace_id, "user": user["id"]})
+        ), {"id": _uuid(), "workspace": workspace_id, "user": uuid.UUID(str(user["id"])).hex})
         personal_workspaces[str(user["id"])] = workspace_id
 
     active_admin = next((user for user in users if user["is_admin"]), None)
