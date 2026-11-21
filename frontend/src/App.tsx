@@ -29,7 +29,7 @@ type ProjectFilePreview = { path: string; start_line: number; end_line: number; 
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
-type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
+type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_evidence_status?: "safe_redacted" | "withheld_private_key" | "unavailable"; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
 type FindingLifecycle = { state: "open" | "in_progress" | "resolved" | "accepted_risk" | "false_positive"; reason: string; expires_at?: string | null; assigned_to_user_id?: string | null };
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
@@ -2241,13 +2241,13 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
               <small className="ai-confidence-note">Уверенность — оценка модели, а не вероятность эксплуатации или подтверждение уязвимости.</small>
             </div>}
             {!finding.ai_explanation && aiNode && <div className="finding-ai-explanation ai-explanation-pending">
-              <div><Bot size={13}/><b>AI EXPLANATION</b><span>{aiNodeResult?.status === "completed" ? "НЕТ ОТВЕТА" : aiNodeResult?.status === "failed" ? "ОШИБКА" : aiNodeResult?.status === "configuration_required" ? "НЕ НАСТРОЕН" : "ОЖИДАЕТ ЗАПУСКА"}</span></div>
+              <div><Bot size={13}/><b>AI EXPLANATION</b><span>{aiNodeResult?.status === "completed" && Number(aiNodeResult?.insufficient_evidence_count || 0) > 0 ? "НЕДОСТАТОЧНО ДОКАЗАТЕЛЬСТВ" : aiNodeResult?.status === "completed" ? "НЕТ ОТВЕТА" : aiNodeResult?.status === "failed" ? "ОШИБКА" : aiNodeResult?.status === "configuration_required" ? "НЕ НАСТРОЕН" : "ОЖИДАЕТ ЗАПУСКА"}</span></div>
               <p>{aiNodeResult?.status === "configuration_required"
                 ? "Объяснение не создано: настройте LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневом .env и перезапустите api и worker."
                 : aiNodeResult?.status === "failed"
                   ? (aiNodeResult?.message || "Провайдер AI не вернул корректный результат. Проверьте адрес, модель, API-ключ и доступность провайдера.")
                   : aiNodeResult?.status === "completed"
-                    ? "Для этой находки модель не вернула проверенное объяснение или находка не попала в установленный лимит. Ниже остаются результаты детерминированного анализа."
+                    ? (aiNodeResult?.message || "Для этой находки модель не вернула проверенное объяснение или находка не попала в установленный лимит. Ниже остаются результаты детерминированного анализа.")
                     : "AI-объяснение появится после выполнения соответствующего блока workflow."}</p>
             </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
