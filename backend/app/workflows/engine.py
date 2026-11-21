@@ -39,13 +39,13 @@ def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -
         minimum = float(minimum)
     except (TypeError, ValueError):
         minimum = 0.0
-    include_tests = config.get("include_tests", False) is True
+    include_tests = config.get("include_tests", True) is True
     if minimum < 0 or minimum > 1:
         minimum = 0.0
     test_markers = {"test", "tests", "androidtest", "testfixtures"}
     filtered = []
     for finding in findings:
-        if float(finding.get("confidence", 0.0) or 0.0) < minimum:
+        if float(finding.get("confidence", 1.0) if finding.get("confidence") is not None else 1.0) < minimum:
             continue
         if scanner in {"secrets", "sast"} and not include_tests:
             parts = {part.lower() for part in PurePosixPath(str(finding.get("path", ""))).parts}
