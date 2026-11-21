@@ -34,19 +34,7 @@
 | Отчёты | JSON и HTML export; сохранение JSON в библиотеку проекта | Реализовано частично |
 | Finding lifecycle | open / accepted_risk / fixed / false_positive, причина, срок риска, история через AuditLog | Частично |
 
-## P0 — закрыть до демонстрации
-
-| ID | Задача | Почему ещё открыта | Критерий закрытия |
-|---|---|---|---|
-| P0-1 | Полный E2E на закреплённом Kotlin-репозитории | Скрипт и demo graph есть, но удалённая проверка исходников не доказывает запуск на пользовательском Docker | Один реальный прогон: Git → Secrets/SCA/SAST → Merge → AI → Webhook + Gate |
-| P0-2 | Проверить webhook delivery | Реализация и тесты есть; нужен фактический приём JSON на уникальном endpoint | В webhook.site получен payload; скрипт подтвердил delivered |
-| P0-3 | Проверить AI в целевом окружении | Код поддерживает provider timeout 90s, но наличие/доступность LLM credentials зависит от локального .env и сети | AI node completed, объяснения привязаны к evidence, нет configuration_required |
-| P0-4 | Пересчитать benchmark на закреплённом эталоне | CI benchmarks есть, но результат ограничен конкретной версией training repo и ground truth | Сохранить precision/recall/F1 и список FP/FN для трёх сканеров |
-| P0-5 | Прогнать миграции и восстановление очереди | CI и unit tests не заменяют проверку существующей пользовательской БД и рестарта worker | Upgrade на пустой и существующей БД; прерванный run восстанавливается без дублирования |
-
-**Demo automation:** `scripts/demo.ps1` теперь входит через `/api/auth/login`, использует session cookie в памяти процесса и отзывает сессию. Для него нужны `INVEST_DEMO_EMAIL` и `INVEST_DEMO_PASSWORD`; инструкция добавлена в README и demo runbook. Сам скрипт ещё нужно выполнить локально.
-
-## P1 — продуктовые недоделки
+## Этап 1 — оставшиеся функциональные задачи
 
 1. **Regex-условие.** Сейчас `logic.compare` покрывает equals/contains и числовые сравнения, но отдельного regex-оператора/ноды в реестре нет. Добавлять только если это требуется точной формулировкой задания.
 2. **SCA freshness и coverage.** Maven advisory snapshot — 41 запись на 2026-11-16, не полный live feed; Spring Boot managed-version catalog ограничен выбранными версиями. Нужны безопасное обновление из upstream, проверка происхождения/хэша, diff-review и регрессионные benchmark-gates.
@@ -58,7 +46,21 @@
 7. **Audit log.** Сейчас события пишутся выборочно; нет полноценного actor-aware аудита, поиска/экспорта и tamper-evident хранения.
 8. **UX.** Текущий UI приведён к CyberGarden dark visual language; остаются usability-проверка на реальных ширинах экрана, длинных finding payloads и заполненном проекте.
 
-## P2 — обязательное до multi-user / production
+
+## Этап 2 — стабилизация и подтверждение демо
+
+| ID | Задача | Почему ещё открыта | Критерий закрытия |
+|---|---|---|---|
+| P0-1 | Полный E2E на закреплённом Kotlin-репозитории | Скрипт и demo graph есть, но удалённая проверка исходников не доказывает запуск на пользовательском Docker | Один реальный прогон: Git → Secrets/SCA/SAST → Merge → AI → Webhook + Gate |
+| P0-2 | Проверить webhook delivery | Реализация и тесты есть; нужен фактический приём JSON на уникальном endpoint | В webhook.site получен payload; скрипт подтвердил delivered |
+| P0-3 | Проверить AI в целевом окружении | Код поддерживает provider timeout 90s, но наличие/доступность LLM credentials зависит от локального .env и сети | AI node completed, объяснения привязаны к evidence, нет configuration_required |
+| P0-4 | Пересчитать benchmark на закреплённом эталоне | CI benchmarks есть, но результат ограничен конкретной версией training repo и ground truth | Сохранить precision/recall/F1 и список FP/FN для трёх сканеров |
+| P0-5 | Прогнать миграции и восстановление очереди | CI и unit tests не заменяют проверку существующей пользовательской БД и рестарта worker | Upgrade на пустой и существующей БД; прерванный run восстанавливается без дублирования |
+
+**Demo automation:** `scripts/demo.ps1` теперь входит через `/api/auth/login`, использует session cookie в памяти процесса и отзывает сессию. Для него нужны `INVEST_DEMO_EMAIL` и `INVEST_DEMO_PASSWORD`; инструкция добавлена в README и demo runbook. Сам скрипт ещё нужно выполнить локально.
+
+
+## Этап 3 — security hardening и границы multi-user
 
 - Tenant model: Organization / Workspace / Membership / Role и owner/tenant foreign keys.
 - Object-level authorization на каждом API lookup; сейчас аутентифицированные пользователи не изолированы друг от друга по проектам/workflows/runs.
