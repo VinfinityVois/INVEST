@@ -84,6 +84,11 @@ def require_workspace_api_token(db, provided_token: str, workspace_id: UUID, sco
     user = db.get(User, token.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="API token owner is inactive.")
+    owner_role = workspace_role(db, user.id, workspace_id)
+    if owner_role is None:
+        raise HTTPException(status_code=401, detail="API token owner no longer has workspace access.")
+    if scope in {"workflow:run", "template:publish"} and owner_role not in {"admin", "editor"}:
+        raise HTTPException(status_code=403, detail="API token owner no longer has permission for this scope.")
     token.last_used_at = datetime.now(timezone.utc)
     db.flush()
     return token
