@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Building2, Plus, Users, X, RefreshCw, Trash2, Crown, FolderOpen, ShieldCheck } from "lucide-react";
 
 type Organization = { id: string; name: string; kind: string; role: "owner" | "admin" | "member" };
@@ -6,13 +6,12 @@ type Workspace = { id: string; name: string; organization_id: string; organizati
 type Member = { user_id: string; email: string; role: string; is_active: boolean };
 
 async function api(path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(path, {
-    credentials: "include",
     ...init,
-    headers: {
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...(init.headers || {}),
-    },
+    credentials: "include",
+    headers,
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || "Не удалось выполнить операцию.");
@@ -34,7 +33,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [orgData, workspaceData] = await Promise.all([
       api("/api/organizations"),
       api("/api/workspaces"),
@@ -43,13 +42,13 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
     setWorkspaces(workspaceData.items || []);
     setOrganizationId(current => current && (orgData.items || []).some((item: Organization) => item.id === current) ? current : orgData.items?.[0]?.id || "");
     setWorkspaceId(current => current && (workspaceData.items || []).some((item: Workspace) => item.id === current) ? current : workspaceData.items?.find((item: Workspace) => item.active)?.id || workspaceData.items?.[0]?.id || "");
-  };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     setError("");
     void load().catch(reason => setError(reason instanceof Error ? reason.message : "Ошибка загрузки."));
-  }, [open]);
+  }, [open, load]);
 
   useEffect(() => {
     if (!open || !organizationId) { setOrganizationMembers([]); return; }
