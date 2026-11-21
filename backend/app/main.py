@@ -969,7 +969,9 @@ def node_types():
 
 
 @app.post("/api/workflows/generate")
-def generate_workflow_draft(payload: WorkflowGenerateRequest):
+def generate_workflow_draft(payload: WorkflowGenerateRequest, request: Request):
+    with SessionLocal() as session:
+        require_active_workspace(session, request, allowed_roles={"admin", "editor"})
     try:
         return generate_workflow_graph(payload.prompt)
     except WorkflowGenerationError as exc:
