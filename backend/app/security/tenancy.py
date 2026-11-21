@@ -80,14 +80,6 @@ def claim_unassigned_legacy_workspace(db: Session, user: User) -> bool:
 
 def workspace_role(db: Session, user_id, workspace_id):
     """Resolve direct workspace membership or inherited organization admin access."""
-    direct = db.scalar(
-        select(WorkspaceMembership.role).where(
-            WorkspaceMembership.user_id == user_id,
-            WorkspaceMembership.workspace_id == workspace_id,
-        )
-    )
-    if direct is not None:
-        return direct
     organization_id = db.scalar(
         select(Workspace.organization_id).where(
             Workspace.id == workspace_id,
@@ -102,7 +94,14 @@ def workspace_role(db: Session, user_id, workspace_id):
             OrganizationMembership.organization_id == organization_id,
         )
     )
-    return "admin" if organization_role in {"owner", "admin"} else None
+    if organization_role in {"owner", "admin"}:
+        return "admin"
+    return db.scalar(
+        select(WorkspaceMembership.role).where(
+            WorkspaceMembership.user_id == user_id,
+            WorkspaceMembership.workspace_id == workspace_id,
+        )
+    )
 
 
 def require_active_workspace(db: Session, request, allowed_roles=None) -> tuple[Workspace, str]:
@@ -120,16 +119,8 @@ def require_active_workspace(db: Session, request, allowed_roles=None) -> tuple[
     workspace_id = session.current_workspace_id
     role = workspace_role(db, user.id, workspace_id) if workspace_id else None
     if role is None:
-        candidate = db.scalar(
-            select(Workspace.id)
-            .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
-            .where(
-                WorkspaceMembership.user_id == user.id,
-                Workspace.deleted_at.is_(None),
-            )
-            .order_by(Workspace.is_default.desc(), Workspace.created_at.asc(), Workspace.id)
-            .limit(1)
-        )
+        candidates = accessible_workspaces(db, user.id)
+        candidate = candidates[0].id if candidates else None
         if candidate is None:
             from fastapi import HTTPException
             raise HTTPException(status_code=403, detail="No workspace access is configured for this account.")
