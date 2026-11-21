@@ -1,44 +1,89 @@
+import hashlib
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from uuid import uuid4
+
 import pytest
 from fastapi import HTTPException
 
-from app.config import settings
-from app.main import _require_ci_token
+from app.security.tokens_api import require_workspace_api_token, token_digest
 
 
-def test_ci_token_rejects_unconfigured_endpoint(monkeypatch):
-    monkeypatch.setattr(settings, "ci_trigger_token", None)
+class FakeTokenSession:
+    def __init__(self, token=None, owner=None):
+        self.token = token
+        self.owner = owner
+        self.flushed = False
+
+    def scalar(self, statement):
+        return self.token
+
+    def get(self, model, identifier):
+        return self.owner
+
+    def flush(self):
+        self.flushed = True
+
+
+def test_workspace_token_rejects_unknown_or_revoked_token():
+    db = FakeTokenSession()
     with pytest.raises(HTTPException) as error:
-        _require_ci_token("anything")
-    assert error.value.status_code == 503
-
-
-def test_ci_token_requires_exact_secret(monkeypatch):
-    monkeypatch.setattr(settings, "ci_trigger_token", "a-long-random-ci-secret")
-    with pytest.raises(HTTPException) as error:
-        _require_ci_token("wrong")
+        require_workspace_api_token(db, "inv_unknown", uuid4(), "workflow:run")
     assert error.value.status_code == 401
-    _require_ci_token("a-long-random-ci-secret")
 
 
-def test_ci_token_rejects_empty_header(monkeypatch):
-    monkeypatch.setattr(settings, "ci_trigger_token", "a-long-random-ci-secret")
+def test_workspace_token_requires_declared_scope():
+    token = SimpleNamespace(
+        scopes=["run:read"],
+        expires_at=None,
+        user_id=uuid4(),
+        last_used_at=None,
+    )
+    db = FakeTokenSession(token, SimpleNamespace(is_active=True))
     with pytest.raises(HTTPException) as error:
-        _require_ci_token("")
+        require_workspace_api_token(db, "inv_valid", uuid4(), "workflow:run")
+    assert error.value.status_code == 403
+
+
+def test_workspace_token_rejects_expired_token():
+    token = SimpleNamespace(
+        scopes=["run:read"],
+        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        user_id=uuid4(),
+        last_used_at=None,
+    )
+    db = FakeTokenSession(token, SimpleNamespace(is_active=True))
+    with pytest.raises(HTTPException) as error:
+        require_workspace_api_token(db, "inv_expired", uuid4(), "run:read")
     assert error.value.status_code == 401
 
 
-def test_template_publish_token_is_disabled_without_configuration(monkeypatch):
-    from app.main import _require_template_publish_token
-    monkeypatch.setattr(settings, "template_publish_token", None)
+def test_workspace_token_rejects_inactive_owner():
+    token = SimpleNamespace(
+        scopes=["run:read"],
+        expires_at=None,
+        user_id=uuid4(),
+        last_used_at=None,
+    )
+    db = FakeTokenSession(token, SimpleNamespace(is_active=False))
     with pytest.raises(HTTPException) as error:
-        _require_template_publish_token("anything")
-    assert error.value.status_code == 503
-
-
-def test_template_publish_token_requires_exact_secret(monkeypatch):
-    from app.main import _require_template_publish_token
-    monkeypatch.setattr(settings, "template_publish_token", "dedicated-template-publish-secret")
-    with pytest.raises(HTTPException) as error:
-        _require_template_publish_token("wrong")
+        require_workspace_api_token(db, "inv_inactive", uuid4(), "run:read")
     assert error.value.status_code == 401
-    _require_template_publish_token("dedicated-template-publish-secret")
+
+
+def test_workspace_token_updates_last_used_and_returns_token():
+    token = SimpleNamespace(
+        scopes=["workflow:run"],
+        expires_at=None,
+        user_id=uuid4(),
+        last_used_at=None,
+    )
+    db = FakeTokenSession(token, SimpleNamespace(is_active=True))
+    resolved = require_workspace_api_token(db, "inv_valid", uuid4(), "workflow:run")
+    assert resolved is token
+    assert token.last_used_at is not None
+    assert db.flushed is True
+
+
+def test_token_digest_is_one_way_sha256():
+    assert token_digest("inv_secret") == hashlib.sha256(b"inv_secret").hexdigest()
