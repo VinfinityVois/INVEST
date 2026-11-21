@@ -1995,6 +1995,39 @@ def _compare_workflow_graphs(before: dict, after: dict) -> dict:
     }
 
 
+def _canonical_finding_path(run: WorkflowRun, path: str) -> str:
+    """Normalize legacy archive-wrapper prefixes in API and exported reports."""
+    if not isinstance(path, str) or not path:
+        return path
+    result = run.result if isinstance(run.result, dict) else {}
+    outputs = result.get("outputs", {}) if isinstance(result.get("outputs"), dict) else {}
+    nodes = run.graph_snapshot.get("nodes", []) if isinstance(run.graph_snapshot, dict) else []
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("type") not in {"source.upload", "source.git"}:
+            continue
+        output = outputs.get(node.get("id"), {})
+        if not isinstance(output, dict) or output.get("status") != "ready":
+            continue
+        prefix = output.get("project_subdirectory")
+        if not prefix and node.get("type") == "source.upload":
+            source_path = output.get("path")
+            if isinstance(source_path, str):
+                relative = PurePosixPath(source_path)
+                if not relative.is_absolute() and all(part not in {"", ".", ".."} for part in relative.parts):
+                    try:
+                        workspace = Path(settings.workspace_root).resolve()
+                        artifact = workspace.joinpath(*relative.parts).resolve(strict=True)
+                        if artifact.is_relative_to(workspace) and artifact.is_dir():
+                            detected = detect_project_root(artifact)
+                            if detected != artifact:
+                                prefix = detected.relative_to(artifact).as_posix()
+                    except (OSError, ValueError):
+                        prefix = None
+        if isinstance(prefix, str) and prefix and prefix != "." and path.startswith(prefix + "/"):
+            return path[len(prefix) + 1:]
+        break
+    return path
+
 def _build_run_report(session, run: WorkflowRun) -> dict:
     telemetry = _safe_report_value(_run_telemetry(session, run))
     rows = session.scalars(
@@ -2006,7 +2039,7 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
             "fingerprint": item.fingerprint,
             "rule_id": item.rule_id,
             "severity": item.severity,
-            "path": item.path,
+            "path": _canonical_finding_path(run, item.path),
             "line": item.line,
         })
         for item in rows
@@ -2181,7 +2214,7 @@ def list_run_findings(run_id: UUID, request: Request):
                 "fingerprint": item.fingerprint,
                 "rule_id": item.rule_id,
                 "severity": item.severity,
-                "path": item.path,
+                "path": _canonical_finding_path(run, item.path),
                 "line": item.line,
                 **({"ai_explanation": explanation} if explanation else {}),
             })
