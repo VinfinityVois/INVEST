@@ -118,7 +118,7 @@ def add_finding_comment(workflow_id: UUID, fingerprint: str, payload: FindingCom
 def delete_finding_comment(workflow_id: UUID, fingerprint: str, comment_id: UUID, request: Request):
     actor = _actor(request)
     with SessionLocal() as db:
-        _workflow_and_finding(db, request, workflow_id, fingerprint)
+        workspace, _, _ = _workflow_and_finding(db, request, workflow_id, fingerprint)
         comment = db.scalar(
             select(FindingComment).where(
                 FindingComment.id == comment_id,
@@ -128,7 +128,7 @@ def delete_finding_comment(workflow_id: UUID, fingerprint: str, comment_id: UUID
         )
         if comment is None:
             raise HTTPException(status_code=404, detail="Comment not found.")
-        role = workspace_role(db, actor.id, request.state.current_workspace_id)
+        role = workspace_role(db, actor.id, workspace.id)
         if comment.author_user_id != actor.id and role not in {"admin", "editor"}:
             raise HTTPException(status_code=403, detail="You can only delete your own comments.")
         db.add(AuditLog(
