@@ -51,7 +51,7 @@ API:
 - `GET /api/organizations/{id}/members`, `POST /api/organizations/{id}/members`, `DELETE /api/organizations/{id}/members/{user_id}`, `POST /api/organizations/{id}/transfer-ownership`;
 - `GET /api/workspaces/{id}/members`, `POST /api/workspaces/{id}/members`, `PATCH /api/workspaces/{id}/members/{user_id}`, `DELETE /api/workspaces/{id}/members/{user_id}`.
 
-API tokens создаются отдельно для Workspace. Поддерживаемые scopes: `workflow:run`, `run:read`, `findings:read`, `reports:read`, `template:publish`. Полный секрет показывается только при создании; БД хранит только SHA-256 hash. CI endpoints проверяют scope и совпадение Workspace токена с Workspace workflow/run. Старые глобальные `CI_TRIGGER_TOKEN` и `TEMPLATE_PUBLISH_TOKEN` больше не используются.
+API tokens создаются отдельно для Workspace. Поддерживаемые scopes: `workflow:run`, `run:read`, `findings:read`, `reports:read`, `template:publish`. Полный секрет показывается только при создании; БД хранит только SHA-256 hash. Если срок не задан, токен истекает через 90 дней; отозванные токены не восстанавливаются. CI endpoints проверяют scope и совпадение Workspace токена с Workspace workflow/run. Старые глобальные `CI_TRIGGER_TOKEN` и `TEMPLATE_PUBLISH_TOKEN` больше не используются.
 
 ## Локальный запуск без Docker (Windows PowerShell)
 
