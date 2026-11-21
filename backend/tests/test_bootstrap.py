@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import OrganizationMembership, User, WorkspaceMembership
+from app.models import Organization, OrganizationMembership, User, Workspace, WorkspaceMembership
 from app.security.bootstrap import create_bootstrap_admin
 from app.security.passwords import verify_password
 
@@ -174,3 +174,40 @@ def test_concurrent_bootstrap_creates_exactly_one_admin(tmp_path):
         assert len(admins) == 1
     finally:
         engine.dispose()
+
+
+def test_bootstrap_claims_unassigned_legacy_workspace(db):
+    legacy = Organization(name="Legacy organization", kind="organization")
+    db.add(legacy)
+    db.flush()
+    legacy_workspace = Workspace(
+        organization_id=legacy.id,
+        name="Legacy workspace",
+        is_default=True,
+    )
+    db.add(legacy_workspace)
+    db.flush()
+
+    with db.begin():
+        user = create_bootstrap_admin(
+            db,
+            "first-admin@example.test",
+            "StrongBootstrapPassword123!",
+        )
+
+    organization_membership = db.scalar(
+        select(OrganizationMembership).where(
+            OrganizationMembership.organization_id == legacy.id,
+            OrganizationMembership.user_id == user.id,
+        )
+    )
+    workspace_membership = db.scalar(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == legacy_workspace.id,
+            WorkspaceMembership.user_id == user.id,
+        )
+    )
+    assert organization_membership is not None
+    assert organization_membership.role == "owner"
+    assert workspace_membership is not None
+    assert workspace_membership.role == "admin"
