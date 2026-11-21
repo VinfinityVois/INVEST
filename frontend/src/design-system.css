@@ -2613,3 +2613,44 @@
 @media(prefers-reduced-motion:reduce) {
   .dashboard-backdrop,.dashboard-trend-column span { animation:none !important;transition:none !important; }
 }
+
+
+.finding-collaboration {
+  display:grid;gap:9px;margin-top:12px;padding:11px;border:1px solid var(--border);
+  border-radius:6px;background:var(--page);
+}
+.finding-collaboration-head,.finding-comments-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:9px;
+}
+.finding-collaboration-head b,.finding-comments-heading b {
+  display:flex;align-items:center;gap:6px;color:var(--text);font-size:10px;
+}
+.finding-collaboration-head select {
+  width:min(260px,65%);height:30px;padding:0 8px;border:1px solid var(--border);
+  border-radius:4px;background:var(--surface);color:var(--text);font-size:10px;
+}
+.finding-comments-heading { padding-top:8px;border-top:1px solid var(--border); }
+.finding-comments-heading span { color:var(--muted);font:10px "JetBrains Mono",monospace; }
+.finding-comments-list { display:grid;gap:6px;max-height:190px;overflow:auto; }
+.finding-comments-list article {
+  padding:8px 9px;border:1px solid var(--border);border-radius:5px;background:var(--surface);
+}
+.finding-comments-list article > div { display:flex;align-items:center;gap:8px; }
+.finding-comments-list article b { color:var(--text);font-size:9px; }
+.finding-comments-list article time { color:var(--muted);font-size:8px; }
+.finding-comments-list article button { display:inline-flex;margin-left:auto;padding:3px;border:0;background:transparent;color:var(--muted); }
+.finding-comments-list article p { margin:7px 0 0;color:var(--text-secondary);font-size:10px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere; }
+.finding-comments-empty { margin:0;color:var(--muted);font-size:9px; }
+.finding-collaboration form { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px; }
+.finding-collaboration textarea {
+  min-width:0;min-height:44px;padding:8px;border:1px solid var(--border);border-radius:5px;
+  background:var(--surface);color:var(--text);font:10px Inter,system-ui,sans-serif;resize:vertical;
+}
+.finding-collaboration form button {
+  display:flex;align-items:center;justify-content:center;gap:5px;align-self:end;
+  min-height:31px;padding:0 9px;border:1px solid var(--accent-500);border-radius:4px;
+  background:var(--accent-600);color:#fff;font-size:9px;font-weight:700;
+}
+.finding-collaboration form button:disabled { opacity:.45;cursor:not-allowed; }
+.finding-collaboration-error { margin:0;color:var(--danger);font-size:9px; }
+.finding-lifecycle-summary .is-in-progress { color:var(--warning); }
