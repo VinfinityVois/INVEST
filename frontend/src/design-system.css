@@ -3043,3 +3043,144 @@
     animation-iteration-count:1!important;
   }
 }
+
+/* 0.8.1 — spacing and alignment refinement (preserve existing palette) */
+.shell {
+  --ui-space-1:4px;
+  --ui-space-2:8px;
+  --ui-space-3:12px;
+  --ui-space-4:16px;
+  --ui-space-5:20px;
+}
+.shell .topbar {
+  gap:clamp(8px, .9vw, 14px);
+}
+.shell .brand,
+.shell .workspace-context,
+.shell .status,
+.shell .actions {
+  flex-shrink:0;
+}
+.shell .brand { gap:9px; }
+.shell .status { gap:7px; }
+.shell .actions { gap:6px; }
+.shell .layout {
+  align-items:stretch;
+  gap:clamp(9px, .8vw, 13px);
+  padding-block:clamp(9px, .8vw, 13px);
+}
+.shell .layout .panel {
+  padding:clamp(12px, .9vw, 16px);
+}
+.shell .panel-heading {
+  min-height:28px;
+  align-items:center;
+  gap:10px;
+  margin-bottom:9px;
+}
+.shell .panel-heading h3,
+.shell .panel h3 {
+  line-height:1.35;
+}
+.shell .panel-intro {
+  margin:8px 0 13px;
+  line-height:1.55;
+}
+.shell .searchbox {
+  margin-bottom:9px;
+}
+.shell .palette-folder {
+  margin-top:12px;
+}
+.shell .palette-folder-head {
+  gap:8px;
+  padding-inline:10px;
+}
+.shell .source-section {
+  margin:0 0 12px;
+  padding:11px;
+}
+.shell .library-item {
+  margin:0 0 8px;
+  padding:9px;
+}
+.shell .library-main { gap:9px; }
+.shell .schema-config-fields {
+  gap:11px;
+  margin:12px 0;
+}
+.shell .schema-config-field { gap:6px; }
+.shell .field-label {
+  margin:0 0 10px;
+  line-height:1.45;
+}
+.shell .field-label input,
+.shell .field-label select,
+.shell .field-label textarea {
+  margin-top:6px;
+}
+.shell .edit-section {
+  margin:12px 0;
+  padding:12px;
+}
+.shell .inspector-tabs {
+  min-height:34px;
+  gap:clamp(10px, 1vw, 14px);
+  margin:13px 0 12px;
+  padding-bottom:9px;
+}
+.shell .selected-card,
+.shell .telemetry-card {
+  margin-block:10px;
+  padding:11px;
+}
+.shell .findings-head {
+  margin:15px 0 9px;
+  gap:9px;
+}
+.shell .finding {
+  margin:0 0 9px;
+  padding:10px 11px;
+}
+.shell .result-section { margin-top:14px; }
+.shell .safe { margin-top:13px;padding:10px; }
+.shell .editor-head {
+  gap:12px;
+  padding-inline:3px;
+}
+.shell .counts { gap:9px; }
+.shell .flow-foot {
+  min-height:31px;
+  margin-top:7px;
+  gap:10px;
+}
+.shell .layout .panel,
+.shell .flow,
+.shell .workflow-node {
+  box-sizing:border-box;
+}
+@media (max-width:1279px) and (min-width:1024px) {
+  .shell .layout { gap:9px; }
+  .shell .layout .panel { padding:12px; }
+  .shell .panel-heading { gap:8px; }
+  .shell .actions { gap:5px; }
+}
+@media (max-width:1023px) and (min-width:761px) {
+  .shell .layout { gap:8px; }
+  .shell .layout .panel:not(.is-collapsed) { padding:14px; }
+}
+@media (max-width:760px) {
+  .shell .topbar { gap:7px; }
+  .shell .layout {
+    gap:6px;
+    padding-block:8px;
+  }
+  .shell .layout .panel:not(.is-collapsed) { padding:12px; }
+  .shell .editor-head {
+    min-height:64px;
+    gap:8px;
+    padding:4px 2px 7px;
+  }
+  .shell .counts { gap:6px; }
+  .shell .panel-intro { margin:7px 0 11px; }
+}
