@@ -74,6 +74,34 @@ def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -
     return filtered
 
 
+def _scan_sca_project(root: Path, config: dict, on_progress=None) -> list[dict]:
+    selected = config.get("rule_packs") or ["sca-spring-boot"]
+    packs = rule_packs.resolve(selected, analyzer="sca")
+    databases = {pack.get("advisory_db") for pack in packs}
+    if databases != {"maven-advisories"}:
+        raise WorkflowExecutionError("Selected SCA packs do not share a supported advisory database")
+    ecosystems = sorted({ecosystem for pack in packs for ecosystem in pack.get("ecosystems", [])})
+    include_dev = config.get("include_dev")
+    if include_dev is None:
+        include_dev = any(pack.get("include_dev", True) for pack in packs)
+    use_lockfile = config.get("use_lockfile")
+    if use_lockfile is None:
+        use_lockfile = any(pack.get("use_lockfile", True) for pack in packs)
+    starter_pack = config.get("starter_pack")
+    if starter_pack is None:
+        starter_pack = next((pack.get("starter_pack") for pack in packs if pack.get("starter_pack") not in {None, "none"}), "none")
+    if starter_pack not in {"none", "spring-boot-starters"}:
+        raise WorkflowExecutionError("Unsupported SCA starter catalog")
+    return scan_project(
+        root,
+        on_progress=on_progress,
+        include_dev=include_dev is True,
+        use_lockfile=use_lockfile is True,
+        ecosystems=ecosystems,
+        starter_pack=starter_pack,
+    )
+
+
 def _source_fingerprint(root: Path) -> str:
     digest = hashlib.sha256()
     skipped = {".git", "node_modules", ".gradle", "build", "dist", "target", ".venv"}
@@ -441,7 +469,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     if node.type == "scan.secrets":
                         raw_findings = _filter_scanner_findings(scan_directory(source_root, on_progress=report_scanner_progress, selected_rule_packs=node.config.get("rule_packs", ["secrets-core"])), node.config, "secrets")
                     elif node.type == "scan.sca":
-                        raw_findings = _filter_scanner_findings(scan_project(source_root, on_progress=report_scanner_progress), node.config, "sca")
+                        raw_findings = _filter_scanner_findings(_scan_sca_project(source_root, node.config, on_progress=report_scanner_progress), node.config, "sca")
                     else:
                         raw_findings = _filter_scanner_findings(scan_kotlin_project(source_root, on_progress=report_scanner_progress), node.config, "sast")
                     findings = [enrich_finding(item, source_root) for item in raw_findings]
@@ -463,7 +491,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(scan_project(artifacts[source_node], on_progress=report_scanner_progress), node.config, "sca")]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(_scan_sca_project(artifacts[source_node], node.config, on_progress=report_scanner_progress), node.config, "sca")]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
             source_node = next(
