@@ -35,7 +35,7 @@
 | Rule packs/presets/templates | YAML inheritance, built-in preset, sanitized template publish/clone | Реализовано |
 | CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Реализовано; external consumer repository setup unverified |
 | Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для single-operator |
-| User management | Admin-only create/list/search/filter/pagination/update email/role/status; soft deactivation revokes sessions | Реализовано частично; only admin/user, no deletion/recovery |
+| User management | Admin-only create/list/search/filter/pagination/update email/role/status; self-service profile email/password/session controls; soft deactivation revokes sessions | Реализовано частично; only admin/user, no deletion/recovery |
 | Self-service account | Password change after current-password verification; session list, revoke one/others | Реализовано в API/UI; требует runtime UX check |
 | User audit events | user.created / user.updated / user.password_changed with actor_user_id | Частично; auth and all security/admin events not fully audited |
 | Authorization / tenancy | No Organization/Workspace/Membership/Role ownership model | Не реализовано |
@@ -59,7 +59,7 @@ The frontend now uses the authenticated session. Demo automation was updated to 
 Remaining security boundary:
 1. no tenant isolation or object-level access checks;
 2. `is_admin` exists but is not a complete RBAC system;
-3. basic admin user management and self-service session/password UI now exist; password recovery/reset, MFA and data deletion policy remain open;
+3. basic admin user management and self-service profile email/session/password UI now exist; password recovery/reset, MFA and data deletion policy remain open;
 4. selected audit events do not yet form a complete actor-aware trail;
 5. operational key rotation, backup/restore and reverse-proxy/TLS deployment need review.
 6. current role model is only the boolean `is_admin` mapped to admin/user; it is not workspace-scoped RBAC. Project/workflow/run/finding ownership and object-level access checks remain absent.
