@@ -75,6 +75,10 @@ type Telemetry = {
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
 type FlowNode = Node<NodeData>;
 
+const getSchemaDefaults = (manifest?: Manifest): Record<string, unknown> => Object.fromEntries(
+  Object.entries(manifest?.config_schema?.properties || {}).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default]),
+);
+
 const formatDuration = (ms?: number | null) => ms == null ? "—" : ms < 1000 ? `${Math.round(ms)} мс` : ms < 60000 ? `${(ms / 1000).toFixed(1)} с` : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
 const formatDate = (value?: string) => value ? new Date(value).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
 
@@ -601,7 +605,7 @@ export default function App() {
   const addNode = (manifest: Manifest) => {
     const id = manifest.type + "-" + Date.now();
     const position = { x: 180 + (nodes.length % 3) * 245, y: 90 + Math.floor(nodes.length / 3) * 145 };
-    const initialConfig = manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {};
+    const initialConfig = getSchemaDefaults(manifest);
     const node: FlowNode = { id, type: "workflow", position, data: { label: manifest.title, nodeType: manifest.type, category: manifest.category, description: manifest.description, config: initialConfig, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } };
     setNodes(current => [...current, node]); setWorkflowDirty(true); setSelectedNodeId(id); setSelectedEdgeId(null);
   };
@@ -622,7 +626,7 @@ export default function App() {
     if (!selectedNode) return;
     const manifest = manifests.find(item => item.type === type);
     if (!manifest) return;
-    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
+    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: getSchemaDefaults(manifest) });
   };
   const renderSchemaFields = () => {
     if (!selectedNode) return null;
