@@ -447,6 +447,7 @@ def test_workspace_api_tokens_are_shown_once_scoped_and_revocable(user_client):
     assert created.status_code == 201
     token = created.json()["token"]
     assert token.startswith("inv_")
+    assert created.json()["expires_at"] is not None
 
     listed = client.get(f"/api/workspaces/{workspace_id}/tokens")
     assert listed.status_code == 200
