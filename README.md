@@ -37,7 +37,21 @@ Health: http://localhost:8000/health
 docker compose exec api python -m app.bootstrap_admin admin@example.test
 ```
 
-Bootstrap разрешён только пока в базе нет администратора. Повторный запуск не меняет существующие учётные записи. Вход выполняется через UI; API использует серверную HttpOnly-сессию. Не публикуй API/UI в недоверенную сеть: tenant isolation и полноценный RBAC ещё не реализованы.
+Bootstrap разрешён только пока в базе нет администратора. Повторный запуск не меняет существующие учётные записи. Для аккаунта создаются личные Organization и Workspace; первый bootstrap-администратор также получает доступ к legacy workspace, куда миграция переносит прежние проекты. Вход выполняется через UI; API использует серверную HttpOnly-сессию и активный Workspace в серверной сессии. Проекты, workflows, runs, findings и отчёты в browser API ограничиваются активным Workspace. Это первый tenant-isolation слой, а не заявление о полном production RBAC: CI токены теперь workspace-scoped, но invitations/email, полный аудит, экспорт/удаление workspace, backup/restore и системная security-проверка ещё остаются в backlog.
+
+## Organizations и Workspace
+
+Модель данных: `User → Organization → Workspace → Project`. У каждого пользователя есть личная Organization и default Workspace. Командные организации могут иметь несколько Workspace. Системные роли организации: Owner, Admin, Member; роли Workspace: Admin, Editor, Analyst, Viewer. Активная рабочая область хранится в серверной сессии, а не принимается из произвольного client header.
+
+В UI через кнопку «Доступы» доступны создание организации и Workspace, добавление уже существующих аккаунтов, просмотр участников, управление workspace roles, отзыв членства и передача владения организацией. Приглашения по email и самостоятельная регистрация по приглашению пока не реализованы. Старые проекты/workflows мигрируются в legacy Workspace первого администратора; остальные старые аккаунты получают собственные пустые personal workspaces.
+
+API:
+- `GET /api/organizations`, `POST /api/organizations`;
+- `GET /api/workspaces`, `GET /api/workspaces/active`, `POST /api/workspaces`, `PATCH /api/workspaces/{id}`, `POST /api/workspaces/{id}/switch`;
+- `GET /api/organizations/{id}/members`, `POST /api/organizations/{id}/members`, `DELETE /api/organizations/{id}/members/{user_id}`, `POST /api/organizations/{id}/transfer-ownership`;
+- `GET /api/workspaces/{id}/members`, `POST /api/workspaces/{id}/members`, `PATCH /api/workspaces/{id}/members/{user_id}`, `DELETE /api/workspaces/{id}/members/{user_id}`.
+
+API tokens создаются отдельно для Workspace. Поддерживаемые scopes: `workflow:run`, `run:read`, `findings:read`, `reports:read`, `template:publish`. Полный секрет показывается только при создании; БД хранит только SHA-256 hash. CI endpoints проверяют scope и совпадение Workspace токена с Workspace workflow/run. Старые глобальные `CI_TRIGGER_TOKEN` и `TEMPLATE_PUBLISH_TOKEN` больше не используются.
 
 ## Локальный запуск без Docker (Windows PowerShell)
 
@@ -90,7 +104,7 @@ Project API:
 - `PUT /api/projects/{id}/file?path=...` — безопасное сохранение поддерживаемого текстового файла (JSON `{ "content": "..." }`);
 - `GET /api/projects/{id}/search?q=...` — поиск по содержимому исходников.
 
-Для разового источника без добавления в библиотеку по-прежнему доступен `POST /api/sources/upload`.
+`POST /api/sources/upload` также создаёт запись проекта в активном Workspace; анонимных или бесхозных загрузок нет.
 
 ### Git source
 
@@ -118,15 +132,15 @@ ALLOWED_TARGETS=https://github.com/example/training
 
 Публичная библиотека содержит только опубликованные графы, очищенные от конфигурационных секретов. Просмотр и клонирование не запускают workflow. При клонировании генерируются новые ID узлов и рёбер, а затем граф повторно проходит серверную валидацию.
 
-Публикация отключена, пока в backend `.env` не задан отдельный `TEMPLATE_PUBLISH_TOKEN`. Используйте случайное значение не короче 32 байт; не переиспользуйте `APP_SECRET_KEY`, `CI_TRIGGER_TOKEN` или `LLM_API_KEY`. Запрос публикации передаёт секрет только в заголовке `X-Template-Publish-Token`. Не помещайте его во frontend или в граф workflow.
+Публикация требует workspace-scoped API token с разрешением `template:publish`. Создайте его в меню «Доступы» для нужного Workspace; секрет показывается один раз, хранится в БД только в виде SHA-256 hash и передаётся в заголовке `X-Template-Publish-Token`. Не помещайте токен во frontend или в граф workflow.
 
 API:
 - `GET /api/templates` — список опубликованных шаблонов (фильтры `category` и `q`);
 - `GET /api/templates/{id}` — очищенный граф шаблона;
-- `POST /api/templates/publish` — публикация сохранённого workflow; требует `X-Template-Publish-Token`;
+- `POST /api/templates/publish` — публикация сохранённого workflow; требует workspace token scope `template:publish` в `X-Template-Publish-Token`;
 - `POST /api/templates/{id}/clone` — создание нового сохранённого workflow без выполнения.
 
-При публикации рекурсивно удаляются поля с именами, похожими на секреты/учётные данные, локальные пути `source.upload` и URL назначения `notify.webhook`. Git URL очищается от user-info, query и fragment. В webhook-ноду записывается безопасный placeholder `example.invalid`, который необходимо заменить перед использованием. Сама публикация не ставит задания в очередь. До появления пользовательской аутентификации и RBAC токен публикации следует хранить только у доверенного администратора и не выдавать клиентам.
+При публикации рекурсивно удаляются поля с именами, похожими на секреты/учётные данные, локальные пути `source.upload` и URL назначения `notify.webhook`. Git URL очищается от user-info, query и fragment. В webhook-ноду записывается безопасный placeholder `example.invalid`, который необходимо заменить перед использованием. Сама публикация не ставит задания в очередь. Публикация ограничена Workspace, к которому привязан токен; токен нельзя использовать для чтения или запуска workflow без соответствующих scopes.
 
 ## Logic.compare — фильтрация находок
 
