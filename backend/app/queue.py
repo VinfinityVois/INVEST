@@ -16,6 +16,7 @@ from sqlalchemy import func, select, update
 from croniter import croniter
 
 from app.db import SessionLocal
+from app.scheduler import next_run_time
 from app.models import AuditLog, Finding, FindingState, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.security.rate_limit import cleanup_expired_rate_limits
@@ -214,10 +215,17 @@ def process_run(run_id: str, worker_id: str) -> None:
             ).all()
             now = datetime.now(timezone.utc)
             for lifecycle in lifecycle_rows:
+                expiry = lifecycle.expires_at
+                if expiry is not None and (
+                    expiry.tzinfo is None or expiry.utcoffset() is None
+                ):
+                    # SQLite may return naive datetimes for timezone columns.
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+
                 expired_risk = (
                     lifecycle.state == "accepted_risk"
-                    and lifecycle.expires_at is not None
-                    and lifecycle.expires_at <= now
+                    and expiry is not None
+                    and expiry <= now
                 )
                 reappeared_fixed = lifecycle.state == "fixed"
                 if expired_risk or reappeared_fixed:
@@ -260,10 +268,14 @@ def process_run(run_id: str, worker_id: str) -> None:
 
 
 
-def _next_schedule_at(expression: str, timezone_name: str, base_time: datetime | None = None) -> datetime:
-    zone = ZoneInfo(timezone_name)
-    base = (base_time or datetime.now(timezone.utc)).astimezone(zone)
-    return croniter(expression, base).get_next(datetime).astimezone(timezone.utc)
+def _next_schedule_at(
+    expression: str,
+    timezone_name: str,
+    base_time: datetime | None = None,
+) -> datetime:
+    """Backward-compatible wrapper around the shared scheduler utility."""
+    return next_run_time(expression, timezone_name, base_time)
+
 
 def enqueue_due_schedules(limit: int = 10) -> int:
     """Atomically enqueue due cron workflows and advance each schedule."""

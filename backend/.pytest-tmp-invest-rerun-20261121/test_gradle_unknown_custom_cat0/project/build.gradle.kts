@@ -1,1 +1,0 @@
-dependencies { kapt(quality.commons) }

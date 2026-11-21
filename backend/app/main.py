@@ -83,6 +83,32 @@ class SelectedRunRequest(BaseModel):
         return normalized
 
 
+
+
+def _lock_workflow_for_version_write(session, workflow_id: UUID):
+    """Serialize workflow version allocation across concurrent writers."""
+    return session.scalar(
+        select(Workflow).where(Workflow.id == workflow_id).with_for_update()
+    )
+
+
+def _lock_run_for_update(session, run_id: UUID):
+    """Serialize run state transitions with worker claims and completion."""
+    return session.scalar(
+        select(WorkflowRun).where(WorkflowRun.id == run_id).with_for_update()
+    )
+
+
+def _lock_schedule_for_update(session, workflow_id: UUID, schedule_id: UUID):
+    """Serialize schedule mutations with the due-schedule dispatcher."""
+    return session.scalar(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id,
+            WorkflowSchedule.workflow_id == workflow_id,
+        ).with_for_update()
+    )
+
+
 class FindingStateUpdate(BaseModel):
     state: Literal["open", "accepted_risk", "fixed", "false_positive"]
     reason: str = Field(min_length=3, max_length=2000)
@@ -900,7 +926,8 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
+        workflow = _workflow_lock
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         latest = session.scalar(
@@ -967,12 +994,14 @@ def get_workflow_schedule(workflow_id: UUID):
 @app.put("/api/workflows/{workflow_id}/schedule")
 def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         schedule = session.scalar(
             select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
         )
+        if schedule is not None:
+            schedule = _lock_schedule_for_update(session, workflow_id, schedule.id)
         if not payload.enabled:
             if schedule is not None:
                 schedule.enabled = False
@@ -1255,7 +1284,7 @@ def compare_workflow_versions(
 @app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
 def restore_workflow_version(workflow_id: UUID, version: int):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         source_version = session.scalar(
@@ -1290,7 +1319,7 @@ def restore_workflow_version(workflow_id: UUID, version: int):
 @app.post("/api/runs/{run_id}/cancel")
 def cancel_workflow_run(run_id: UUID):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _lock_run_for_update(session, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         if run.status in {"completed", "partial", "failed", "cancelled"}:
@@ -1310,7 +1339,7 @@ def cancel_workflow_run(run_id: UUID):
 @app.post("/api/runs/{run_id}/retry", status_code=202)
 def retry_workflow_run(run_id: UUID):
     with SessionLocal() as session:
-        previous = session.get(WorkflowRun, run_id)
+        previous = _lock_run_for_update(session, run_id)
         if previous is None:
             raise HTTPException(status_code=404, detail="Run not found")
         if previous.status not in {"completed", "partial", "failed", "cancelled"}:
@@ -2085,13 +2114,45 @@ def run_workflow(graph: WorkflowGraph):
 @app.get("/api/workflows/{workflow_id}/finding-states")
 def list_finding_states(workflow_id: UUID):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
+        if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+
         rows = session.scalars(
             select(FindingState)
             .where(FindingState.workflow_id == workflow_id)
             .order_by(FindingState.fingerprint)
         ).all()
+
+        now = datetime.now(timezone.utc)
+        changed = False
+        for row in rows:
+            if row.state != "accepted_risk" or row.expires_at is None:
+                continue
+            expiry = row.expires_at
+            if expiry.tzinfo is None or expiry.utcoffset() is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if expiry <= now:
+                previous_state = row.state
+                row.state = "open"
+                row.reason = "Срок принятого риска истёк."
+                row.expires_at = None
+                session.add(AuditLog(
+                    action="finding.state.expired",
+                    entity="finding_state",
+                    entity_id=f"{workflow_id}:{row.fingerprint}",
+                    details={
+                        "workflow_id": str(workflow_id),
+                        "fingerprint": row.fingerprint,
+                        "previous_state": previous_state,
+                        "new_state": "open",
+                    },
+                ))
+                changed = True
+
+        if changed:
+            session.commit()
+
         return [
             {
                 "fingerprint": row.fingerprint,
@@ -2110,8 +2171,15 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
     if payload.state != "accepted_risk" and payload.expires_at is not None:
         raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
 
+    if payload.state == "accepted_risk" and payload.expires_at is not None:
+        expiry = payload.expires_at
+        if expiry.tzinfo is None or expiry.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Срок принятого риска должен содержать часовой пояс.")
+        if expiry <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=422, detail="Срок принятого риска должен быть в будущем.")
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
+        if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         finding = session.scalar(
             select(Finding)
@@ -2126,7 +2194,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
             select(FindingState).where(
                 FindingState.workflow_id == workflow_id,
                 FindingState.fingerprint == fingerprint,
-            )
+            ).with_for_update()
         )
         previous_state = state_row.state if state_row else None
         if state_row is None:
@@ -2167,7 +2235,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
 
 
 @app.get("/api/workflows/{workflow_id}/findings/{fingerprint}/history")
-def finding_state_history(workflow_id: UUID, fingerprint: str):
+def finding_state_history(workflow_id: UUID, fingerprint: str, limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)):
     with SessionLocal() as session:
         if session.get(Workflow, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
@@ -2176,6 +2244,8 @@ def finding_state_history(workflow_id: UUID, fingerprint: str):
             select(AuditLog)
             .where(AuditLog.entity == "finding_state", AuditLog.entity_id == entity_id)
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(limit)
+            .offset(offset)
         ).all()
         return [
             {

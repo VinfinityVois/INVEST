@@ -1,4 +1,0 @@
-[versions]
-commons = { strictly = "3.17.0", prefer = "3.20.0" }
-[libraries]
-commons = { module = "org.apache.commons:commons-lang3", version.ref = "commons" }

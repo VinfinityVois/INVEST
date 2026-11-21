@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: str | None = None
     notify_webhook_allowed_hosts: str = "webhook.site"
+    webhook_allowed_hosts: str | None = None
     ci_trigger_token: str | None = None
     template_publish_token: str | None = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -125,6 +126,17 @@ class Settings(BaseSettings):
             )
 
         return self
+
+    @property
+    def webhook_allowed_host_list(self) -> set[str]:
+        raw = self.webhook_allowed_hosts
+        if raw is None:
+            raw = self.notify_webhook_allowed_hosts
+        return {
+            host.strip().lower().rstrip('.')
+            for host in raw.split(',')
+            if host.strip()
+        }
 
     @property
     def allowed_target_list(self) -> set[str]:

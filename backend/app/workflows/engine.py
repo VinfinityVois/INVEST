@@ -33,6 +33,190 @@ MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
+def _condition_context(parents: list[dict]) -> dict:
+    findings = []
+    for parent in parents:
+        if isinstance(parent, dict):
+            findings.extend(
+                item for item in parent.get("findings", [])
+                if isinstance(item, dict)
+            )
+
+    severities = {}
+    for finding in findings:
+        level = str(finding.get("severity", "UNKNOWN")).upper()
+        severities[level] = severities.get(level, 0) + 1
+
+    return {
+        "findings": findings,
+        "finding_count": len(findings),
+        "critical_count": severities.get("CRITICAL", 0),
+        "high_count": severities.get("HIGH", 0),
+        "medium_count": severities.get("MEDIUM", 0),
+        "low_count": severities.get("LOW", 0),
+        "info_count": severities.get("INFO", 0),
+        "severity_counts": severities,
+    }
+
+
+def _condition_value(context: dict, field: str):
+    value = context
+    for part in field.split("."):
+        if isinstance(value, dict):
+            value = value.get(part)
+        elif isinstance(value, (list, tuple)) and part.isdigit():
+            index = int(part)
+            value = value[index] if index < len(value) else None
+        else:
+            return None
+    return value
+
+
+def _evaluate_condition(
+    config: dict,
+    parents: list[dict],
+) -> tuple[bool, str | None]:
+    import math
+    import regex
+
+    if not isinstance(config, dict):
+        return False, "Конфигурация условия должна быть объектом."
+
+    field = config.get("field", "finding_count")
+    operator = config.get("operator", "gt")
+    expected = config.get("value", 0)
+
+    if (
+        not isinstance(field, str)
+        or not field
+        or len(field) > 160
+    ):
+        return False, "Некорректное поле условия."
+
+    if not isinstance(operator, str):
+        return False, "Оператор условия должен быть строкой."
+
+    context = _condition_context(parents)
+    actual = _condition_value(context, field)
+
+    if operator == "exists":
+        return actual is not None, None
+
+    if operator in {"eq", "ne"}:
+        matched = actual == expected
+
+        if operator == "ne":
+            matched = not matched
+
+        return matched, None
+
+    if operator in {"contains", "not_contains"}:
+        if not isinstance(actual, (str, list, tuple, dict, set)):
+            return (
+                False,
+                "Операция contains требует строку или коллекцию.",
+            )
+
+        try:
+            matched = expected in actual
+        except (TypeError, ValueError):
+            return (
+                False,
+                "Некорректное значение для операции contains.",
+            )
+
+        if operator == "not_contains":
+            matched = not matched
+
+        return matched, None
+
+    if operator == "regex":
+        if (
+            not isinstance(actual, str)
+            or not isinstance(expected, str)
+            or len(expected) > 256
+            or len(actual) > 8192
+        ):
+            return (
+                False,
+                "Некорректное регулярное выражение или входная строка.",
+            )
+
+        try:
+            matched = regex.search(
+                expected,
+                actual,
+                timeout=0.05,
+            ) is not None
+
+            return matched, None
+
+        except TimeoutError:
+            return (
+                False,
+                "Превышено допустимое время выполнения регулярного выражения.",
+            )
+
+        except regex.error as exc:
+            return (
+                False,
+                "Некорректное регулярное выражение: " + str(exc),
+            )
+
+    if operator in {"gt", "gte", "lt", "lte"}:
+        try:
+            left = float(actual)
+            right = float(expected)
+        except (TypeError, ValueError, OverflowError):
+            return (
+                False,
+                "Для сравнения укажите значения числовых типов.",
+            )
+
+        if not math.isfinite(left) or not math.isfinite(right):
+            return (
+                False,
+                "Числовое сравнение не принимает NaN и Infinity.",
+            )
+
+        comparisons = {
+            "gt": left > right,
+            "gte": left >= right,
+            "lt": left < right,
+            "lte": left <= right,
+        }
+
+        return comparisons[operator], None
+
+    return (
+        False,
+        "Неизвестный оператор условия: " + operator,
+    )
+def _active_parent_ids(edges, outputs: dict) -> list[str]:
+    active = []
+    for edge in edges:
+        parent_output = outputs.get(edge.source)
+        if parent_output is None or parent_output.get("status") in {
+            "skipped", "failed", "configuration_required", "blocked", "cancelled"
+        }:
+            continue
+        selected_branch = parent_output.get("branch")
+        has_split_findings = (
+            "matched_findings" in parent_output
+            and "unmatched_findings" in parent_output
+        )
+        if (
+            selected_branch
+            and not has_split_findings
+            and edge.source_handle
+            and edge.source_handle != selected_branch
+        ):
+            continue
+        active.append(edge.source)
+    return list(dict.fromkeys(active))
+
+
+
 def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -> list[dict]:
     """Apply only presentation-independent scanner options declared in the node schema."""
     minimum = config.get("min_confidence", 0.4)
@@ -347,10 +531,26 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
         cache_hit = False
         cache_bypass_reason = None
         parents = []
+        active_edge_handles = []
         for parent_id, source_handle in incoming_edge_handles[node_id]:
             parent_output = outputs.get(parent_id)
-            if parent_output is None:
+            if parent_output is None or parent_output.get("status") in {
+                "skipped", "failed", "configuration_required", "blocked", "cancelled"
+            }:
                 continue
+            selected_branch = parent_output.get("branch")
+            has_split_findings = (
+                "matched_findings" in parent_output
+                and "unmatched_findings" in parent_output
+            )
+            if (
+                selected_branch
+                and not has_split_findings
+                and source_handle
+                and source_handle != selected_branch
+            ):
+                continue
+            active_edge_handles.append((parent_id, source_handle))
             if source_handle == "true" and "matched_findings" in parent_output:
                 parent_output = {**parent_output, "findings": parent_output["matched_findings"]}
             elif source_handle == "false" and "unmatched_findings" in parent_output:
@@ -388,7 +588,9 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             except Exception:
                 pass
 
-        if node.type in {"trigger.manual", "trigger.schedule"}:
+        if incoming_edge_handles[node_id] and not active_edge_handles:
+            output = {"status": "skipped"}
+        elif node.type in {"trigger.manual", "trigger.schedule"}:
             output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":
             relative_path = node.config.get("path")
@@ -619,7 +821,24 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 except (ValueError, TypeError):
                     output = {"status": "failed", "message": "Для числового сравнения укажите числовое значение и поле.", "findings": findings}
         elif node.type == "logic.if":
-            output = {"status": "completed", "branch": "false"}
+            matched, error = _evaluate_condition(node.config, parents)
+            if error:
+                output = {
+                    "status": "failed",
+                    "reason_code": "INVALID_CONDITION",
+                    "message": error,
+                    "branch": "false",
+                }
+            else:
+                output = {
+                    "status": "completed",
+                    "branch": "true" if matched else "false",
+                    "condition": {
+                        "field": node.config.get("field", "finding_count"),
+                        "operator": node.config.get("operator", "gt"),
+                        "matched": matched,
+                    },
+                }
         elif node.type == "ai.explain":
             merged = []
             for parent in parents:

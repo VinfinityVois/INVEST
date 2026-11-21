@@ -81,3 +81,102 @@ def test_branch_routing_keeps_unconditional_parent():
     edges = [SimpleNamespace(source="merge", source_handle=None)]
     outputs = {"merge": {"status": "completed", "findings": []}}
     assert _active_parent_ids(edges, outputs) == ["merge"]
+
+def test_condition_rejects_regex_timeout():
+    parents = [
+        {
+            "findings": [
+                {
+                    "rule_id": "a" * 8000 + "!",
+                }
+            ]
+        }
+    ]
+
+    matched, error = _evaluate_condition(
+        {
+            "field": "findings.0.rule_id",
+            "operator": "regex",
+            "value": r"^(a+)+$",
+        },
+        parents,
+    )
+
+    assert matched is False
+    assert error is not None
+
+
+def test_condition_rejects_oversized_regex_input():
+    parents = [
+        {
+            "findings": [
+                {
+                    "rule_id": "a" * 8193,
+                }
+            ]
+        }
+    ]
+
+    matched, error = _evaluate_condition(
+        {
+            "field": "findings.0.rule_id",
+            "operator": "regex",
+            "value": "a+",
+        },
+        parents,
+    )
+
+    assert matched is False
+    assert error is not None
+
+
+def test_condition_rejects_nan_numeric_comparison():
+    matched, error = _evaluate_condition(
+        {
+            "field": "finding_count",
+            "operator": "gt",
+            "value": float("nan"),
+        },
+        [{"findings": []}],
+    )
+
+    assert matched is False
+    assert error is not None
+
+
+def test_condition_rejects_infinity_numeric_comparison():
+    matched, error = _evaluate_condition(
+        {
+            "field": "finding_count",
+            "operator": "gt",
+            "value": float("inf"),
+        },
+        [{"findings": []}],
+    )
+
+    assert matched is False
+    assert error is not None
+
+
+def test_condition_rejects_invalid_contains_type():
+    matched, error = _evaluate_condition(
+        {
+            "field": "finding_count",
+            "operator": "contains",
+            "value": 1,
+        },
+        [{"findings": []}],
+    )
+
+    assert matched is False
+    assert error is not None
+
+
+def test_condition_rejects_non_dict_config():
+    matched, error = _evaluate_condition(
+        None,
+        [{"findings": []}],
+    )
+
+    assert matched is False
+    assert error is not None

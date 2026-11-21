@@ -9,3 +9,7 @@ dist/
 coverage/
 .idea/
 .vscode/
+# Local and test artifacts
+**/.pytest-tmp-*/
+*.bak
+*.bak-*

@@ -19,14 +19,15 @@ def skip_file(name):
         or lower == "create_zip.py"
         or lower == ".env"
         or lower.startswith(".env.")
-        or lower.endswith((".pyc", ".pyo"))
+        or lower.endswith((".pyc", ".pyo", ".bak", ".orig", ".rej"))
+        or ".bak-" in lower
     )
 
 with zipfile.ZipFile(
     output, "w", zipfile.ZIP_DEFLATED, compresslevel=6
 ) as archive:
     for current, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".pytest-tmp-")]
 
         for name in files:
             if skip_file(name):

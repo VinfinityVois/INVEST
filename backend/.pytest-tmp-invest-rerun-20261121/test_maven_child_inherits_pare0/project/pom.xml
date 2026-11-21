@@ -1,1 +1,0 @@
-<project><modelVersion>4.0.0</modelVersion><parent><groupId>demo</groupId><artifactId>parent</artifactId><version>1</version><relativePath>parent-pom.xml</relativePath></parent><artifactId>app</artifactId><dependencies><dependency><groupId>com.google.code.gson</groupId><artifactId>gson</artifactId></dependency></dependencies></project>

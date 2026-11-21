@@ -105,3 +105,53 @@ def test_valid_schema_driven_config_is_accepted():
     )
     result = validate_graph(graph, registry)
     assert not any(issue.code == "invalid_node_config" for issue in result.issues)
+
+def test_logic_if_config_schema_rejects_unknown_operator():
+    graph = WorkflowGraph(
+        nodes=[
+            {
+                "id": "condition",
+                "type": "logic.if",
+                "config": {
+                    "field": "finding_count",
+                    "operator": "approx",
+                    "value": 5,
+                },
+            }
+        ],
+        edges=[],
+    )
+
+    result = validate_graph(graph, registry)
+
+    assert not result.valid
+    assert any(
+        issue.code == "invalid_node_config"
+        and issue.severity == "error"
+        for issue in result.issues
+    )
+
+
+def test_logic_if_config_schema_accepts_valid_condition():
+    graph = WorkflowGraph(
+        nodes=[
+            {
+                "id": "condition",
+                "type": "logic.if",
+                "config": {
+                    "field": "critical_count",
+                    "operator": "gte",
+                    "value": 1,
+                },
+            }
+        ],
+        edges=[],
+    )
+
+    result = validate_graph(graph, registry)
+
+    assert not any(
+        issue.code == "invalid_node_config"
+        and issue.severity == "error"
+        for issue in result.issues
+    )
