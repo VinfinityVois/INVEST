@@ -193,3 +193,18 @@ def test_different_secrets_on_same_line_are_preserved():
     assert len({item["value_hash"] for item in findings}) == 2
     assert first not in str(findings)
     assert second not in str(findings)
+
+
+def test_multiple_secrets_matching_same_rule_on_one_line_are_preserved():
+    first = "first_api_secret_value_123"
+    second = "second_api_secret_value_456"
+
+    findings = scan_text(
+        f'api_key = "{first}"; api_key = "{second}"',
+        "config.py",
+    )
+
+    assert len(findings) == 2
+    assert len({item["value_hash"] for item in findings}) == 2
+    assert first not in str(findings)
+    assert second not in str(findings)
