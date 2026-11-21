@@ -39,6 +39,7 @@ def create_personal_workspace(db: Session, user: User) -> Workspace:
         user_id=user.id,
         role="admin",
     ))
+    db.flush()
     return workspace
 
 
@@ -72,4 +73,5 @@ def claim_unassigned_legacy_workspace(db: Session, user: User) -> bool:
             user_id=user.id,
             role="admin",
         ))
+    db.flush()
     return True
