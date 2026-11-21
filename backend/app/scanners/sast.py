@@ -39,11 +39,22 @@ def _finding(rule_id: str, path: str, line: int, severity: str, message: str,
 
 
 def _method_blocks(text: str):
-    """Yield Kotlin function bodies using balanced braces while ignoring quoted strings/comments."""
-    for match in re.finditer(r"(?m)^\s*(?:override\s+|private\s+|internal\s+|public\s+|suspend\s+)*fun\s+([A-Za-z_]\w*)\s*\([^)]*\)[^{\n]*(?:\n\s*)?\{", text):
+    """Yield Kotlin function bodies using balanced braces, including raw triple-quoted strings."""
+    signature = re.compile(
+        r"(?m)^\s*(?:override\s+|private\s+|internal\s+|public\s+|suspend\s+)*"
+        r"fun\s+([A-Za-z_]\w*)\s*\([^)]*\)[^{\n]*(?:\n\s*)?\{"
+    )
+    for match in signature.finditer(text):
         start = match.end()
-        depth, quote, escaped, index = 1, None, False, start
+        depth, quote, escaped, raw_string, index = 1, None, False, False, start
         while index < len(text) and depth:
+            if raw_string:
+                if text.startswith('"""', index):
+                    raw_string = False
+                    index += 3
+                else:
+                    index += 1
+                continue
             char = text[index]
             if quote:
                 if escaped:
@@ -52,14 +63,21 @@ def _method_blocks(text: str):
                     escaped = True
                 elif char == quote:
                     quote = None
-            elif text.startswith("//", index):
+                index += 1
+                continue
+            if text.startswith('"""', index):
+                raw_string = True
+                index += 3
+                continue
+            if text.startswith("//", index):
                 end = text.find("\n", index)
                 index = len(text) if end < 0 else end
                 continue
-            elif text.startswith("/*", index):
+            if text.startswith("/*", index):
                 end = text.find("*/", index + 2)
-                index = len(text) if end < 0 else end + 1
-            elif char in {"'", '"'}:
+                index = len(text) if end < 0 else end + 2
+                continue
+            if char in {"'", '"'}:
                 quote = char
             elif char == "{":
                 depth += 1
@@ -68,7 +86,6 @@ def _method_blocks(text: str):
             index += 1
         if depth == 0:
             yield match.group(1), match.start(), start, index - 1, text[start:index - 1]
-
 
 def _scan_sql(path: str, text: str) -> list[dict]:
     findings = []
