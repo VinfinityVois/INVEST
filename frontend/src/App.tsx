@@ -1341,7 +1341,13 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft, expected_sha256: projectFilePreview.sha256 }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Не удалось сохранить файл");
+      if (!response.ok) {
+        const detail = data.detail;
+        if (response.status === 409 && detail && typeof detail === "object" && detail.code === "PROJECT_FILE_VERSION_CONFLICT") {
+          throw new Error("Файл изменился после открытия. Черновик оставлен без изменений; перезагрузи исходник и повтори правку.");
+        }
+        throw new Error(typeof detail === "string" ? detail : "Не удалось сохранить файл");
+      }
       const savedPath = projectFilePreview.path;
       setActiveEditorEditing(false);
       setProjectEditorTabs(tabs => tabs.map(tab => tab.path === savedPath ? { ...tab, baseline: projectDraft, draft: projectDraft, editing: false } : tab));
@@ -1351,8 +1357,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
     } catch (error) {
       const message = String(error);
-      if (message.includes("PROJECT_FILE_VERSION_CONFLICT") || message.includes("409")) {
-        setResult("Файл был изменён в другом месте. Текущий черновик сохранён в редакторе; сначала обнови исходник и сравни версии.");
+      if (message.includes("Файл изменился после открытия")) {
+        setResult(message);
       } else {
         setResult("Ошибка сохранения: " + message);
       }
