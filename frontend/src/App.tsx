@@ -174,7 +174,166 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
 }
 const nodeTypes = { workflow: memo(WorkflowNode) };
 
+type AuthUser = { id: string; email: string; is_admin: boolean };
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, {
+    ...init,
+    credentials: init?.credentials ?? "same-origin",
+  });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("invest:unauthorized"));
+  }
+  return response;
+}
+
 export default function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch("/api/auth/me", {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then(async response => {
+        if (response.ok) {
+          setUser(await response.json() as AuthUser);
+          return;
+        }
+        if (response.status !== 401) {
+          throw new Error("Сервис авторизации временно недоступен.");
+        }
+      })
+      .catch(reason => {
+        if (!controller.signal.aborted) {
+          setError(String(reason instanceof Error ? reason.message : reason));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setChecking(false);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setPassword("");
+      setError("Сессия завершена. Войдите снова.");
+      setChecking(false);
+    };
+
+    window.addEventListener("invest:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("invest:unauthorized", handleUnauthorized);
+  }, []);
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitting) return;
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(response.status === 401
+          ? "Неверный email или пароль."
+          : typeof data.detail === "string" ? data.detail : "Не удалось выполнить вход.");
+        return;
+      }
+
+      setUser(data as AuthUser);
+      setPassword("");
+      setError("");
+    } catch {
+      setError("Не удалось связаться с сервером. Проверьте подключение.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error("Не удалось завершить сессию.");
+      setUser(null);
+      setPassword("");
+      setError("");
+    } catch {
+      setError("Не удалось связаться с сервером для выхода.");
+    }
+  };
+
+  if (checking) {
+    return <main className="auth-screen"><section className="auth-card">
+      <div className="auth-mark">INVEST</div>
+      <h1>Проверка сессии</h1>
+      <p>Защищённое подключение к рабочей области</p>
+      <div className="auth-loader" />
+    </section></main>;
+  }
+
+  if (!user) {
+    return <main className="auth-screen">
+      <section className="auth-card">
+        <div className="auth-mark">INVEST <span>／ AI SECURITY WORKFLOW</span></div>
+        <div className="auth-eyebrow">SECURE WORKSPACE</div>
+        <h1>Вход в систему</h1>
+        <p>Введите учётные данные для доступа к рабочей области.</p>
+        <form className="auth-form" onSubmit={handleLogin}>
+          <label htmlFor="invest-auth-email">EMAIL</label>
+          <input
+            id="invest-auth-email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={event => setEmail(event.target.value)}
+            maxLength={320}
+            required
+          />
+          <label htmlFor="invest-auth-password">ПАРОЛЬ</label>
+          <input
+            id="invest-auth-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={event => setPassword(event.target.value)}
+            maxLength={1024}
+            required
+          />
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Проверка…" : "Войти"}
+          </button>
+        </form>
+        <div className="auth-footnote">SESSION PROTECTED  HTTPONLY COOKIE</div>
+      </section>
+    </main>;
+  }
+
+  return <AuthenticatedApp onLogout={() => { void handleLogout(); }} />;
+}
+
+function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => { window.localStorage.setItem("invest.theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
@@ -282,7 +441,7 @@ export default function App() {
   useEffect(() => {
     if (!workflowId) { setScheduleStatus(null); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/schedule")
+    apiFetch("/api/workflows/" + workflowId + "/schedule")
       .then(response => response.ok ? response.json() : null)
       .then(data => { if (active) setScheduleStatus(data); })
       .catch(() => { if (active) setScheduleStatus(null); });
@@ -290,22 +449,22 @@ export default function App() {
   }, [workflowId]);
 
   useEffect(() => {
-    fetch("/api/rule-packs")
+    apiFetch("/api/rule-packs")
       .then(response => response.ok ? response.json() : [])
       .then((data: RulePack[]) => setRulePacks(data))
       .catch(() => setRulePacks([]));
   }, []);
 
   useEffect(() => {
-    fetch("/api/projects")
+    apiFetch("/api/projects")
       .then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Project[]) => setProjects(data))
       .catch(() => setResult("Не удалось загрузить библиотеку проектов."));
   }, []);
 
   useEffect(() => {
-    fetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
-    fetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
+    apiFetch("/api/ai/status").then(response => response.ok ? response.json() : null).then(data => { if (data) setAiProvider(data); }).catch(() => setAiProvider(null));
+    apiFetch("/api/node-types").then(response => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: Manifest[]) => {
         setManifests(data);
         setNodes(current => current.map(node => {
@@ -321,7 +480,7 @@ export default function App() {
     if (!workflowId) { setSecurityTrend(null); return; }
     let active = true;
     setSecurityTrendLoading(true);
-    fetch("/api/workflows/" + workflowId + "/security-trend?limit=30")
+    apiFetch("/api/workflows/" + workflowId + "/security-trend?limit=30")
       .then(response => { if (!response.ok) throw new Error("Не удалось загрузить историю безопасности"); return response.json(); })
       .then((data: SecurityTrend) => { if (active) setSecurityTrend(data); })
       .catch(() => { if (active) setSecurityTrend(null); })
@@ -332,7 +491,7 @@ export default function App() {
   useEffect(() => {
     if (!workflowId) { setTelemetry(null); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/telemetry/latest")
+    apiFetch("/api/workflows/" + workflowId + "/telemetry/latest")
       .then(response => response.ok ? response.json() : null)
       .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
       .catch(() => { if (active) setTelemetry(null); });
@@ -342,7 +501,7 @@ export default function App() {
   useEffect(() => {
     if (!workflowId) { setFindingStates({}); return; }
     let active = true;
-    fetch("/api/workflows/" + workflowId + "/finding-states")
+    apiFetch("/api/workflows/" + workflowId + "/finding-states")
       .then(response => response.ok ? response.json() : [])
       .then((rows: Array<FindingLifecycle & { fingerprint: string }>) => {
         if (active) setFindingStates(Object.fromEntries(rows.map(row => [row.fingerprint, row])));
@@ -354,7 +513,7 @@ export default function App() {
   useEffect(() => {
     if (!lastRunId) return;
     let active = true;
-    fetch("/api/runs/" + lastRunId + "/telemetry")
+    apiFetch("/api/runs/" + lastRunId + "/telemetry")
       .then(response => response.ok ? response.json() : null)
       .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
       .catch(() => undefined);
@@ -364,12 +523,12 @@ export default function App() {
   const refreshWorkflowRuns = async (id: string) => {
     setRunHistoryLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + id + "/runs");
+      const response = await apiFetch("/api/workflows/" + id + "/runs");
       if (!response.ok) throw new Error("Не удалось загрузить историю запусков");
       const rows = await response.json() as WorkflowRunSummary[];
       const summaries = await Promise.all(rows.slice(0, 12).map(async run => {
         try {
-          const telemetryResponse = await fetch("/api/runs/" + run.id + "/telemetry");
+          const telemetryResponse = await apiFetch("/api/runs/" + run.id + "/telemetry");
           if (!telemetryResponse.ok) return run;
           const data = await telemetryResponse.json() as Telemetry;
           return { ...run, total_findings: data.total_findings, severity: data.severity, cache: data.cache };
@@ -393,7 +552,7 @@ export default function App() {
   const refreshWorkflowVersions = async (id: string) => {
     setVersionsLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + id + "/versions");
+      const response = await apiFetch("/api/workflows/" + id + "/versions");
       if (!response.ok) throw new Error("Не удалось загрузить версии workflow");
       setWorkflowVersions(await response.json() as WorkflowVersionSummary[]);
     } catch { setWorkflowVersions([]); }
@@ -404,7 +563,7 @@ export default function App() {
     if (!workflowId || fromVersion === toVersion) return;
     setVersionDiffLoading(true);
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/versions/compare?from_version=" + fromVersion + "&to_version=" + toVersion);
+      const response = await apiFetch("/api/workflows/" + workflowId + "/versions/compare?from_version=" + fromVersion + "&to_version=" + toVersion);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сравнить версии");
       setWorkflowVersionDiff(data as WorkflowVersionDiff);
@@ -415,7 +574,7 @@ export default function App() {
   const restoreWorkflowVersion = async (version: number) => {
     if (!workflowId || !window.confirm("Восстановить версию " + version + "? Текущая конфигурация останется в истории.")) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/versions/" + version + "/restore", { method: "POST" });
+      const response = await apiFetch("/api/workflows/" + workflowId + "/versions/" + version + "/restore", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось восстановить версию");
       setResult("Версия " + version + " восстановлена как новая версия " + data.version + ". Перезагрузите workflow, чтобы применить граф.");
@@ -428,7 +587,7 @@ export default function App() {
     setRunCompareLoading(true);
     try {
       const params = new URLSearchParams({ from_run: runCompareFrom, to_run: runCompareTo });
-      const response = await fetch("/api/workflows/" + workflowId + "/runs/compare?" + params.toString());
+      const response = await apiFetch("/api/workflows/" + workflowId + "/runs/compare?" + params.toString());
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сравнить запуски");
       setRunComparison(data as RunComparison);
@@ -441,8 +600,8 @@ export default function App() {
   const openHistoricalRun = async (run: WorkflowRunSummary) => {
     try {
       const [findingResponse, telemetryResponse] = await Promise.all([
-        fetch("/api/runs/" + run.id + "/findings"),
-        fetch("/api/runs/" + run.id + "/telemetry"),
+        apiFetch("/api/runs/" + run.id + "/findings"),
+        apiFetch("/api/runs/" + run.id + "/telemetry"),
       ]);
       if (!findingResponse.ok || !telemetryResponse.ok) throw new Error("Не удалось открыть выбранный запуск");
       const [rows, data] = await Promise.all([findingResponse.json(), telemetryResponse.json()]);
@@ -458,14 +617,14 @@ export default function App() {
   const saveRunReportToProject = async (run: WorkflowRunSummary) => {
     if (!activeProject) return;
     try {
-      const response = await fetch("/api/projects/" + activeProject.id + "/reports/" + run.id, { method: "POST" });
+      const response = await apiFetch("/api/projects/" + activeProject.id + "/reports/" + run.id, { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сохранить отчёт");
       setResult("Отчёт сохранён в " + activeProject.name + " · " + data.path);
       await refreshProjects();
       const [filesResponse, historyResponse] = await Promise.all([
-        fetch("/api/projects/" + activeProject.id + "/files"),
-        fetch("/api/projects/" + activeProject.id + "/history"),
+        apiFetch("/api/projects/" + activeProject.id + "/files"),
+        apiFetch("/api/projects/" + activeProject.id + "/history"),
       ]);
       if (filesResponse.ok) setProjectFiles(((await filesResponse.json()).files || []) as ProjectFile[]);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json() as ProjectHistoryEntry[]);
@@ -474,7 +633,7 @@ export default function App() {
 
   const cancelWorkflowRun = async (run: WorkflowRunSummary) => {
     try {
-      const response = await fetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
+      const response = await apiFetch("/api/runs/" + run.id + "/cancel", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось отменить запуск");
       setResult(data.status === "cancelled" ? "Запуск отменён до старта." : "Отмена запрошена. Текущий блок завершится, затем workflow остановится.");
@@ -484,7 +643,7 @@ export default function App() {
 
   const retryWorkflowRun = async (run: WorkflowRunSummary) => {
     try {
-      const response = await fetch("/api/runs/" + run.id + "/retry", { method: "POST" });
+      const response = await apiFetch("/api/runs/" + run.id + "/retry", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось повторить запуск");
       setResult("Создан повторный запуск · " + data.run_id);
@@ -510,7 +669,7 @@ export default function App() {
     const controller = new AbortController();
     setSourcePreview(null); setSourcePreviewLoading(true); setSourcePreviewError("");
     const params = new URLSearchParams({ start_line: String(sourceWindowStart), end_line: String(sourceWindowStart + 99) });
-    fetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
+    apiFetch(`/api/runs/${lastRunId}/findings/${encodeURIComponent(selectedFinding.fingerprint)}/source?${params}`, { signal: controller.signal })
       .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Не удалось открыть исходник"); return data as SourcePreview; })
       .then(data => { setSourcePreview(data); setSourcePreviewError(""); })
       .catch(error => { if (!(error instanceof DOMException && error.name === "AbortError")) { setSourcePreview(null); setSourcePreviewError(error instanceof Error ? error.message : String(error)); } })
@@ -751,7 +910,7 @@ export default function App() {
 
 
   const refreshProjects = async () => {
-    const response = await fetch("/api/projects");
+    const response = await apiFetch("/api/projects");
     if (!response.ok) throw new Error("Не удалось обновить библиотеку проектов");
     setProjects(await response.json());
   };
@@ -760,7 +919,7 @@ export default function App() {
     setUploading(true); setUploadingProjectId(projectId || "new");
     try {
       const form = new FormData(); form.append("file", file);
-      const response = await fetch(projectId ? `/api/projects/${projectId}/archive` : "/api/projects", {
+      const response = await apiFetch(projectId ? `/api/projects/${projectId}/archive` : "/api/projects", {
         method: projectId ? "PUT" : "POST", body: form,
       });
       const data = await response.json();
@@ -769,7 +928,7 @@ export default function App() {
       if (activeProject?.id === data.id) {
         setActiveProject(data);
         setProjectVisualPreview(null);
-        const filesResponse = await fetch(`/api/projects/${data.id}/files`);
+        const filesResponse = await apiFetch(`/api/projects/${data.id}/files`);
         if (filesResponse.ok) {
           const updatedFiles = ((await filesResponse.json()).files || []) as ProjectFile[];
           setProjectFiles(updatedFiles);
@@ -780,7 +939,7 @@ export default function App() {
           })));
         }
         setProjectFilePreview(null);
-        const historyResponse = await fetch(`/api/projects/${data.id}/history`);
+        const historyResponse = await apiFetch(`/api/projects/${data.id}/history`);
         if (historyResponse.ok) setProjectHistory(await historyResponse.json());
       }
       setResult((projectId ? "Проект обновлён" : "Проект добавлен") + " · " + data.name + " · " + data.file_count + " файлов");
@@ -790,7 +949,7 @@ export default function App() {
   const openProject = async (project: Project) => {
     setProjectFilesLoading(true);
     try {
-      const response = await fetch(`/api/projects/${project.id}/files`);
+      const response = await apiFetch(`/api/projects/${project.id}/files`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть проект");
       setActiveProject(data.project || project);
@@ -802,7 +961,7 @@ export default function App() {
       setProjectDraft("");
       setProjectEditing(false);
       setProjectHistoryOpen(false);
-      const historyResponse = await fetch(`/api/projects/${project.id}/history`);
+      const historyResponse = await apiFetch(`/api/projects/${project.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
       else setProjectHistory([]);
       const sourceNode = nodes.find(node => node.data.category === "Source");
@@ -838,7 +997,7 @@ export default function App() {
     const name = window.prompt("Новое название проекта:", project.name);
     if (name === null || !name.trim()) return;
     try {
-      const response = await fetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
+      const response = await apiFetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось переименовать проект");
       await refreshProjects();
@@ -853,7 +1012,7 @@ export default function App() {
   const deleteProject = async (project: Project) => {
     if (!window.confirm(`Удалить проект «${project.name}» и все его файлы? Это действие необратимо.`)) return;
     try {
-      const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Не удалось удалить проект");
       await refreshProjects();
       if (activeProject?.id === project.id) {
@@ -881,7 +1040,7 @@ export default function App() {
       if (imageTypes.has(suffix) || isPdf) {
         const params = new URLSearchParams({ path: file.path });
         const url = `/api/projects/${activeProject.id}/preview?${params}`;
-        const response = await fetch(url, { method: "HEAD" });
+        const response = await apiFetch(url, { method: "HEAD" });
         if (!response.ok) {
           const message = response.headers.get("content-type")?.includes("application/json")
             ? (await response.json()).detail : "Не удалось открыть файл";
@@ -896,7 +1055,7 @@ export default function App() {
         return;
       }
       const params = new URLSearchParams({ path: file.path, start_line: String(startLine) });
-      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`);
+      const response = await apiFetch(`/api/projects/${activeProject.id}/file?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть файл");
       setProjectVisualPreview(null);
@@ -918,7 +1077,7 @@ export default function App() {
     setProjectContentSearching(true);
     try {
       const params = new URLSearchParams({ q: projectContentQuery.trim() });
-      const response = await fetch(`/api/projects/${activeProject.id}/search?${params}`);
+      const response = await apiFetch(`/api/projects/${activeProject.id}/search?${params}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Поиск не выполнен");
       setProjectContentResults(data.results || []);
@@ -1003,7 +1162,7 @@ export default function App() {
     setProjectSaving(true);
     try {
       const params = new URLSearchParams({ path: projectFilePreview.path });
-      const response = await fetch(`/api/projects/${activeProject.id}/file?${params}`, {
+      const response = await apiFetch(`/api/projects/${activeProject.id}/file?${params}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft }),
       });
       const data = await response.json();
@@ -1013,7 +1172,7 @@ export default function App() {
       setProjectEditorTabs(tabs => tabs.map(tab => tab.path === savedPath ? { ...tab, baseline: projectDraft, draft: projectDraft, editing: false } : tab));
       await openProjectFile({ path: savedPath, size: new Blob([projectDraft]).size }, 1, true);
       setResult("Файл сохранён · " + data.path);
-      const historyResponse = await fetch(`/api/projects/${activeProject.id}/history`);
+      const historyResponse = await apiFetch(`/api/projects/${activeProject.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
     } catch (error) { setResult("Ошибка сохранения: " + String(error)); }
     finally { setProjectSaving(false); }
@@ -1023,7 +1182,7 @@ export default function App() {
     setUploading(true); setFindings([]);
     try {
       const form = new FormData(); form.append("file", file);
-      const response = await fetch("/api/sources/upload", { method: "POST", body: form });
+      const response = await apiFetch("/api/sources/upload", { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
       const sourceNode = nodes.find(node => node.data.category === "Source");
@@ -1033,7 +1192,7 @@ export default function App() {
     finally { setUploading(false); }
   };
   const persistWorkflow = async () => {
-    const response = await fetch(workflowId ? "/api/workflows/" + workflowId : "/api/workflows", {
+    const response = await apiFetch(workflowId ? "/api/workflows/" + workflowId : "/api/workflows", {
       method: workflowId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph),
     });
     const data = await response.json();
@@ -1048,8 +1207,8 @@ export default function App() {
       if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
       if (templateSearch.trim()) params.set("q", templateSearch.trim());
       const [response, presetResponse] = await Promise.all([
-        fetch("/api/templates" + (params.toString() ? "?" + params.toString() : "")),
-        fetch("/api/presets"),
+        apiFetch("/api/templates" + (params.toString() ? "?" + params.toString() : "")),
+        apiFetch("/api/presets"),
       ]);
       const [data, presets] = await Promise.all([response.json(), presetResponse.json()]);
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
@@ -1085,12 +1244,12 @@ export default function App() {
     setTemplateBusyId(templateId);
     setTemplateError("");
     try {
-      const response = await fetch("/api/templates/" + templateId + "/clone", {
+      const response = await apiFetch("/api/templates/" + templateId + "/clone", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
-      const loaded = await fetch("/api/workflows/" + data.id);
+      const loaded = await apiFetch("/api/workflows/" + data.id);
       const workflow = await loaded.json();
       if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
@@ -1120,12 +1279,12 @@ export default function App() {
     setTemplateBusyId("preset:" + presetId);
     setTemplateError("");
     try {
-      const response = await fetch("/api/presets/" + presetId + "/clone", {
+      const response = await apiFetch("/api/presets/" + presetId + "/clone", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
-      const loaded = await fetch("/api/workflows/" + data.id);
+      const loaded = await apiFetch("/api/workflows/" + data.id);
       const workflow = await loaded.json();
       if (!loaded.ok || !workflow.graph) throw new Error("Preset скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
@@ -1159,7 +1318,7 @@ export default function App() {
     setAiGraphBusy(true);
     setAiGraphError("");
     try {
-      const response = await fetch("/api/workflows/generate", {
+      const response = await apiFetch("/api/workflows/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: aiGraphPrompt.trim() }),
       });
@@ -1207,7 +1366,7 @@ export default function App() {
     setScheduleBusy(true);
     try {
       const id = await persistWorkflow();
-      const response = await fetch("/api/workflows/" + id + "/schedule", {
+      const response = await apiFetch("/api/workflows/" + id + "/schedule", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
@@ -1225,7 +1384,7 @@ export default function App() {
   const validateWorkflow = async () => {
     setBusy(true);
     try {
-      const response = await fetch("/api/workflows/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph) });
+      const response = await apiFetch("/api/workflows/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(graph) });
       const data = await response.json(); setResult(JSON.stringify(data, null, 2)); setShowResult(true);
     } catch { setResult("Не удалось связаться с API. Проверьте backend."); setShowResult(true); }
     finally { setBusy(false); }
@@ -1235,7 +1394,7 @@ export default function App() {
     try {
       const id = await persistWorkflow();
       const endpoint = selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs";
-      const response = await fetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
+      const response = await apiFetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
       const queued = await response.json();
       if (!response.ok) throw new Error(JSON.stringify(queued));
       setShowResult(true);
@@ -1257,7 +1416,7 @@ export default function App() {
           try {
             for (let attempt = 0; attempt < 300; attempt += 1) {
               await new Promise(resolveWait => window.setTimeout(resolveWait, 1000));
-              const response = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+              const response = await apiFetch("/api/runs/" + queued.run_id + "/telemetry");
               if (!response.ok) throw new Error("Не удалось получить телеметрию задания");
               const data: Telemetry = await response.json();
               setTelemetry(data);
@@ -1279,9 +1438,9 @@ export default function App() {
         };
         stream.onerror = () => { void fallback(); };
       });
-      const findingsResponse = await fetch("/api/runs/" + queued.run_id + "/findings");
+      const findingsResponse = await apiFetch("/api/runs/" + queued.run_id + "/findings");
       if (findingsResponse.ok) setFindings(await findingsResponse.json());
-      const telemetryResponse = await fetch("/api/runs/" + queued.run_id + "/telemetry");
+      const telemetryResponse = await apiFetch("/api/runs/" + queued.run_id + "/telemetry");
       if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
       if (completed.status === "failed") {
         const nodeErrors = Object.entries(completed.node_results || {})
@@ -1304,7 +1463,7 @@ export default function App() {
     const reason = window.prompt("Причина изменения статуса уязвимости:", state === "open" ? "Повторная проверка" : "");
     if (reason === null || !reason.trim()) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
+      const response = await apiFetch("/api/workflows/" + workflowId + "/findings/" + finding.fingerprint + "/state", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state, reason: reason.trim() }),
       });
@@ -1317,7 +1476,7 @@ export default function App() {
   const loadFindingHistory = async (fingerprint: string) => {
     if (!workflowId) return;
     try {
-      const response = await fetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
+      const response = await apiFetch("/api/workflows/" + workflowId + "/findings/" + fingerprint + "/history");
       if (!response.ok) throw new Error("Не удалось загрузить историю");
       const history = await response.json();
       setFindingHistory(current => ({ ...current, [fingerprint]: history }));
@@ -1613,7 +1772,7 @@ export default function App() {
               <div><span>АНАЛИЗ ФАЙЛОВ</span><b>{telemetry.scanner_progress.files_scanned} / {telemetry.scanner_progress.total_files}</b></div>
               <div className="scanner-file-track"><i style={{ width: telemetry.scanner_progress.total_files ? Math.min(100, telemetry.scanner_progress.files_scanned / telemetry.scanner_progress.total_files * 100) + "%" : "0%" }} /></div>
               <small>Сейчас: {telemetry.scanner_progress.current_file}</small>
-            </div>}
+              <button role="menuitem" onClick={() => { setAppMenuOpen(false); onLogout(); }}><LockKeyhole size={15}/><span><b>Выйти</b><small>Завершить текущую сессию</small></span></button>            </div>}
             {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
               <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>{telemetry.cache && telemetry.cache.scanner_blocks > 0 && <div className="cache-telemetry-strip"><span><b>{telemetry.cache.cache_hits}</b> из {telemetry.cache.scanner_blocks} сканеров взято из кэша</span><span>{Math.round(telemetry.cache.hit_rate * 100)}% повторного использования</span><small>Срок актуальности: {Math.round(telemetry.cache.ttl_seconds / 3600)} ч</small></div>}
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>

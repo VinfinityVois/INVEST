@@ -1,4 +1,4 @@
-﻿import json
+import json
 import time
 import shutil
 import re
@@ -133,6 +133,8 @@ async def authentication_middleware(request: Request, call_next):
             )
 
     if path == "/api/auth/login":
+        return await call_next(request)
+    if path == "/api/auth/logout" and method == "POST":
         return await call_next(request)
 
     token = request.cookies.get(SESSION_COOKIE)
