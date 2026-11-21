@@ -104,3 +104,18 @@ def test_fail_on_unfixed_policy_ignores_findings_marked_fixed():
     )
     assert result["decision"] == "PASS"
     assert result["counts"]["HIGH"] == 0
+
+
+def test_named_policy_profiles_drive_gate_thresholds():
+    from app.rules_loader import rule_packs
+    from app.policies.security_gate import evaluate_security_gate
+
+    findings = [
+        {"fingerprint": "high", "severity": "HIGH", "rule_id": "demo.high"},
+        {"fingerprint": "critical", "severity": "CRITICAL", "rule_id": "demo.critical"},
+    ]
+    bank = rule_packs.resolve(["bank-strict"], analyzer="policy")[0]
+    startup = rule_packs.resolve(["startup-lenient"], analyzer="policy")[0]
+    assert evaluate_security_gate(findings, bank)["decision"] == "BLOCK"
+    assert evaluate_security_gate(findings, startup)["decision"] == "BLOCK"
+    assert startup["warn_on"] == ["HIGH", "MEDIUM", "LOW", "INFO"]
