@@ -10,7 +10,7 @@ type SessionItem = {
   expires_at: string; revoked: boolean; current: boolean;
 };
 
-type Props = { isAdmin: boolean; currentUserId: string; currentEmail: string; onProfileUpdated: (user: { id: string; email: string; is_admin: boolean }) => void; onClose: () => void };
+type Props = { isAdmin: boolean; currentUserId: string; currentEmail: string; onProfileUpdated: (user: { id: string; email: string; is_admin: boolean }) => void; onClose: () => void; initialTab?: "profile" | "users" };
 
 async function request(path: string, init?: RequestInit) {
   const response = await fetch(path, {
@@ -25,7 +25,8 @@ async function request(path: string, init?: RequestInit) {
   return response;
 }
 
-export default function UserManagement({ isAdmin, currentUserId, currentEmail, onProfileUpdated, onClose }: Props) {
+export default function UserManagement({ isAdmin, currentUserId, currentEmail, onProfileUpdated, onClose, initialTab = "profile" }: Props) {
+  const [activeTab, setActiveTab] = useState<"profile" | "users">(initialTab === "users" && isAdmin ? "users" : "profile");
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [query, setQuery] = useState("");
@@ -169,14 +170,22 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
 
   return <div className="template-library-backdrop user-management-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="template-library-dialog user-management-dialog" role="dialog" aria-modal="true" aria-labelledby="user-management-title">
-      <header className="template-library-header">
-        <div><span className="eyebrow">ACCOUNT & ACCESS</span><h2 id="user-management-title"><Shield size={18}/> {isAdmin ? "Пользователи и доступы" : "Безопасность аккаунта"}</h2><p>Управление учётной записью, паролем и активными сессиями.</p></div>
+      <header className="template-library-header user-access-header">
+        <div><span className="eyebrow">SECURITY PROFILE & ACCESS CONTROL</span><h2 id="user-management-title"><Shield size={18}/> Центр управления доступом и безопасностью</h2><p>Персональные настройки учётной записи и отдельное администрирование пользователей системы.</p></div>
         <button className="icon-button" onClick={onClose} aria-label="Закрыть"><X size={16}/></button>
       </header>
+      <nav className="user-access-tabs" aria-label="Разделы управления доступом">
+        <button type="button" className={activeTab === "profile" ? "active" : ""} onClick={() => setActiveTab("profile")}><Shield size={15}/> Мой профиль <span>ЛИЧНОЕ</span></button>
+        {isAdmin && <button type="button" className={activeTab === "users" ? "active" : ""} onClick={() => setActiveTab("users")}><Users size={15}/> Управление пользователями <span>ADMIN · {total}</span></button>}
+      </nav>
       {error && <div className="template-library-error"><AlertTriangle size={14}/><span>{error}</span><button onClick={() => { void loadUsers(); void loadSessions(); }}>Повторить</button></div>}
       {notice && <div className="user-management-notice"><Check size={14}/>{notice}</div>}
       <div className="user-management-content">
-        {isAdmin && <>
+        {activeTab === "users" && isAdmin && <>
+          <section className="user-management-section user-admin-intro">
+            <div className="user-section-heading"><div><Users size={15}/><b>Управление пользователями и правами</b><small>{total} аккаунтов в системе</small></div><button className="ghost" onClick={() => void loadUsers()} disabled={loading}><RefreshCw size={13}/> Обновить</button></div>
+            <p>Создание учётных записей, назначение системной роли и обратимая блокировка с отзывом активных сессий.</p>
+          </section>
           <section className="user-management-section">
             <div className="user-section-heading"><div><Users size={15}/><b>Пользователи</b><small>{total} аккаунтов</small></div><button className="ghost" onClick={() => void loadUsers()} disabled={loading}><RefreshCw size={13}/> Обновить</button></div>
             <div className="user-filter-row">
@@ -206,14 +215,23 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
             <p className="user-policy-note">Удаление аккаунта пока намеренно отключено: до внедрения владения данными применяется обратимая блокировка с отзывом всех его сессий.</p>
           </section>
         </>}
-        <section className="user-management-section">
-          <div className="user-section-heading"><div><Shield size={15}/><b>Профиль</b></div></div>
+        {activeTab === "profile" && <>
+        <section className="user-profile-banner">
+          <div className="user-profile-avatar">{currentEmail.slice(0, 2).toUpperCase()}</div>
+          <div><span className="eyebrow">ACCOUNT IDENTITY</span><b>{currentEmail}</b><small>{isAdmin ? "SYSTEM ADMINISTRATOR" : "STANDARD USER"} · УЧЁТНАЯ ЗАПИСЬ АКТИВНА</small></div>
+          <span className="user-profile-online"><i/> ONLINE</span>
+        </section>
+        <div className="user-profile-grid">
+        <section className="user-management-section user-profile-panel">
+          <div className="user-section-heading"><div><Shield size={15}/><b>Личные данные профиля</b></div><small>РЕЖИМ РЕДАКТИРОВАНИЯ</small></div>
           <form className="user-password-form" onSubmit={updateProfile}>
             <input type="email" required maxLength={320} value={profileEmail} onChange={event => setProfileEmail(event.target.value)} placeholder="Email аккаунта"/>
             <input type="password" required maxLength={1024} autoComplete="current-password" value={profilePassword} onChange={event => setProfilePassword(event.target.value)} placeholder="Подтвердите текущим паролем"/>
             <button className="template-card-clone" disabled={saving || profileEmail.trim().toLowerCase() === currentEmail.toLowerCase()}><Check size={13}/> Сохранить профиль</button>
           </form>
         </section>
+        </section>
+        <div className="user-profile-security">
         <section className="user-management-section">
           <div className="user-section-heading"><div><Lock size={15}/><b>Активные сессии</b><small>{sessions.filter(item => !item.revoked).length} действующих</small></div><button className="ghost" disabled={saving} onClick={() => void revokeOthers()}>Завершить остальные</button></div>
           <div className="user-session-list">
@@ -229,6 +247,9 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
             <button className="template-card-clone" disabled={saving}><KeyRound size={13}/> Изменить пароль</button>
           </form>
         </section>
+        </div>
+        </div>
+        </>}
       </div>
       <footer className="template-library-footer"><span>SERVER-SIDE PERMISSIONS · SESSION REVOCATION</span><button onClick={onClose}>Закрыть</button></footer>
     </section>
