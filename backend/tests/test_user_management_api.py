@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import Organization, OrganizationMembership, User, UserSession, Workspace, WorkspaceMembership
+from app.models import Organization, OrganizationMembership, Project, User, UserSession, Workspace, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
@@ -236,6 +236,24 @@ def test_workspace_membership_isolation_and_switching(user_client):
     client, _, member_id = user_client
     assert login(client).status_code == 200
 
+    with TestingSession.begin() as db:
+        admin = db.scalar(select(User).where(User.email == "admin@example.test"))
+        admin_workspace = db.scalar(
+            select(Workspace).join(WorkspaceMembership).where(
+                WorkspaceMembership.user_id == admin.id
+            )
+        )
+        admin_project = Project(
+            name="Private admin project",
+            workspace_id=admin_workspace.id,
+            workspace_path="projects/project-private-admin",
+            file_count=1,
+            expanded_bytes=10,
+        )
+        db.add(admin_project)
+        db.flush()
+        admin_project_id = admin_project.id
+
     own_workspaces = client.get("/api/workspaces")
     assert own_workspaces.status_code == 200
     assert len(own_workspaces.json()["items"]) == 1
@@ -270,6 +288,9 @@ def test_workspace_membership_isolation_and_switching(user_client):
     assert member_added.json()["user_id"] == str(member_id)
 
     assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    assert client.get("/api/projects").json() == []
+    hidden_project = client.get(f"/api/projects/{admin_project_id}/files")
+    assert hidden_project.status_code == 404
     member_workspaces = client.get("/api/workspaces")
     assert member_workspaces.status_code == 200
     visible_ids = {item["id"] for item in member_workspaces.json()["items"]}
