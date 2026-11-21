@@ -1703,7 +1703,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       });
       const findingsResponse = await apiFetch("/api/runs/" + queued.run_id + "/findings");
       let latestFindings: Finding[] = [];
-      if (findingsResponse.ok) {
+      const findingsLoaded = findingsResponse.ok;
+      if (findingsLoaded) {
         latestFindings = await findingsResponse.json() as Finding[];
         setFindings(latestFindings);
       }
@@ -1722,7 +1723,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
       }
       await refreshWorkflowRuns(id);
-      return { telemetry: completed, findings: latestFindings };
+      return { telemetry: completed, findings: latestFindings, findingsLoaded };
     } catch (error) {
       setResult("Запуск не выполнен: " + String(error));
       setShowResult(true);
@@ -1811,7 +1812,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setShowResult(true);
       return;
     }
-    if (outcome.telemetry.status !== "completed") {
+    if (outcome.telemetry.status !== "completed" || !outcome.findingsLoaded) {
       setResult("Повторное сканирование завершилось со статусом " + outcome.telemetry.status + ". Результат AI Fix не подтверждён; исходная находка не считается устранённой.");
       setShowResult(true);
       return;
