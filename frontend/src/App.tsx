@@ -1680,6 +1680,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       const lifecycle = item.fingerprint ? (findingStates[item.fingerprint]?.state || "open") : "open";
       const lifecycleMatch = findingLifecycleFilter === "Все"
         || (findingLifecycleFilter === "Открытые" && lifecycle === "open")
+        || (findingLifecycleFilter === "В работе" && lifecycle === "in_progress")
         || (findingLifecycleFilter === "Принятый риск" && lifecycle === "accepted_risk")
         || (findingLifecycleFilter === "Исправленные" && lifecycle === "resolved")
         || (findingLifecycleFilter === "Ложные срабатывания" && lifecycle === "false_positive");
@@ -1689,7 +1690,16 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     });
     const groups = new Map<string, Finding[]>();
     for (const item of visible) { const path = item.path || "Файл не указан"; groups.set(path, [...(groups.get(path) || []), item]); }
-    return Array.from(groups, ([path, items]) => ({ path, items: items.sort((a,b) => (a.line || 0) - (b.line || 0)) })).sort((a,b) => a.path.localeCompare(b.path));
+    const severityRank = (severity: string) => ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 } as Record<string, number>)[severity.toUpperCase()] ?? 5;
+    const result = Array.from(groups, ([path, items]) => ({
+      path,
+      items: items.sort((a, b) => severityRank(a.severity) - severityRank(b.severity) || (a.line || 0) - (b.line || 0)),
+    }));
+    return result.sort((a, b) => {
+      const aPriority = Math.min(...a.items.map(item => severityRank(item.severity)));
+      const bPriority = Math.min(...b.items.map(item => severityRank(item.severity)));
+      return aPriority - bPriority || a.path.localeCompare(b.path);
+    });
   }, [findings, findingQuery, findingSeverity, findingLifecycleFilter, findingStates]);
   const orderedVisibleFindings = findingGroups.flatMap(group => group.items);
   const selectedFindingIndex = selectedFinding ? orderedVisibleFindings.findIndex(item => item.fingerprint === selectedFinding.fingerprint) : -1;
@@ -2163,7 +2173,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
           <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
-          <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
+          <select aria-label="Фильтр статуса" value={findingLifecycleFilter} onChange={event => setFindingLifecycleFilter(event.target.value)}>{["Все","Открытые","В работе","Принятый риск","Исправленные","Ложные срабатывания"].map(state => <option key={state}>{state}</option>)}</select>
           <span>{orderedVisibleFindings.length} / {findings.length}</span>
           <div className="finding-lifecycle-summary" aria-label="Распределение находок по статусам">
             <span className="is-open">{findingLifecycleCounts.open || 0} открыто</span>
