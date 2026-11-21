@@ -29,8 +29,11 @@ type ProjectFilePreview = { path: string; start_line: number; end_line: number; 
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
-type Finding = { id?: string; fingerprint?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_evidence_status?: "safe_redacted" | "withheld_private_key" | "unavailable"; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
+type Finding = { id?: string; fingerprint?: string; category?: string; rule_id: string; severity: string; path: string; line?: number; message?: string; masked_value?: string; why_it_matters?: string; recommendation?: string; cwe?: string[]; cve?: string | null; code_context?: Array<{ line: number; text: string; is_finding: boolean }>; start_line?: number; end_line?: number; code_context_redacted?: boolean; ai_evidence_status?: "safe_redacted" | "withheld_private_key" | "unavailable"; ai_explanation?: { root_cause: string; impact: string; recommendation: string; confidence: number; evidence_limits: string; source_evidence?: Array<{ line: number; text: string; is_finding: boolean }> } };
 type FindingLifecycle = { state: "open" | "in_progress" | "resolved" | "accepted_risk" | "false_positive"; reason: string; expires_at?: string | null; assigned_to_user_id?: string | null };
+type AIFixProposal = { project_id: string; run_id: string; fingerprint: string; path: string; original_sha256: string; summary: string; tests: string[]; proposed_content: string; diff: string; model?: string; auto_applied: false; apply_requires_confirmation: true };
+type AIFixApplied = { project_id: string; run_id: string; fingerprint: string; path: string };
+
 type WorkflowVersionDiff = { from_version: number; to_version: number; name_changed: boolean; name_before: string; name_after: string; nodes: { added: Array<{id:string;type:string}>; removed: Array<{id:string;type:string}>; changed: Array<{id:string;label:string;changes:Array<{field:string;before:unknown;after:unknown}>}> }; edges: { added: Array<{id:string;source:string;target:string}>; removed: Array<{id:string;source:string;target:string}> }; summary: Record<string,number> };
 type WorkflowVersionSummary = { version: number; created_at: string; name: string; node_count: number; edge_count: number };
 type WorkflowRunSummary = { id: string; status: string; source?: string; queued_at?: string; started_at?: string; finished_at?: string; total_findings?: number; severity?: Record<string, number>; cache?: { scanner_blocks: number; cache_hits: number; fresh_scans: number; hit_rate: number; ttl_seconds: number } };
@@ -447,6 +450,12 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
   const [sourcePreviewLoading, setSourcePreviewLoading] = useState(false);
   const [sourcePreviewError, setSourcePreviewError] = useState("");
+  const [aiFixProposal, setAiFixProposal] = useState<AIFixProposal | null>(null);
+  const [aiFixBusy, setAiFixBusy] = useState(false);
+  const [aiFixApplying, setAiFixApplying] = useState(false);
+  const [aiFixError, setAiFixError] = useState<{ fingerprint: string; message: string } | null>(null);
+  const [aiFixApplied, setAiFixApplied] = useState<AIFixApplied | null>(null);
+
   const [sourceWindowStart, setSourceWindowStart] = useState(1);
   const [findingStates, setFindingStates] = useState<Record<string, FindingLifecycle>>({});
   const [findingHistory, setFindingHistory] = useState<Record<string, Array<{ details: Record<string, unknown>; created_at: string }>>>({});
@@ -1646,6 +1655,83 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
   };
+  const generateAiFix = async (finding: Finding) => {
+    if (!lastRunId || !finding.fingerprint) return;
+    setAiFixBusy(true);
+    setAiFixError(null);
+    setAiFixProposal(null);
+    try {
+      const response = await apiFetch(
+        "/api/runs/" + lastRunId + "/findings/" + finding.fingerprint + "/fix-preview",
+        { method: "POST" },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось подготовить AI Fix");
+      setAiFixProposal(data as AIFixProposal);
+      setAiFixApplied(null);
+      setResult("AI Fix подготовлен · изменения не применены · проверь diff перед подтверждением.");
+    } catch (error) {
+      setAiFixError({ fingerprint: finding.fingerprint, message: String(error) });
+    } finally {
+      setAiFixBusy(false);
+    }
+  };
+
+  const applyAiFixProposal = async () => {
+    const proposal = aiFixProposal;
+    if (!proposal || aiFixApplying) return;
+    if (!window.confirm(
+      "Применить предложенный AI Fix к файлу " + proposal.path + "?\n\n" +
+      "Файл будет изменён только после этого подтверждения. Перед применением проверь diff.",
+    )) return;
+    setAiFixApplying(true);
+    setAiFixError(null);
+    try {
+      const params = new URLSearchParams({ path: proposal.path });
+      const response = await apiFetch("/api/projects/" + proposal.project_id + "/file?" + params, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: proposal.proposed_content,
+          expected_sha256: proposal.original_sha256,
+          ai_fix_run_id: proposal.run_id,
+          ai_fix_fingerprint: proposal.fingerprint,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        const detail = data.detail;
+        if (response.status === 409 && detail && typeof detail === "object" && detail.code === "PROJECT_FILE_VERSION_CONFLICT") {
+          throw new Error("Исходный файл изменился после генерации патча. AI Fix не применён; создай новое предложение на актуальной версии.");
+        }
+        throw new Error(typeof detail === "string" ? detail : "Не удалось применить AI Fix");
+      }
+      setAiFixProposal(null);
+      setAiFixApplied({
+        project_id: proposal.project_id,
+        run_id: proposal.run_id,
+        fingerprint: proposal.fingerprint,
+        path: proposal.path,
+      });
+      setResult("AI Fix применён · " + data.path + " · находка остаётся открытой до повторного сканирования.");
+      if (activeProject?.id === proposal.project_id) {
+        const historyResponse = await apiFetch("/api/projects/" + proposal.project_id + "/history");
+        if (historyResponse.ok) setProjectHistory(await historyResponse.json() as ProjectHistoryEntry[]);
+      }
+    } catch (error) {
+      setAiFixError({ fingerprint: proposal.fingerprint, message: String(error) });
+    } finally {
+      setAiFixApplying(false);
+    }
+  };
+
+  const rescanAfterAiFix = async () => {
+    if (!aiFixApplied || busy) return;
+    if (!window.confirm("Запустить повторное сканирование текущего workflow, чтобы проверить результат исправления?")) return;
+    setAiFixApplied(null);
+    await runWorkflow();
+  };
+
   const refreshFindingStates = async () => {
     if (!workflowId) return;
     try {
@@ -2262,6 +2348,30 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
                   : aiNodeResult?.status === "completed"
                     ? (aiNodeResult?.message || "Для этой находки модель не вернула проверенное объяснение или находка не попала в установленный лимит. Ниже остаются результаты детерминированного анализа.")
                     : "AI-объяснение появится после выполнения соответствующего блока workflow."}</p>
+            </div>}
+            {finding.fingerprint && lastRunId && ["SAST", "SCA"].includes(String(finding.category || "").toUpperCase()) && <div className="ai-fix-actions">
+              <button type="button" onClick={() => void generateAiFix(finding)} disabled={aiFixBusy || aiFixApplying}>
+                <Bot size={13}/>{aiFixBusy ? "Готовлю AI Fix…" : "Предложить AI Fix"}
+              </button>
+              <small>Только SAST/SCA · секреты не отправляются модели · без автоматического применения</small>
+            </div>}
+            {aiFixError?.fingerprint === finding.fingerprint && <div className="ai-fix-error">{aiFixError.message}</div>}
+            {aiFixProposal?.fingerprint === finding.fingerprint && <div className="ai-fix-preview">
+              <div className="ai-fix-preview-heading"><b>AI FIX · ПРЕДЛОЖЕНИЕ</b><span>{aiFixProposal.model || "LLM"}</span></div>
+              <p>{aiFixProposal.summary}</p>
+              <div className="ai-fix-diff-label">DIFF · {aiFixProposal.path}</div>
+              <pre>{aiFixProposal.diff}</pre>
+              {aiFixProposal.tests.length > 0 && <div className="ai-fix-tests"><b>ПРОВЕРКИ ПОСЛЕ ПРИМЕНЕНИЯ</b><ul>{aiFixProposal.tests.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+              <small>Патч ещё не применён. Сервер повторно проверит версию файла и безопасное содержимое при сохранении.</small>
+              <div className="ai-fix-preview-actions">
+                <button type="button" onClick={() => void applyAiFixProposal()} disabled={aiFixApplying}>{aiFixApplying ? "Применяю…" : "Проверил diff · применить"}</button>
+                <button type="button" onClick={() => setAiFixProposal(null)} disabled={aiFixApplying}>Отменить</button>
+              </div>
+            </div>}
+            {aiFixApplied?.fingerprint === finding.fingerprint && <div className="ai-fix-applied">
+              <b>Исправление сохранено</b>
+              <p>Находка не помечена как устранённая автоматически. Запусти сканирование, чтобы проверить результат.</p>
+              <button type="button" onClick={() => void rescanAfterAiFix()} disabled={busy}>Повторить сканирование</button>
             </div>}
             {(finding.cwe?.length || finding.cve) && <div className="finding-identifiers">{finding.cwe?.map(value => <span key={value}>{value}</span>)}{finding.cve && <span>{finding.cve}</span>}</div>}
             {finding.masked_value && <code>{finding.masked_value}</code>}
