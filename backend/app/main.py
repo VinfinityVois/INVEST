@@ -38,6 +38,7 @@ from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
 from app.workflows.templates import sanitize_graph, clone_graph
+from app.workflows.presets import PresetError, list_presets, load_preset
 
 class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -2146,12 +2147,74 @@ class TemplateCloneRequest(BaseModel):
     name: str | None = Field(default=None, max_length=200)
 
 
+class PresetCloneRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+
+
 def _require_template_publish_token(provided_token: str) -> None:
     configured_token = settings.template_publish_token
     if not configured_token:
         raise HTTPException(status_code=503, detail="Template publishing is not configured")
     if not provided_token or not hmac.compare_digest(provided_token, configured_token):
         raise HTTPException(status_code=401, detail="Invalid template publishing token")
+
+
+@app.get("/api/presets")
+def list_builtin_presets():
+    try:
+        return list_presets()
+    except PresetError as exc:
+        raise HTTPException(status_code=500, detail="Built-in preset catalog is unavailable") from exc
+
+
+@app.get("/api/presets/{preset_id}")
+def get_builtin_preset(preset_id: str):
+    try:
+        preset = load_preset(preset_id)
+    except PresetError as exc:
+        status = 404 if str(exc).startswith("Unknown preset:") else 500
+        detail = "Preset not found" if status == 404 else "Built-in preset catalog is unavailable"
+        raise HTTPException(status_code=status, detail=detail) from exc
+    return {key: value for key, value in preset.items() if key != "file"} | {"graph": sanitize_graph(preset["graph"])}
+
+
+@app.post("/api/presets/{preset_id}/clone", status_code=201)
+def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest):
+    try:
+        preset = load_preset(preset_id)
+    except PresetError as exc:
+        status = 404 if str(exc).startswith("Unknown preset:") else 500
+        detail = "Preset not found" if status == 404 else "Built-in preset catalog is unavailable"
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    base_name = payload.name.strip() if payload.name else preset["name"]
+    if not base_name:
+        raise HTTPException(status_code=422, detail="Workflow name cannot be empty")
+    graph_data = clone_graph(sanitize_graph(preset["graph"]), base_name[:200])
+    graph = WorkflowGraph.model_validate(graph_data)
+    validation = validate_graph(graph, registry)
+    if not validation.valid:
+        raise HTTPException(status_code=422, detail=validation.model_dump())
+
+    with SessionLocal() as session:
+        workflow = Workflow(name=base_name[:200], description=f"Created from built-in preset: {preset['id']}")
+        session.add(workflow)
+        session.flush()
+        session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
+        session.add(AuditLog(
+            action="workflow_preset.cloned",
+            entity="workflow",
+            entity_id=str(workflow.id),
+            details={"preset_id": preset["id"], "preset_version": preset["version"]},
+        ))
+        session.commit()
+        return {
+            "id": str(workflow.id),
+            "name": workflow.name,
+            "version": 1,
+            "executed": False,
+            "setup_required": preset["setup_required"],
+        }
 
 
 @app.get("/api/templates")
