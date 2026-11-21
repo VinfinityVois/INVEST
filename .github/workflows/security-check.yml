@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: invest-security-check-\${{ inputs.workflow_id }}
+  group: invest-security-check-${{ inputs.workflow_id }}
   cancel-in-progress: false
 
 jobs:
@@ -33,9 +33,9 @@ jobs:
     steps:
       - name: Validate configuration
         env:
-          API_BASE_URL: \${{ secrets.INVEST_API_BASE_URL }}
-          CI_TOKEN: \${{ secrets.INVEST_CI_TOKEN }}
-          WORKFLOW_ID: \${{ inputs.workflow_id }}
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          WORKFLOW_ID: ${{ inputs.workflow_id }}
         run: |
           set -euo pipefail
           test -n "$API_BASE_URL" || { echo "::error::Set repository secret INVEST_API_BASE_URL"; exit 1; }
@@ -45,9 +45,9 @@ jobs:
       - name: Queue security workflow
         id: queue
         env:
-          API_BASE_URL: \${{ secrets.INVEST_API_BASE_URL }}
-          CI_TOKEN: \${{ secrets.INVEST_CI_TOKEN }}
-          WORKFLOW_ID: \${{ inputs.workflow_id }}
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          WORKFLOW_ID: ${{ inputs.workflow_id }}
         run: |
           set -euo pipefail
           response="$(curl --fail-with-body --silent --show-error \
@@ -61,9 +61,9 @@ jobs:
 
       - name: Wait for Security Gate
         env:
-          API_BASE_URL: \${{ secrets.INVEST_API_BASE_URL }}
-          CI_TOKEN: \${{ secrets.INVEST_CI_TOKEN }}
-          RUN_ID: \${{ steps.queue.outputs.run_id }}
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          RUN_ID: ${{ steps.queue.outputs.run_id }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 900))
