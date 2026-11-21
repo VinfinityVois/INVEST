@@ -190,6 +190,7 @@ def test_finding_state_history_query_is_bounded():
         assert finding_state_history(workflow_id, "a" * 64, None, limit=25, offset=50) == []
     finally:
         main.SessionLocal = original
+        monkeypatch.undo()
 
     sql = str(session.statement.compile(dialect=postgresql.dialect()))
     assert "LIMIT" in sql
