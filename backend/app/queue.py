@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from croniter import croniter
 
 from app.db import SessionLocal
@@ -38,8 +38,7 @@ def claim_next_run(worker_id: str) -> str | None:
             update(WorkflowRun)
             .where(
                 WorkflowRun.status == "cancelling",
-                WorkflowRun.heartbeat_at.is_not(None),
-                WorkflowRun.heartbeat_at < now - STALE_AFTER,
+                func.coalesce(WorkflowRun.heartbeat_at, WorkflowRun.started_at) < now - STALE_AFTER,
             )
             .values(status="cancelled", finished_at=now, locked_by=None, heartbeat_at=None, error="Cancellation finalized after worker heartbeat expired")
         )
