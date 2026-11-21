@@ -89,6 +89,7 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось изменить пользователя.");
+      if (typeof data.email === "string") setEditing(value => ({ ...value, [id]: data.email }));
       setNotice("Изменения сохранены.");
       await loadUsers();
     } catch (reason) {
