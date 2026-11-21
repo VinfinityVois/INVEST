@@ -1227,6 +1227,7 @@ def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", 
         workflow = session.get(Workflow, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "workflow:run")
         version = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
