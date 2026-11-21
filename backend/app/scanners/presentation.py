@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 _SECRET_ASSIGNMENT = re.compile(
-    r'(?i)(\b(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|authorization)\b\s*[:=]\s*)(["\'])(.*?)(\2)'
+    r'(?i)(\b(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|credential|authorization)\b\s*[:=]\s*)(["\'])(.*?)(\2)'
 )
 _BEARER = re.compile(r'(?i)(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}')
 _LONG_TOKEN = re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b')
@@ -82,6 +82,26 @@ def enrich_finding(finding: dict, root: Path) -> dict:
         }
         for number in range(start, end + 1)
     ]
+    # Keep the user-facing source preview fully redacted for SECRET findings.
+    # AI receives a separate, bounded excerpt with known credential forms masked.
+    if secret_context:
+        contains_private_key = any(
+            "-----BEGIN " in line and "PRIVATE KEY-----" in line
+            for line in lines
+        )
+        if contains_private_key:
+            item["ai_code_context"] = []
+            item["ai_evidence_status"] = "withheld_private_key"
+        else:
+            item["ai_code_context"] = [
+                {
+                    "line": number,
+                    "text": _redact(lines[number - 1])[:350],
+                    "is_finding": number == line_number,
+                }
+                for number in range(start, end + 1)
+            ]
+            item["ai_evidence_status"] = "safe_redacted" if item["ai_code_context"] else "unavailable"
     item["start_line"] = start
     item["end_line"] = end
     return item
