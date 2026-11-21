@@ -17,6 +17,7 @@ import app.security.users_api as users_api
 import app.security.workspaces_api as workspaces_api
 import app.security.tokens_api as tokens_api
 import app.security.dashboard_api as dashboard_api
+import app.security.findings_api as findings_api
 from app.security.tenancy import create_personal_workspace
 
 
@@ -58,6 +59,7 @@ def user_client(monkeypatch):
     monkeypatch.setattr(workspaces_api, "SessionLocal", TestingSession)
     monkeypatch.setattr(tokens_api, "SessionLocal", TestingSession)
     monkeypatch.setattr(dashboard_api, "SessionLocal", TestingSession)
+    monkeypatch.setattr(findings_api, "SessionLocal", TestingSession)
 
     with TestClient(main.app) as client:
         yield client, TestingSession, member_id
@@ -571,3 +573,93 @@ def test_workspace_token_is_revoked_when_its_owner_loses_membership(user_client)
         headers={"X-CI-Token": raw_token},
     )
     assert rejected.status_code == 401
+
+
+def test_finding_comments_assignment_and_bulk_lifecycle(user_client):
+    client, TestingSession, member_id = user_client
+    assert login(client).status_code == 200
+    organization = client.post(
+        "/api/organizations",
+        json={"name": "Finding collaboration"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    organization_id = organization.json()["id"]
+    workspace_id = organization.json()["default_workspace_id"]
+    added = client.post(
+        f"/api/organizations/{organization_id}/members",
+        json={
+            "email": "member@example.test",
+            "workspace_id": workspace_id,
+            "workspace_role": "analyst",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert added.status_code == 201
+
+    fingerprint = "b" * 64
+    with TestingSession.begin() as db:
+        workflow = Workflow(name="Finding lifecycle workflow", workspace_id=uuid.UUID(workspace_id))
+        db.add(workflow)
+        db.flush()
+        run = WorkflowRun(
+            workflow_id=workflow.id,
+            status="completed",
+            source="ui",
+            graph_snapshot={"nodes": [], "edges": []},
+        )
+        db.add(run)
+        db.flush()
+        db.add(Finding(
+            run_id=run.id,
+            fingerprint=fingerprint,
+            rule_id="SAST.SQL",
+            severity="high",
+            path="src/main.kt",
+            line=42,
+            payload={"category": "SAST"},
+        ))
+        workflow_id = workflow.id
+
+    assigned = client.patch(
+        f"/api/workflows/{workflow_id}/findings/{fingerprint}/assignee",
+        json={"user_id": str(member_id)},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["assigned_to_user_id"] == str(member_id)
+
+    assert login(client, "member@example.test", "MemberPassword123!").status_code == 200
+    comment = client.post(
+        f"/api/workflows/{workflow_id}/findings/{fingerprint}/comments",
+        json={"body": "Проверил источник и подтвердил путь данных."},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert comment.status_code == 201
+    comment_id = comment.json()["id"]
+    comments = client.get(f"/api/workflows/{workflow_id}/findings/{fingerprint}/comments")
+    assert comments.status_code == 200
+    assert len(comments.json()["items"]) == 1
+    assert comments.json()["items"][0]["author_email"] == "member@example.test"
+
+    bulk = client.post(
+        f"/api/workflows/{workflow_id}/findings/bulk",
+        json={
+            "fingerprints": [fingerprint],
+            "state": "in_progress",
+            "reason": "Анализ подтверждён, исправление выполняется.",
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert bulk.status_code == 200
+    assert bulk.json()["updated"] == 1
+
+    states = client.get(f"/api/workflows/{workflow_id}/finding-states")
+    assert states.status_code == 200
+    assert states.json()[0]["state"] == "in_progress"
+    assert states.json()[0]["assigned_to_user_id"] == str(member_id)
+
+    deleted = client.delete(
+        f"/api/workflows/{workflow_id}/findings/{fingerprint}/comments/{comment_id}",
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert deleted.status_code == 200
