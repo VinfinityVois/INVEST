@@ -174,3 +174,31 @@ def test_session_list_revoke_and_password_change(user_client):
     assert changed.status_code == 200
     assert changed.json()["other_sessions_revoked"] is True
     assert client.get("/api/auth/me").status_code == 200
+
+
+def test_profile_email_change_requires_current_password_and_is_audited(user_client):
+    client, TestingSession, _ = user_client
+    assert login(client).status_code == 200
+
+    rejected = client.patch(
+        "/api/auth/profile",
+        json={"email": "new-admin@example.test", "current_password": "WrongPassword123!"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert rejected.status_code == 400
+
+    changed = client.patch(
+        "/api/auth/profile",
+        json={"email": " New-Admin@example.test ", "current_password": "CorrectPassword123!"},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert changed.status_code == 200
+    assert changed.json()["email"] == "new-admin@example.test"
+
+    with TestingSession() as db:
+        admin = db.scalar(select(User).where(User.email == "new-admin@example.test"))
+        assert admin is not None
+        from app.models import AuditLog
+        event = db.scalar(select(AuditLog).where(AuditLog.action == "user.profile_updated"))
+        assert event is not None
+        assert event.details["actor_user_id"] == str(admin.id)
