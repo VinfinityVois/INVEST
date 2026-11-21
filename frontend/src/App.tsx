@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
-type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: Record<string, unknown> };
+type ConfigSchemaProperty = { type?: string; title?: string; description?: string; enum?: unknown[]; default?: unknown; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; items?: ConfigSchemaProperty; format?: string };
+type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { type?: string; title?: string; description?: string; required?: string[]; properties?: Record<string, ConfigSchemaProperty>; [key: string]: unknown } };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
@@ -622,6 +623,52 @@ export default function App() {
     const manifest = manifests.find(item => item.type === type);
     if (!manifest) return;
     updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: manifest.type === "trigger.schedule" ? { cron: "*/5 * * * *", timezone: "UTC" } : {} });
+  };
+  const renderSchemaFields = () => {
+    if (!selectedNode) return null;
+    const manifest = manifests.find(item => item.type === selectedNode.data.nodeType);
+    const schema = manifest?.config_schema;
+    const properties = schema?.properties || {};
+    const required = new Set(schema?.required || []);
+    const entries = Object.entries(properties);
+    if (!entries.length) return <p className="edit-hint">Для этого блока параметры не требуются.</p>;
+    const setField = (key: string, value: unknown) => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, [key]: value } });
+    return <div className="schema-config-fields">
+      {schema?.description && <p className="edit-hint">{schema.description}</p>}
+      {entries.map(([key, field]) => {
+        const value = selectedNode.data.config[key] ?? field.default ?? (field.type === "boolean" ? false : field.type === "array" ? [] : "");
+        const label = field.title || key.replace(/_/g, " ");
+        const id = "config-" + selectedNode.id + "-" + key;
+        const requiredField = required.has(key);
+        return <div className="schema-config-field" key={key}>
+          <label className="field-label" htmlFor={id}>{label}{requiredField && <span className="schema-required"> *</span>}</label>
+          {field.enum ? <select id={id} value={String(value)} onChange={event => setField(key, event.target.value)}>
+            {!requiredField && <option value="">Не задано</option>}
+            {field.enum.map(option => <option key={String(option)} value={String(option)}>{String(option)}</option>)}
+          </select> : field.type === "boolean" ? <label className="schema-checkbox"><input id={id} type="checkbox" checked={Boolean(value)} onChange={event => setField(key, event.target.checked)}/><span>{Boolean(value) ? "Включено" : "Отключено"}</span></label>
+          : field.type === "integer" || field.type === "number" ? <input id={id} type="number" step={field.type === "integer" ? 1 : "any"} min={field.minimum} max={field.maximum} value={value === "" ? "" : Number(value)} onChange={event => {
+            if (event.target.value === "") { setField(key, ""); return; }
+            const parsed = field.type === "integer" ? Number.parseInt(event.target.value, 10) : Number(event.target.value);
+            if (Number.isFinite(parsed)) setField(key, parsed);
+          }}/>
+          : field.type === "array" && field.items?.enum ? <div className="schema-array-options">{field.items.enum.map(option => {
+            const selected = Array.isArray(value) && value.includes(option);
+            return <label key={String(option)}><input type="checkbox" checked={selected} onChange={event => {
+              const current = Array.isArray(value) ? value : [];
+              setField(key, event.target.checked ? [...current, option] : current.filter(item => item !== option));
+            }}/><span>{String(option)}</span></label>;
+          })}</div>
+          : field.type === "array" ? <textarea id={id} rows={3} value={Array.isArray(value) ? value.join("\n") : String(value)} placeholder="Одно значение на строку" onChange={event => setField(key, event.target.value.split("\n").map(item => item.trim()).filter(Boolean))}/>
+          : field.type === "object" ? <textarea id={id} rows={4} className="schema-json-fallback" value={JSON.stringify(value, null, 2)} spellCheck={false} onChange={event => {
+            try { const parsed = JSON.parse(event.target.value); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) setField(key, parsed); } catch { /* Keep the last valid object until JSON is complete. */ }
+          }}/>
+          : <input id={id} type="text" value={String(value)} maxLength={field.maxLength} placeholder={field.format === "uri" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri"} onChange={event => setField(key, event.target.value)}/>}
+          {field.description && <small className="schema-field-help">{field.description}</small>}
+          {(field.minimum !== undefined || field.maximum !== undefined || field.minLength !== undefined || field.maxLength !== undefined) && <small className="schema-field-constraints">{[field.minimum !== undefined ? "мин. " + field.minimum : "", field.maximum !== undefined ? "макс. " + field.maximum : "", field.minLength !== undefined ? "от " + field.minLength + " симв." : "", field.maxLength !== undefined ? "до " + field.maxLength + " симв." : ""].filter(Boolean).join(" · ")}</small>}
+          {requiredField && (selectedNode.data.config[key] === undefined || selectedNode.data.config[key] === null || selectedNode.data.config[key] === "") && <small className="schema-field-error">Обязательное поле</small>}
+        </div>;
+      })}
+    </div>;
   };
   const saveNodeConfig = () => {
     if (!selectedNode) return;
@@ -1373,16 +1420,9 @@ export default function App() {
           <label className="field-label">Название блока<input value={selectedNode.data.label} onChange={event => updateNode(selectedNode.id, { label: event.target.value })} /></label>
           <label className="field-label">Заменить тип блока<select value={selectedNode.data.nodeType} onChange={event => replaceSelectedNode(event.target.value)}><option value={selectedNode.data.nodeType}>{selectedNode.data.nodeType}</option>{manifests.filter(item => item.type !== selectedNode.data.nodeType).map(item => <option key={item.type} value={item.type}>{item.title} · {item.type}</option>)}</select></label>
           {selectedNode.data.nodeType === "logic.compare" ? <>
-            <div className="ai-node-guide"><div><Activity size={15}/><b>COMPARE · ФИЛЬТР НАХОДОК</b></div><p>Разделяет входящие findings на true и false. Подключайте downstream-ноды к соответствующему выходному порту.</p></div>
-            <label className="field-label">Поле<select value={String(selectedNode.data.config.field || "severity")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, field: event.target.value } })}>
-              <option value="severity">Severity</option><option value="rule_id">Rule ID</option><option value="path">Путь файла</option><option value="category">Категория</option><option value="message">Сообщение</option><option value="cve">CVE</option><option value="cwe">CWE</option><option value="count">Количество находок</option>
-            </select></label>
-            <label className="field-label">Оператор<select value={String(selectedNode.data.config.operator || "equals")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, operator: event.target.value } })}>
-              <option value="equals">Равно</option><option value="not_equals">Не равно</option><option value="contains">Содержит</option><option value="not_contains">Не содержит</option><option value="greater_than">Больше</option><option value="greater_or_equal">Больше или равно</option><option value="less_than">Меньше</option><option value="less_or_equal">Меньше или равно</option>
-            </select></label>
-            <label className="field-label">Значение<input value={String(selectedNode.data.config.value ?? "")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, value: event.target.value } })} maxLength={256} placeholder="HIGH / 3 / CVE-…" spellCheck={false}/></label>
-            <p className="edit-hint">Для числовых операторов используйте числовое поле или «Количество находок». Значение сравнения ограничено 256 символами.</p>
-          </> : selectedNode.data.nodeType === "ai.explain" ? <>
+            <div className="ai-node-guide"><div><Activity size={15}/><b>COMPARE · ФИЛЬТР НАХОДОК</b></div><p>Разделяет входящие findings на true и false. Параметры автоматически построены по config_schema реестра.</p></div>
+            {renderSchemaFields()}
+          </>: selectedNode.data.nodeType === "ai.explain" ? <>
             <div className="ai-node-guide"><div><Bot size={16}/><b>AI-АНАЛИЗАТОР · {aiProvider?.configured ? (aiProvider.endpoint_valid ? "КОНФИГУРАЦИЯ НАЙДЕНА" : "ОШИБКА АДРЕСА") : "ТРЕБУЕТ НАСТРОЙКИ"}</b></div><p>Получает находки из блока Merge findings. Ключ API хранится только в корневом .env и не вводится здесь.</p><div className="ai-provider-checks"><span className={aiProvider?.base_url_set ? "is-ready" : ""}>BASE URL {aiProvider?.base_url_set ? "✓" : "—"}</span><span className={aiProvider?.model_set ? "is-ready" : ""}>MODEL {aiProvider?.model_set ? "✓" : "—"}</span><span className={aiProvider?.api_key_set ? "is-ready" : ""}>API KEY {aiProvider?.api_key_set ? "✓" : "—"}</span></div>{aiProvider?.endpoint_error && <p className="ai-provider-error">{aiProvider.endpoint_error}</p>}{!aiProvider?.configured && <ol><li>Добавь LLM_BASE_URL, LLM_MODEL и LLM_API_KEY в корневой .env</li><li>Перезапусти api и worker</li><li>Запусти workflow после настройки</li></ol>}{aiProvider?.configured && aiProvider?.endpoint_valid && <div className="ai-provider-ready-note"><b>Конфигурация загружена.</b> Повторно добавлять параметры не нужно. Запусти workflow: результат реального обращения к модели появится в статусе этого блока.</div>}{aiNodeResult && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ ЗАПУСК: {aiNodeResult.status === "completed" ? "ЗАВЕРШЁН" : aiNodeResult.status === "failed" ? "ОШИБКА" : aiNodeResult.status === "configuration_required" ? "НЕТ КОНФИГУРАЦИИ" : String(aiNodeResult.status).toUpperCase()}</b>{aiNodeResult.status === "failed" && <p>{aiNodeResult.message || "Проверь логи worker."}</p>}{aiNodeResult.status === "completed" && <p>Объяснено: {aiNodeResult.explained_count ?? 0} из {aiNodeResult.analyzed_count ?? aiNodeResult.total_findings ?? 0} · покрытие {Math.round((aiNodeResult.coverage ?? 0) * 100)}% · без объяснения: {aiNodeResult.unexplained_count ?? 0} · пропущено лимитом: {aiNodeResult.skipped_count ?? 0}.</p>}{aiNodeResult.status === "failed" && <p>Проанализировано до ошибки: {aiNodeResult.analyzed_count ?? 0} · не обработано лимитом: {aiNodeResult.skipped_count ?? 0}.</p>}{aiNodeResult.model && <small>Модель ответа: {aiNodeResult.model} · провайдер: {aiNodeResult.provider || "OpenAI-compatible"}</small>}</div>}<small>Модель: {aiProvider?.model || "не задана"} · ключ не отображается и не передаётся в браузер</small></div>
             <label className="field-label">Язык объяснений<select value={String(selectedNode.data.config.language || "ru")} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, language: event.target.value } })}><option value="ru">Русский</option><option value="en">English</option></select></label>
             <label className="field-label">Максимум находок<input type="number" min={1} max={25} value={Number(selectedNode.data.config.max_findings ?? 20)} onChange={event => updateNode(selectedNode.id, { config: { ...selectedNode.data.config, max_findings: Math.max(1, Math.min(25, Number(event.target.value) || 1)) } })}/></label>
@@ -1401,8 +1441,12 @@ export default function App() {
             <button className="ghost" disabled={scheduleBusy || !scheduleStatus?.enabled} onClick={() => void updateSchedule(false)}>Отключить расписание</button>
             <p className="edit-hint">Примеры: <code>*/5 * * * *</code> — каждые 5 минут; <code>0 9 * * 1-5</code> — будни в 09:00. Часовой пояс влияет на локальное время.</p>
           </> : <>
-            <label className="field-label">Конфигурация (JSON)<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
-          </>}
+            {renderSchemaFields()}
+            <details className="schema-advanced-config"><summary>Расширенная конфигурация JSON</summary>
+              <label className="field-label">JSON<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
+              <button className="ghost" onClick={saveNodeConfig}>Применить JSON</button>
+            </details>
+          </>}}
           {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
