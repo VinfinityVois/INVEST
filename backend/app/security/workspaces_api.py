@@ -58,6 +58,37 @@ class WorkspaceUpdate(BaseModel):
         return value
 
 
+class WorkspaceMemberCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: str = "viewer"
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str) -> str:
+        normalized = normalize_email(value)
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+    @field_validator("role")
+    @classmethod
+    def valid_role(cls, value: str) -> str:
+        if value not in {"admin", "editor", "analyst", "viewer"}:
+            raise ValueError("Unsupported workspace role.")
+        return value
+
+
+class WorkspaceMemberUpdate(BaseModel):
+    role: str
+
+    @field_validator("role")
+    @classmethod
+    def valid_role(cls, value: str) -> str:
+        if value not in {"admin", "editor", "analyst", "viewer"}:
+            raise ValueError("Unsupported workspace role.")
+        return value
+
+
 class MemberCreate(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     workspace_id: UUID | None = None
@@ -304,6 +335,189 @@ def list_organization_members(organization_id: UUID, request: Request):
                     "is_active": user.is_active,
                 })
         return {"items": items}
+
+
+
+
+@router.get("/api/workspaces/{workspace_id}/members")
+def list_workspace_members(workspace_id: UUID, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        role = workspace_role(db, actor.id, workspace_id)
+        if role is None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+        rows = db.scalars(
+            select(WorkspaceMembership).where(WorkspaceMembership.workspace_id == workspace_id)
+        ).all()
+        items = []
+        for row in rows:
+            user = db.get(User, row.user_id)
+            if user is not None:
+                items.append({
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "role": row.role,
+                    "is_active": user.is_active,
+                })
+        return {"items": items}
+
+
+@router.post("/api/workspaces/{workspace_id}/members", status_code=201)
+def add_workspace_member(workspace_id: UUID, payload: WorkspaceMemberCreate, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        role = workspace_role(db, actor.id, workspace_id)
+        if role != "admin":
+            raise HTTPException(status_code=403, detail="Workspace administrator permission required.")
+        workspace = db.get(Workspace, workspace_id)
+        if workspace is None or workspace.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Workspace not found.")
+        user = db.scalar(select(User).where(User.email == payload.email, User.is_active.is_(True)))
+        if user is None:
+            raise HTTPException(status_code=404, detail="Active user not found.")
+        organization_member = db.scalar(
+            select(OrganizationMembership.id).where(
+                OrganizationMembership.organization_id == workspace.organization_id,
+                OrganizationMembership.user_id == user.id,
+            )
+        )
+        if organization_member is None:
+            raise HTTPException(status_code=409, detail="Add the user to the organization before assigning a workspace.")
+        existing = db.scalar(
+            select(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == workspace_id,
+                WorkspaceMembership.user_id == user.id,
+            )
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="User is already a workspace member.")
+        db.add(WorkspaceMembership(
+            workspace_id=workspace_id,
+            user_id=user.id,
+            role=payload.role,
+        ))
+        _audit(db, actor, "workspace.member_added", "workspace", workspace_id, {
+            "member_user_id": str(user.id),
+            "role": payload.role,
+        })
+        db.commit()
+        return {"user_id": str(user.id), "email": user.email, "role": payload.role}
+
+
+@router.patch("/api/workspaces/{workspace_id}/members/{user_id}")
+def update_workspace_member(workspace_id: UUID, user_id: UUID, payload: WorkspaceMemberUpdate, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        if workspace_role(db, actor.id, workspace_id) != "admin":
+            raise HTTPException(status_code=403, detail="Workspace administrator permission required.")
+        membership = db.scalar(
+            select(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == workspace_id,
+                WorkspaceMembership.user_id == user_id,
+            )
+        )
+        if membership is None:
+            raise HTTPException(status_code=404, detail="Workspace member not found.")
+        previous_role = membership.role
+        membership.role = payload.role
+        _audit(db, actor, "workspace.member_role_updated", "workspace", workspace_id, {
+            "member_user_id": str(user_id),
+            "previous_role": previous_role,
+            "role": payload.role,
+        })
+        db.commit()
+        return {"user_id": str(user_id), "role": membership.role}
+
+
+@router.delete("/api/workspaces/{workspace_id}/members/{user_id}")
+def remove_workspace_member(workspace_id: UUID, user_id: UUID, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        if workspace_role(db, actor.id, workspace_id) != "admin":
+            raise HTTPException(status_code=403, detail="Workspace administrator permission required.")
+        membership = db.scalar(
+            select(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == workspace_id,
+                WorkspaceMembership.user_id == user_id,
+            )
+        )
+        if membership is None:
+            raise HTTPException(status_code=404, detail="Workspace member not found.")
+        db.delete(membership)
+        _audit(db, actor, "workspace.member_removed", "workspace", workspace_id, {
+            "member_user_id": str(user_id),
+        })
+        db.commit()
+        return {"status": "removed"}
+
+
+@router.delete("/api/organizations/{organization_id}/members/{user_id}")
+def remove_organization_member(organization_id: UUID, user_id: UUID, request: Request):
+    actor = _actor(request)
+    with SessionLocal() as db:
+        role = _organization_role(db, organization_id, actor.id)
+        if role not in {"owner", "admin"}:
+            raise HTTPException(status_code=403, detail="Organization administrator permission required.")
+        membership = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == user_id,
+            )
+        )
+        if membership is None:
+            raise HTTPException(status_code=404, detail="Organization member not found.")
+        if membership.role == "owner":
+            raise HTTPException(status_code=409, detail="Transfer organization ownership before removing its owner.")
+        workspace_ids = select(Workspace.id).where(Workspace.organization_id == organization_id)
+        db.query(WorkspaceMembership).filter(
+            WorkspaceMembership.user_id == user_id,
+            WorkspaceMembership.workspace_id.in_(workspace_ids),
+        ).delete(synchronize_session=False)
+        db.delete(membership)
+        _audit(db, actor, "organization.member_removed", "organization", organization_id, {
+            "member_user_id": str(user_id),
+        })
+        db.commit()
+        return {"status": "removed"}
+
+
+class OwnershipTransfer(BaseModel):
+    new_owner_user_id: UUID
+    confirm: bool
+
+
+@router.post("/api/organizations/{organization_id}/transfer-ownership")
+def transfer_organization_ownership(organization_id: UUID, payload: OwnershipTransfer, request: Request):
+    actor = _actor(request)
+    if not payload.confirm:
+        raise HTTPException(status_code=422, detail="Explicit ownership transfer confirmation is required.")
+    with SessionLocal() as db:
+        current = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == actor.id,
+            ).with_for_update()
+        )
+        if current is None or current.role != "owner":
+            raise HTTPException(status_code=403, detail="Only the current organization owner can transfer ownership.")
+        target = db.scalar(
+            select(OrganizationMembership).where(
+                OrganizationMembership.organization_id == organization_id,
+                OrganizationMembership.user_id == payload.new_owner_user_id,
+            ).with_for_update()
+        )
+        if target is None:
+            raise HTTPException(status_code=404, detail="New owner must already be an organization member.")
+        if target.user_id == actor.id:
+            raise HTTPException(status_code=422, detail="Choose another organization member.")
+        current.role = "admin"
+        target.role = "owner"
+        _audit(db, actor, "organization.ownership_transferred", "organization", organization_id, {
+            "previous_owner_user_id": str(actor.id),
+            "new_owner_user_id": str(target.user_id),
+        })
+        db.commit()
+        return {"organization_id": str(organization_id), "owner_user_id": str(target.user_id)}
 
 
 @router.post("/api/organizations/{organization_id}/members", status_code=201)
