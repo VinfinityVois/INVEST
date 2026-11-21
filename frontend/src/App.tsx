@@ -1446,7 +1446,7 @@ export default function App() {
               <label className="field-label">JSON<textarea className="config-editor" spellCheck={false} value={configText} onChange={event => setConfigText(event.target.value)} /></label>
               <button className="ghost" onClick={saveNodeConfig}>Применить JSON</button>
             </details>
-          </>}}
+          </>}
           {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && !manifests.find(item => item.type === selectedNode.data.nodeType)?.config_schema && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
