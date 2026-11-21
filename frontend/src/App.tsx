@@ -25,7 +25,7 @@ type WorkspaceSummary = { id: string; name: string; organization_id: string; org
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
-type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
+type ProjectFilePreview = { path: string; start_line: number; end_line: number; total_lines: number; sha256: string; editable?: boolean; content?: string | null; lines: Array<{ line: number; text: string }> };
 type ProjectVisualPreview = { path: string; url: string; kind: "image" | "pdf" };
 type ProjectEditorTab = { path: string; name: string; kind: "text" | "image" | "pdf"; draft: string; baseline: string; editing: boolean };
 type ProjectSearchResult = { path: string; line: number; text: string };
@@ -1349,7 +1349,14 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setResult("Файл сохранён · " + data.path);
       const historyResponse = await apiFetch(`/api/projects/${activeProject.id}/history`);
       if (historyResponse.ok) setProjectHistory(await historyResponse.json());
-    } catch (error) { setResult("Ошибка сохранения: " + String(error)); }
+    } catch (error) {
+      const message = String(error);
+      if (message.includes("PROJECT_FILE_VERSION_CONFLICT") || message.includes("409")) {
+        setResult("Файл был изменён в другом месте. Текущий черновик сохранён в редакторе; сначала обнови исходник и сравни версии.");
+      } else {
+        setResult("Ошибка сохранения: " + message);
+      }
+    }
     finally { setProjectSaving(false); }
   };
   const uploadArchive = async (file?: File) => {
