@@ -13,6 +13,9 @@ _PACK_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 _MAX_PACK_BYTES = 512_000
 _MAX_RULES_PER_PACK = 500
 _MAX_REGEX_LENGTH = 400
+_SCA_ECOSYSTEMS = {"Maven", "Gradle"}
+_SCA_ADVISORY_DATABASES = {"maven-advisories"}
+_SCA_STARTER_PACKS = {"none", "spring-boot-starters"}
 
 
 class RulePackError(ValueError):
@@ -62,6 +65,17 @@ class RulePackRegistry:
             globs = raw.get("path_globs", [])
             if not isinstance(globs, list) or not all(isinstance(item, str) and len(item) <= 300 for item in globs):
                 raise RulePackError(f"Invalid path_globs in {pack_id}")
+            if analyzer == "sca":
+                ecosystems = raw.get("ecosystems", [])
+                if not isinstance(ecosystems, list) or not ecosystems or not all(item in _SCA_ECOSYSTEMS for item in ecosystems):
+                    raise RulePackError(f"Invalid ecosystems in {pack_id}")
+                if raw.get("advisory_db") not in _SCA_ADVISORY_DATABASES:
+                    raise RulePackError(f"Unsupported advisory database in {pack_id}")
+                if raw.get("starter_pack", "none") not in _SCA_STARTER_PACKS:
+                    raise RulePackError(f"Unsupported starter pack in {pack_id}")
+                for key in ("include_dev", "use_lockfile"):
+                    if key in raw and not isinstance(raw[key], bool):
+                        raise RulePackError(f"Invalid {key} flag in {pack_id}")
             if analyzer == "policy":
                 allowed = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
                 for key in ("block_on", "warn_on"):
@@ -151,6 +165,14 @@ class RulePackRegistry:
                 "version": raw.get("version", 1),
                 "rule_count": len(resolved.get("patterns", [])) + len(resolved.get("rules", [])),
                 "extends": list(raw.get("extends", [])),
+                **({
+                    "description": str(raw.get("description", ""))[:500],
+                    "ecosystems": list(resolved.get("ecosystems", [])),
+                    "advisory_db": resolved.get("advisory_db"),
+                    "starter_pack": resolved.get("starter_pack", "none"),
+                    "include_dev": resolved.get("include_dev", True),
+                    "use_lockfile": resolved.get("use_lockfile", True),
+                } if raw["analyzer"] == "sca" else {}),
             })
         return result
 
