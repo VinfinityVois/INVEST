@@ -109,7 +109,7 @@ def _lock_schedule_for_update(session, workflow_id: UUID, schedule_id: UUID):
 
 
 class FindingStateUpdate(BaseModel):
-    state: Literal["open", "accepted_risk", "fixed", "false_positive"]
+    state: Literal["open", "in_progress", "resolved", "accepted_risk", "false_positive", "fixed"]
     reason: str = Field(min_length=3, max_length=2000)
     expires_at: datetime | None = None
 
@@ -2294,6 +2294,7 @@ def list_finding_states(workflow_id: UUID, request: Request):
                 "state": row.state,
                 "reason": row.reason,
                 "expires_at": row.expires_at,
+                "assigned_to_user_id": str(row.assigned_to_user_id) if row.assigned_to_user_id else None,
             }
             for row in rows
         ]
@@ -2303,10 +2304,11 @@ def list_finding_states(workflow_id: UUID, request: Request):
 def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingStateUpdate, request: Request):
     if not fingerprint or len(fingerprint) > 64:
         raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
-    if payload.state != "accepted_risk" and payload.expires_at is not None:
+    normalized_state = "resolved" if payload.state == "fixed" else payload.state
+    if normalized_state != "accepted_risk" and payload.expires_at is not None:
         raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
 
-    if payload.state == "accepted_risk" and payload.expires_at is not None:
+    if normalized_state == "accepted_risk" and payload.expires_at is not None:
         expiry = payload.expires_at
         if expiry.tzinfo is None or expiry.utcoffset() is None:
             raise HTTPException(status_code=422, detail="Срок принятого риска должен содержать часовой пояс.")
@@ -2337,13 +2339,13 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
             state_row = FindingState(
                 workflow_id=workflow_id,
                 fingerprint=fingerprint,
-                state=payload.state,
+                state=normalized_state,
                 reason=payload.reason,
                 expires_at=payload.expires_at,
             )
             session.add(state_row)
         else:
-            state_row.state = payload.state
+            state_row.state = normalized_state
             state_row.reason = payload.reason
             state_row.expires_at = payload.expires_at
 
@@ -2355,7 +2357,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
                 "workflow_id": str(workflow_id),
                 "fingerprint": fingerprint,
                 "previous_state": previous_state,
-                "new_state": payload.state,
+                "new_state": normalized_state,
                 "reason": payload.reason,
                 "expires_at": payload.expires_at.isoformat() if payload.expires_at else None,
             },
@@ -2366,6 +2368,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
             "previous_state": previous_state,
             "state": state_row.state,
             "reason": state_row.reason,
+            "assigned_to_user_id": str(state_row.assigned_to_user_id) if state_row.assigned_to_user_id else None,
             "expires_at": state_row.expires_at,
         }
 
