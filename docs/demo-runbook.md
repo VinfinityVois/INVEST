@@ -83,4 +83,4 @@ jobs:
       INVEST_CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
 ```
 
-В целевом репозитории задайте Actions variable `INVEST_WORKFLOW_ID` (UUID сохранённого workflow) и secrets `INVEST_API_BASE_URL` и `INVEST_CI_TOKEN`. Для production закрепите reusable workflow на проверенном release tag или commit SHA вместо изменяемой feature-ветки. Не используйте `pull_request_target`: проверка не должна получать секреты в контексте недоверенного кода PR.
+В UI INVEST откройте «Доступы», выберите Workspace, в разделе «API Tokens / CI» создайте токен со scopes `workflow:run` и `run:read`. Скопируйте секрет при создании (повторно он не показывается) и сохраните в GitHub Actions secret `INVEST_CI_TOKEN`. Токен привязан к конкретному Workspace: он не сможет запускать workflow или читать run из другой области. Задайте Actions variable `INVEST_WORKFLOW_ID` (UUID сохранённого workflow из этого Workspace) и secret `INVEST_API_BASE_URL`. Для production закрепите reusable workflow на проверенном release tag или commit SHA вместо изменяемой feature-ветки. Не используйте `pull_request_target`: проверка не должна получать секреты в контексте недоверенного кода PR.
