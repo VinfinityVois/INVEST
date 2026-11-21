@@ -202,3 +202,15 @@ def test_profile_email_change_requires_current_password_and_is_audited(user_clie
         event = db.scalar(select(AuditLog).where(AuditLog.action == "user.profile_updated"))
         assert event is not None
         assert event.details["actor_user_id"] == str(admin.id)
+
+
+@pytest.mark.parametrize("field", ["email", "is_admin", "is_active"])
+def test_admin_update_rejects_null_fields(user_client, field):
+    client, _, member_id = user_client
+    assert login(client).status_code == 200
+    response = client.patch(
+        f"/api/admin/users/{member_id}",
+        json={field: None},
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert response.status_code == 422
