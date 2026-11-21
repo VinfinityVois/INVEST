@@ -60,7 +60,9 @@ def validate_graph(graph: WorkflowGraph, registry: NodeRegistry) -> ValidationRe
         else:
             manifests[node.id] = manifest
             for message in _validate_config_value(node.config, manifest.config_schema, "config"):
-                issues.append(ValidationIssue(code="invalid_node_config", message=message, node_id=node.id))
+                # Incomplete nodes are valid drafts; required values are checked again at execution.
+                severity = "warning" if "обязательное поле не заполнено" in message else "error"
+                issues.append(ValidationIssue(code="invalid_node_config", message=message, node_id=node.id, severity=severity))
     adjacency = defaultdict(list)
     indegree = {n.id:0 for n in graph.nodes}
     seen = set()
