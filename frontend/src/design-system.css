@@ -630,3 +630,19 @@
   .shell .finding-table-row>small,.shell .finding-table-message { grid-column:2; }
   .shell .finding-table-row>svg { grid-column:3;grid-row:1/4; }
 }
+
+/* Registry-driven node configuration */
+.shell .schema-config-fields { display:flex;flex-direction:column;gap:13px;margin:10px 0 14px; }
+.shell .schema-config-field { display:flex;flex-direction:column;gap:5px;min-width:0; }
+.shell .schema-config-field>.field-label { display:flex;align-items:center;gap:4px;margin:0;color:var(--text-secondary);font-size:10px;font-weight:600; }
+.shell .schema-required { color:var(--danger); }
+.shell .schema-field-help,.shell .schema-field-constraints { color:var(--muted);font-size:9px;line-height:1.5; }
+.shell .schema-field-error { color:var(--danger);font-size:9px; }
+.shell .schema-config-field input:not([type="checkbox"]),.shell .schema-config-field select,.shell .schema-config-field textarea { width:100%;min-width:0;min-height:34px;padding:7px 9px;border:1px solid var(--border);border-radius:3px;background:var(--surface);color:var(--text);font:11px "Inter",sans-serif; }
+.shell .schema-config-field textarea { resize:vertical; }
+.shell .schema-checkbox,.shell .schema-array-options label { display:flex;align-items:center;gap:8px;min-height:30px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface);color:var(--text-secondary);font-size:10px; }
+.shell .schema-checkbox input,.shell .schema-array-options input { accent-color:var(--accent-600); }
+.shell .schema-array-options { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px; }
+.shell .schema-advanced-config { margin:12px 0;padding-top:10px;border-top:1px solid var(--border); }
+.shell .schema-advanced-config summary { color:var(--muted);font-size:10px;cursor:pointer; }
+.shell .schema-advanced-config .config-editor { margin-top:8px; }
