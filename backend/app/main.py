@@ -188,7 +188,8 @@ def _run_in_active_workspace(session, request: Request, run_id: UUID, *, write: 
     return run
 
 
-def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: WorkflowGraph) -> None:
+def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: WorkflowGraph) -> UUID | None:
+    project_ids = set()
     for node in graph.nodes:
         if node.type != "source.upload":
             continue
@@ -206,6 +207,8 @@ def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: Workfl
                 status_code=404,
                 detail="Workflow source project is not available in the active workspace.",
             )
+        project_ids.add(project_id)
+    return next(iter(project_ids)) if len(project_ids) == 1 else None
 
 
 @app.middleware("http")
@@ -1003,8 +1006,8 @@ def create_workflow(graph: WorkflowGraph, request: Request):
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
         workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
-        _validate_graph_workspace_sources(session, workspace.id, graph)
-        workflow = Workflow(name=graph.name, workspace_id=workspace.id)
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=graph.name, workspace_id=workspace.id, project_id=linked_project_id)
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
@@ -1040,7 +1043,7 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
         active_workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
-        _validate_graph_workspace_sources(session, active_workflow.workspace_id, graph)
+        active_workflow.project_id = _validate_graph_workspace_sources(session, active_workflow.workspace_id, graph)
         _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
         workflow = _workflow_lock
         if workflow is None:
@@ -1419,7 +1422,7 @@ def restore_workflow_version(workflow_id: UUID, version: int, request: Request):
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
-        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
+        workflow.project_id = _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         latest = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
@@ -2442,8 +2445,8 @@ def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest, request: R
 
     with SessionLocal() as session:
         workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
-        _validate_graph_workspace_sources(session, workspace.id, graph)
-        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, description=f"Created from built-in preset: {preset['id']}")
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, project_id=linked_project_id, description=f"Created from built-in preset: {preset['id']}")
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
@@ -2531,8 +2534,8 @@ def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest, re
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
         workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
-        _validate_graph_workspace_sources(session, workspace.id, graph)
-        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, description=f"Cloned from template: {template.name}")
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, project_id=linked_project_id, description=f"Cloned from template: {template.name}")
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
