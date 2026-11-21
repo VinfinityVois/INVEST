@@ -11,20 +11,43 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        "finding_states",
-        sa.Column(
-            "assigned_to_user_id",
-            sa.Uuid(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="SET NULL"),
-            nullable=True,
-        ),
+    assigned_column = sa.Column(
+        "assigned_to_user_id",
+        sa.Uuid(as_uuid=True),
+        nullable=True,
     )
-    op.create_index(
-        "ix_finding_states_assigned_to_user_id",
-        "finding_states",
-        ["assigned_to_user_id"],
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "sqlite":
+        # SQLite cannot ALTER TABLE to add a foreign-key constraint. Batch mode
+        # rebuilds the table while preserving its existing rows and constraints.
+        with op.batch_alter_table("finding_states", recreate="always") as batch:
+            batch.add_column(assigned_column)
+            batch.create_foreign_key(
+                "fk_finding_states_assigned_to_user_id_users",
+                "users",
+                ["assigned_to_user_id"],
+                ["id"],
+                ondelete="SET NULL",
+            )
+            batch.create_index(
+                "ix_finding_states_assigned_to_user_id",
+                ["assigned_to_user_id"],
+            )
+    else:
+        op.add_column("finding_states", assigned_column)
+        op.create_foreign_key(
+            "fk_finding_states_assigned_to_user_id_users",
+            "finding_states",
+            "users",
+            ["assigned_to_user_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+        op.create_index(
+            "ix_finding_states_assigned_to_user_id",
+            "finding_states",
+            ["assigned_to_user_id"],
+        )
     op.execute("UPDATE finding_states SET state = 'resolved' WHERE state = 'fixed'")
     op.create_table(
         "finding_comments",
