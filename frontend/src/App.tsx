@@ -255,6 +255,7 @@ export default function App() {
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
   const [templateItems, setTemplateItems] = useState<Array<{id:string;name:string;description:string;category:string;node_count:number;created_at?:string}>>([]);
+  const [presetItems, setPresetItems] = useState<Array<{id:string;name:string;description:string;category:string;node_count:number;setup_required:string[]}>>([]);
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateCategory, setTemplateCategory] = useState("Все");
   const [templateLoading, setTemplateLoading] = useState(false);
@@ -1045,13 +1046,19 @@ export default function App() {
       const params = new URLSearchParams();
       if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
       if (templateSearch.trim()) params.set("q", templateSearch.trim());
-      const response = await fetch("/api/templates" + (params.toString() ? "?" + params.toString() : ""));
-      const data = await response.json();
+      const [response, presetResponse] = await Promise.all([
+        fetch("/api/templates" + (params.toString() ? "?" + params.toString() : "")),
+        fetch("/api/presets"),
+      ]);
+      const [data, presets] = await Promise.all([response.json(), presetResponse.json()]);
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
+      if (!presetResponse.ok) throw new Error(typeof presets.detail === "string" ? presets.detail : "Не удалось загрузить встроенные presets");
       setTemplateItems(Array.isArray(data) ? data : []);
+      setPresetItems(Array.isArray(presets) ? presets : []);
     } catch (error) {
       setTemplateError(String(error));
       setTemplateItems([]);
+      setPresetItems([]);
     } finally { setTemplateLoading(false); }
   };
   useEffect(() => {
@@ -1103,6 +1110,41 @@ export default function App() {
       setSelectedEdgeId(null);
       setTemplateLibraryOpen(false);
       setResult("Шаблон скопирован в новый workflow · " + workflow.name + ". Перед запуском проверь конфигурацию источника и webhook.");
+      setShowResult(true);
+    } catch (error) {
+      setTemplateError(String(error));
+    } finally { setTemplateBusyId(null); }
+  };
+  const clonePresetIntoEditor = async (presetId: string) => {
+    setTemplateBusyId("preset:" + presetId);
+    setTemplateError("");
+    try {
+      const response = await fetch("/api/presets/" + presetId + "/clone", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+      const loaded = await fetch("/api/workflows/" + data.id);
+      const workflow = await loaded.json();
+      if (!loaded.ok || !workflow.graph) throw new Error("Preset скопирован, но граф не удалось загрузить");
+      setWorkflowId(workflow.id);
+      setWorkflowDraftName(workflow.name || "");
+      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
+        const manifest = manifests.find(item => item.type === node.type);
+        return {
+          id: node.id, type: "workflow", position: node.position,
+          data: {
+            label: manifest?.title || node.type, nodeType: node.type,
+            category: manifest?.category || "Logic", description: manifest?.description || "",
+            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
+          },
+        } as FlowNode;
+      }));
+      setEdges(workflow.graph.edges || []);
+      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
+      setSelectedEdgeId(null);
+      setTemplateLibraryOpen(false);
+      setResult("Создан workflow из preset «" + workflow.name + "». Укажи разрешённый Git URL в блоке Git repository, затем сохрани и запускай вручную или через CI Gate.");
       setShowResult(true);
     } catch (error) {
       setTemplateError(String(error));
@@ -1878,7 +1920,7 @@ export default function App() {
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
       <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
         <header className="template-library-header">
-          <div><span className="eyebrow">WORKFLOW CATALOG</span><h2 id="template-library-title"><Library size={18}/> Библиотека шаблонов</h2><p>Готовые графы для быстрого старта. Копирование не запускает анализ.</p></div>
+          <div><span className="eyebrow">WORKFLOW CATALOG</span><h2 id="template-library-title"><Library size={18}/> Каталог workflow</h2><p>Встроенные presets и опубликованные шаблоны. Создание копии не запускает анализ.</p></div>
           <button className="icon-button" onClick={() => setTemplateLibraryOpen(false)} aria-label="Закрыть библиотеку"><X size={16}/></button>
         </header>
         <div className="template-library-tools">
@@ -1887,10 +1929,17 @@ export default function App() {
         </div>
         {templateError && <div className="template-library-error"><AlertTriangle size={14}/><span>{templateError}</span><button onClick={() => void loadTemplateLibrary()}>Повторить</button></div>}
         <div className="template-library-list">
-          {templateLoading ? <div className="template-library-empty">Загружаем каталог…</div> : templateItems.length ? templateItems.map(item => <article className="template-library-card" key={item.id}>
-            <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>{item.category}</span></div><p>{item.description || "Описание не добавлено."}</p><small>{item.node_count} блоков · опубликован {formatDate(item.created_at)}</small></div>
-            <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void cloneTemplateIntoEditor(item.id)}>{templateBusyId === item.id ? "Копирование…" : "Клонировать"}</button>
-          </article>) : <div className="template-library-empty"><Library size={25}/><b>Шаблоны не найдены</b><span>Попробуй изменить поиск или категорию. Новые шаблоны появятся после публикации администратором.</span></div>}
+          {templateLoading ? <div className="template-library-empty">Загружаем каталог…</div> : <>
+            {presetItems.map(item => <article className="template-library-card" key={"preset:" + item.id}>
+              <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>BUILT-IN · {item.category}</span></div><p>{item.description}</p><small>{item.node_count} блоков · требуется настроить: {item.setup_required.join(", ") || "ничего"}</small></div>
+              <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void clonePresetIntoEditor(item.id)}>{templateBusyId === "preset:" + item.id ? "Создание…" : "Создать workflow"}</button>
+            </article>)}
+            {templateItems.map(item => <article className="template-library-card" key={item.id}>
+              <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>{item.category}</span></div><p>{item.description || "Описание не добавлено."}</p><small>{item.node_count} блоков · опубликован {formatDate(item.created_at)}</small></div>
+              <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void cloneTemplateIntoEditor(item.id)}>{templateBusyId === item.id ? "Копирование…" : "Клонировать"}</button>
+            </article>)}
+            {!presetItems.length && !templateItems.length && <div className="template-library-empty"><Library size={25}/><b>Ничего не найдено</b><span>Попробуй изменить поиск или категорию.</span></div>}
+          </>}
         </div>
         <footer className="template-library-footer"><span>SAFE CLONE · NO AUTO EXECUTION</span><button onClick={() => setTemplateLibraryOpen(false)}>Закрыть</button></footer>
       </section>
