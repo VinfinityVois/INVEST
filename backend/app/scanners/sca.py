@@ -703,7 +703,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
             )
             for alias_match in alias_pattern.finditer(block):
-                configuration_match = re.search(r"([A-Za-z_]\\w*)\\s*\\(\\s*$", block[:alias_match.start()])
+                configuration_match = re.search(r"([A-Za-z_]\w*)\s*\(\\s*$", block[:alias_match.start()])
                 if not include_dev and configuration_match and _is_dev_configuration(configuration_match.group(1)):
                     continue
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
