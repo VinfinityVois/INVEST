@@ -140,6 +140,7 @@ from app.security.dashboard_api import router as dashboard_router
 from app.security.findings_api import router as findings_router
 from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
+from app.security.file_versions import sha256_text, version_matches
 
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -688,7 +689,7 @@ def preview_project_file(
             "start_line": first,
             "end_line": last,
             "total_lines": len(lines),
-            "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "sha256": sha256_text(content),
             "editable": editable,
             "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
@@ -909,8 +910,8 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
             original = resolved.read_text(encoding="utf-8")
             if not _project_content_is_safe(original):
                 raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
-            current_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
-            if current_sha256 != payload.expected_sha256:
+            current_sha256 = sha256_text(original)
+            if not version_matches(original, payload.expected_sha256):
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -938,7 +939,7 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
             "path": relative.as_posix(),
             "bytes": len(payload.content.encode("utf-8")),
             "previous_sha256": current_sha256,
-            "new_sha256": hashlib.sha256(payload.content.encode("utf-8")).hexdigest(),
+            "new_sha256": sha256_text(payload.content),
         }))
         session.commit()
     return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
