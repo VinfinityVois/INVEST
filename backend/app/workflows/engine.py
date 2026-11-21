@@ -494,7 +494,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 policy_id = gate_config.get("policy_pack")
                 if policy_id:
                     policy = rule_packs.resolve([policy_id], analyzer="policy")[0]
-                    gate_config = {**policy, **gate_config}
+                    gate_config = {**gate_config, **policy}
                 evaluation = evaluate_security_gate(list(unique.values()), gate_config, finding_states)
                 output = {
                     "status": "blocked" if evaluation["blocked"] else "completed",
