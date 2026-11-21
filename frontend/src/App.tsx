@@ -665,7 +665,7 @@ export default function App() {
           : <input id={id} type="text" value={String(value)} maxLength={field.maxLength} placeholder={field.format === "uri" ? "https://…" : ""} autoComplete="off" spellCheck={field.format !== "uri"} onChange={event => setField(key, event.target.value)}/>}
           {field.description && <small className="schema-field-help">{field.description}</small>}
           {(field.minimum !== undefined || field.maximum !== undefined || field.minLength !== undefined || field.maxLength !== undefined) && <small className="schema-field-constraints">{[field.minimum !== undefined ? "мин. " + field.minimum : "", field.maximum !== undefined ? "макс. " + field.maximum : "", field.minLength !== undefined ? "от " + field.minLength + " симв." : "", field.maxLength !== undefined ? "до " + field.maxLength + " симв." : ""].filter(Boolean).join(" · ")}</small>}
-          {requiredField && (selectedNode.data.config[key] === undefined || selectedNode.data.config[key] === null || selectedNode.data.config[key] === "") && <small className="schema-field-error">Обязательное поле</small>}
+          {requiredField && field.default === undefined && (selectedNode.data.config[key] === undefined || selectedNode.data.config[key] === null || selectedNode.data.config[key] === "") && <small className="schema-field-error">Обязательное поле</small>}
         </div>;
       })}
     </div>;
@@ -1447,7 +1447,7 @@ export default function App() {
               <button className="ghost" onClick={saveNodeConfig}>Применить JSON</button>
             </details>
           </>}}
-          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
+          {selectedNode.data.nodeType !== "ai.explain" && selectedNode.data.nodeType !== "notify.webhook" && selectedNode.data.nodeType !== "trigger.schedule" && selectedNode.data.nodeType !== "logic.compare" && !manifests.find(item => item.type === selectedNode.data.nodeType)?.config_schema && <><button className="save-config" onClick={saveNodeConfig}><Check size={13} /> Применить настройки</button>{configError && <p className="config-error">{configError}</p>}</>}
           <div className="element-actions"><button className="ghost" onClick={duplicateSelectedNode}><Copy size={13} /> Дублировать</button><button className="danger" onClick={deleteSelectedNode}><Trash2 size={13} /> Удалить блок</button></div>
           <p className="edit-hint">Замена сохраняет позицию и связи блока, но сбрасывает его конфигурацию. Удаление также удаляет связанные рёбра.</p>
         </section>}
