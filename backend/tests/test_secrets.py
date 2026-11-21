@@ -123,3 +123,39 @@ def test_rule_pack_loader_rejects_inheritance_cycles(tmp_path):
     import pytest
     with pytest.raises(RulePackError, match="inheritance cycle"):
         RulePackRegistry(tmp_path)
+def test_real_secret_containing_example_is_not_ignored():
+    value = "prod_example_k7Qp9xVm2Rz8"
+
+    findings = scan_text(
+        f'api_key = "{value}"',
+        "config.py",
+    )
+
+    assert findings
+    assert value not in str(findings)
+
+
+def test_real_secret_containing_xxx_is_not_ignored():
+    value = "prod_xxx_k7Qp9xVm2Rz8"
+
+    findings = scan_text(
+        f'api_key = "{value}"',
+        "config.py",
+    )
+
+    assert findings
+    assert value not in str(findings)
+
+
+def test_common_placeholder_formats_are_ignored():
+    for value in (
+        "changeme",
+        "YOUR_API_KEY_HERE",
+        "${API_KEY}",
+        "{{SECRET_TOKEN}}",
+        "%API_KEY%",
+    ):
+        assert scan_text(
+            f'api_key = "{value}"',
+            "config.py",
+        ) == []

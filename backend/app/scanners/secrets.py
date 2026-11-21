@@ -9,7 +9,33 @@ from app.rules_loader import RulePackError, rule_packs
 MAX_FILE_BYTES=1_000_000
 MAX_FILES=20_000
 SKIP_DIRS={".git","node_modules",".gradle","build","dist","target",".venv"}
-PLACEHOLDERS=("changeme","change-me","example","your_","xxx","dummy","placeholder")
+PLACEHOLDER_VALUES = {
+    "changeme",
+    "change-me",
+    "change_me",
+    "example",
+    "your_key",
+    "your_api_key",
+    "your_token",
+    "your_secret",
+    "your_password",
+    "xxx",
+    "dummy",
+    "placeholder",
+    "password",
+    "secret",
+    "token",
+}
+
+PLACEHOLDER_PATTERN = re.compile(
+    r"(?i)^(?:"
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*\}"
+    r"|\{\{[^{}]{1,80}\}\}"
+    r"|%[A-Za-z_][A-Za-z0-9_]*%"
+    r"|<[^<>]{1,80}>"
+    r"|your[_-](?:api[_-]?key|access[_-]?token|client[_-]?secret|password|secret|token)(?:[_-]?here)?"
+    r")$"
+)
 SECRET_NAME=re.compile(r"(?i)(password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|authorization|bearer|credential)")
 QUOTED=r"""["']([^"'\r\n]{8,})["']"""
 PATTERNS=[
@@ -25,8 +51,12 @@ def _shannon_entropy(value):
 
 SECRET_LITERAL_ASSIGNMENT=re.compile(r"""(?i)(?P<name>[A-Za-z_][\w.-]*(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|credential|authorization)[\w.-]*)\s*[:=]\s*["'](?P<value>[^"'\r\n]{20,})["']""")
 def _is_placeholder(value):
- low=value.strip().lower()
- return any(x in low for x in PLACEHOLDERS) or low in {"password","secret","token"} or low.startswith("$")
+    normalized = value.strip().lower()
+
+    if normalized in PLACEHOLDER_VALUES:
+        return True
+
+    return bool(PLACEHOLDER_PATTERN.fullmatch(normalized))
 def _masked(value):
  return "[REDACTED]" if len(value)<=8 else value[:3]+"*"*min(12,len(value)-6)+value[-3:]
 def _make_finding(rule_id,class_name,path,line,value,severity,confidence,end_line=None):
