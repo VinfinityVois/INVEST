@@ -265,3 +265,27 @@ class UnsafeEscapeService(private val jdbc: JdbcTemplate) {
         item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
         for item in findings
     )
+
+def test_interprocedural_sql_taint_parses_kotlin_raw_strings_with_braces(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "RawSqlController.kt").write_text(
+        '''class RawSqlController(private val repository: RawSqlRepository) {
+    fun search(@RequestParam term: String) = repository.find(term)
+}
+class RawSqlRepository(private val jdbc: JdbcTemplate) {
+    fun find(value: String): List<String> {
+        val sql = """SELECT name FROM item WHERE name = '$value' /* } */"""
+        return jdbc.queryForList(sql, String::class.java)
+    }
+}
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_kotlin_project(root)
+    assert any(
+        item["rule_id"] == "kotlin.taint.interprocedural-sql-injection"
+        and item["path"].endswith("RawSqlController.kt")
+        for item in findings
+    )
