@@ -1,7 +1,7 @@
 # INVEST — актуальный аудит исходников и roadmap
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `bd05d31d8a804535c542cc16759fb61c4af4439f`  
+**Срез исходников:** `21758f1f5e24c67de1e0d373b53aa909b26b88e7` (последний проверенный кодовый commit; последующие изменения — только синхронизация документации)  
 **Дата:** 2026-11-21  
 **Метод:** статический просмотр backend, frontend, migrations, tests, CI и документации. Это не penetration test и не runtime-проверка локального Docker.
 
@@ -14,6 +14,10 @@
 Добавлены bootstrap первого администратора, Argon2id password hashing, server-side sessions, HttpOnly cookie, logout/revocation, Origin validation и database-backed login rate limits.
 
 **Текущее состояние:** базовый tenant boundary теперь реализован для browser API: Organization/Workspace/Membership, активный Workspace в server-side session, workspace ownership у Project/Workflow, а Run/Findings/Reports наследуют scope через Workflow. Browser endpoints проверяют membership и role; CI и template publish используют API tokens, привязанные к Workspace и scopes. Это существенный переход от single-operator модели, но ещё не полный production RBAC: остаются invitations, workspace export/delete/retention, полная проверка всех фоновых/внешних путей, audit UI, backup/restore и runtime-проверки.
+
+## Последняя CI-проверка кодового snapshot
+
+На кодовом commit `21758f1f5e24c67de1e0d373b53aa909b26b88e7` GitHub Actions run `44922979633` завершился успешно: backend, frontend, benchmark и container — **4/4 jobs success**. Benchmark закреплённого `TBagirov/training` commit `fe1fcbe212669783480666b9b60147c8a8c6eef4` подтвердил 15/15 ожидаемых findings: Secrets 5/5, SCA 5/5, SAST 5/5; precision/recall/F1 = 1.0 для каждой категории, false positives/missed/controls = 0. Это benchmark evidence, не runtime E2E доказательство AI/webhook/worker.
 
 ## 1. Реализация по слоям
 
@@ -33,7 +37,7 @@
 | Notifications | HTTPS webhook with allowlist, DNS checks, no redirects/proxy trust | Реализовано; actual delivery needs demo |
 | Security Gate | Named policy packs and deterministic decision | Реализовано |
 | Rule packs/presets/templates | YAML inheritance, built-in preset, sanitized template publish/clone | Реализовано |
-| CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Реализовано; external consumer repository setup unverified |
+| CI | Backend tests, frontend build, scanner benchmarks, Docker, reusable security-check | Внутренний CI 4/4 success; LESS E2E PASS подтверждён; NEVZ E2E pending |
 | Authentication | Bootstrap admin, Argon2id, hashed server sessions, 12h lifetime, logout, Origin checks, rate limits | Реализовано для browser account flow |
 | User management | Admin create/list/search/filter/pagination/update email/role/status; profile email/password/session controls; soft deactivation revokes sessions | Реализовано частично; password recovery, MFA and deletion policy open |
 | Self-service account | Password change after current-password verification; session list, revoke one/others | Реализовано в API/UI; требует runtime UX check |
@@ -41,7 +45,7 @@
 | Authorization / tenancy | Organization/Workspace/Membership, active session workspace, project/workflow ownership, scoped browser APIs and CI tokens | Реализовано базово; edge routes and full RBAC review remain |
 | Finding lifecycle | open, accepted_risk, fixed, false_positive; reason, expiry, history | Частично |
 | Audit log | Selected events persisted; no actor identity/full query/export/tamper evidence | Частично |
-| Reports | JSON and HTML endpoints; JSON can be saved to project | Частично; CSV/SARIF/PDF/XLSX not confirmed |
+| Reports | JSON/HTML endpoints; JSON can be saved to project; filtered findings CSV export | Частично; SARIF/PDF/XLSX not confirmed |
 | Release operations | Docker compose and CI exist | Partial; backup/restore, monitoring and load tests open |
 
 ## 2. Authentication and security boundary
@@ -104,7 +108,7 @@ Remaining:
 
 ### Reports and findings
 - JSON and HTML report exports exist.
-- CSV, SARIF, PDF and XLSX were not confirmed.
+- CSV export текущей отфильтрованной выборки findings добавлен в `frontend/src/App.tsx` (commit `21758f1`); экспорт не включает source code и secret values. SARIF, PDF и XLSX не подтверждены.
 - Finding states and history exist, but assignment, comments, labels, due dates and a complete reopen/approval process are not implemented.
 
 ## 5. Runtime verification still required
