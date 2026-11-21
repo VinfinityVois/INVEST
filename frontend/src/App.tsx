@@ -336,7 +336,11 @@ export default function App() {
 function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
-  useEffect(() => { window.localStorage.setItem("invest.theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
+  useEffect(() => {
+    window.localStorage.setItem("invest.theme", theme);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
@@ -914,6 +918,64 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
     if (!response.ok) throw new Error("Не удалось обновить библиотеку проектов");
     setProjects(await response.json());
   };
+  const resetProjectRunState = () => {
+    setFindings([]);
+    setSelectedFinding(null);
+    setFindingStates({});
+    setFindingHistory({});
+    setFindingQuery("");
+    setFindingSeverity("Все");
+    setFindingLifecycleFilter("Все");
+    setTelemetry(null);
+    setLastRunId(null);
+    window.localStorage.removeItem("invest.lastRunId");
+    setWorkflowRuns([]);
+    setWorkflowVersions([]);
+    setWorkflowVersionDiff(null);
+    setCompareVersion(null);
+    setRunComparison(null);
+    setRunCompareFrom("");
+    setRunCompareTo("");
+    setSecurityTrend(null);
+    setSourcePreview(null);
+    setSourcePreviewOpen(false);
+    setSourcePreviewError("");
+    setSourceWindowStart(1);
+    setSelectedEdgeId(null);
+    setTraceFilter("all");
+    setNodes(current => current.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        executionStatus: "idle",
+        executionDetail: "",
+        executionNotes: [],
+        executionSeverity: undefined,
+        executionDuration: undefined,
+        executionCount: undefined,
+        executionCoverage: undefined,
+        executionProgress: undefined,
+        executionProgressLabel: undefined,
+      },
+    })));
+  };
+  const clearProjectModules = () => {
+    if (!window.confirm("Очистить модули текущего workflow? Сам проект и все его файлы останутся в библиотеке.")) return;
+    resetProjectRunState();
+    const sourceConfig = activeProject ? { path: activeProject.workspace_path } : {};
+    const resetNodes = seedNodes.map(node => node.id === "source"
+      ? { ...node, data: { ...node.data, label: activeProject?.name || node.data.label, config: sourceConfig } }
+      : { ...node, data: { ...node.data, executionStatus: "idle" as const, executionDetail: "", executionNotes: [] } });
+    setNodes(resetNodes);
+    setEdges(seedEdges);
+    setSelectedNodeId("source");
+    setSelectedEdgeId(null);
+    setWorkflowId(null);
+    setWorkflowDraftName(activeProject?.name || "Security pipeline");
+    setWorkflowDirty(true);
+    setResult("Модули workflow очищены. Проект и его файлы сохранены.");
+    setShowResult(true);
+  };
   const uploadProjectArchive = async (file: File | undefined, projectId?: string) => {
     if (!file) return;
     setUploading(true); setUploadingProjectId(projectId || "new");
@@ -952,8 +1014,17 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
       const response = await apiFetch(`/api/projects/${project.id}/files`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось открыть проект");
+      resetProjectRunState();
       setActiveProject(data.project || project);
       setProjectFiles(data.files || []);
+      setProjectFileQuery("");
+      setExpandedProjectDirs(new Set());
+      setProjectContentQuery("");
+      setProjectContentResults([]);
+      setProjectHistoryOpen(false);
+      setEditorFind("");
+      setEditorReplace("");
+      setEditorJumpLine("");
       setProjectFilePreview(null);
       setProjectVisualPreview(null);
       setProjectEditorTabs([]);
@@ -980,6 +1051,18 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
       setResult("Невозможно применить проект: добавь на граф блок-источник.");
       return;
     }
+    resetProjectRunState();
+    setProjectWorkspaceOpen(false);
+    setProjectFiles([]);
+    setProjectFilePreview(null);
+    setProjectVisualPreview(null);
+    setProjectEditorTabs([]);
+    setActiveEditorTab(null);
+    setProjectHistory([]);
+    setProjectHistoryOpen(false);
+    setProjectFileQuery("");
+    setProjectContentQuery("");
+    setProjectContentResults([]);
     updateNode(sourceNode.id, {
       nodeType: "source.upload",
       label: project.name,
@@ -1608,6 +1691,7 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
               <div className="project-library-main"><div className="project-folder-icon"><FolderOpen size={15}/></div><div className="project-library-copy"><b title={project.name}>{project.name}</b><small>{project.file_count} файлов · {(project.expanded_bytes / 1048576).toFixed(1)} MiB</small></div></div>
               <div className="project-library-actions">
                 <button title="Открыть файлы и историю проекта" onClick={() => void openProject(project)}><FolderOpen size={12}/>Открыть</button><button className="project-apply-button" title="Подключить проект как источник текущего workflow" onClick={() => applyProject(project)}><Check size={12}/>Применить</button>
+                {activeProject?.id === project.id && <button title="Очистить модули workflow, не удаляя проект и его файлы" onClick={clearProjectModules}><Layers3 size={12}/>Очистить модули</button>}
                 <label title="Обновить содержимое ZIP"><RefreshCw size={12}/><input type="file" accept=".zip,application/zip" disabled={uploading || busy} onChange={event => { void uploadProjectArchive(event.target.files?.[0], project.id); event.currentTarget.value = ""; }}/></label>
                 <button title="Переименовать" onClick={() => void renameProject(project)}><Pencil size={12}/></button>
                 <button title="Удалить проект" className="project-delete" onClick={() => void deleteProject(project)}><Trash2 size={12}/></button>

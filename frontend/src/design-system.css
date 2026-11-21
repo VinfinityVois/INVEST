@@ -1036,3 +1036,156 @@
 @media (prefers-reduced-motion:reduce) {
   .shell * { scroll-behavior:auto!important;transition-duration:0.01ms!important; }
 }
+
+
+/* Theme parity and consistent workspace rhythm */
+.shell[data-theme="light"] {
+  color-scheme: light;
+  --page:#f3f6f8;
+  --surface:#ffffff;
+  --elevated:#f8fafb;
+  --border:#d6dee5;
+  --text:#17212b;
+  --text-secondary:#526170;
+  --muted:#718091;
+  --icon:#526170;
+  --canvas:#edf2f5;
+  --dots:#d6dee5;
+  --soft-accent:#e6f5ed;
+  --accent-text:#12613b;
+  --shadow:0 2px 8px rgba(26,42,58,.07),0 10px 24px rgba(26,42,58,.05);
+}
+.shell[data-theme="light"] .topbar {
+  background:rgba(255,255,255,.96);
+  border-bottom-color:var(--border);
+}
+.shell[data-theme="light"] .brand b,
+.shell[data-theme="light"] .panel-heading h3,
+.shell[data-theme="light"] .inspector-top h3,
+.shell[data-theme="light"] .editor-head h1,
+.shell[data-theme="light"] .workflow-title-input,
+.shell[data-theme="light"] .node-copy b,
+.shell[data-theme="light"] .app-menu button b,
+.shell[data-theme="light"] .app-menu a b {
+  color:var(--text);
+}
+.shell[data-theme="light"] .brand small,
+.shell[data-theme="light"] .editor-head p,
+.shell[data-theme="light"] .panel-intro,
+.shell[data-theme="light"] .field-label,
+.shell[data-theme="light"] .source-field,
+.shell[data-theme="light"] .node-description,
+.shell[data-theme="light"] .node-copy small,
+.shell[data-theme="light"] .node-topline,
+.shell[data-theme="light"] .node-footer,
+.shell[data-theme="light"] .section-caption,
+.shell[data-theme="light"] .eyebrow {
+  color:var(--text-secondary);
+}
+.shell[data-theme="light"] .status,
+.shell[data-theme="light"] .panel,
+.shell[data-theme="light"] .inspector,
+.shell[data-theme="light"] .palette,
+.shell[data-theme="light"] .source-section,
+.shell[data-theme="light"] .palette-folder,
+.shell[data-theme="light"] .palette-folder-head,
+.shell[data-theme="light"] .library-item,
+.shell[data-theme="light"] .project-library-item,
+.shell[data-theme="light"] .selected-card,
+.shell[data-theme="light"] .edit-section,
+.shell[data-theme="light"] .telemetry-card,
+.shell[data-theme="light"] .workflow-version-card,
+.shell[data-theme="light"] .finding,
+.shell[data-theme="light"] .finding-detail,
+.shell[data-theme="light"] .finding-ai-explanation,
+.shell[data-theme="light"] .finding-lifecycle,
+.shell[data-theme="light"] .workflow-bottom-drawer,
+.shell[data-theme="light"] .app-menu {
+  background:var(--surface);
+  color:var(--text);
+  border-color:var(--border);
+  box-shadow:var(--shadow);
+}
+.shell[data-theme="light"] .workflow-node {
+  background:#ffffff;
+  color:var(--text);
+  border-color:#cbd6df;
+  box-shadow:0 8px 22px rgba(27,45,62,.12);
+}
+.shell[data-theme="light"] .workflow-node .node-copy b,
+.shell[data-theme="light"] .workflow-node .node-topline,
+.shell[data-theme="light"] .workflow-node .node-footer,
+.shell[data-theme="light"] .workflow-node .node-description,
+.shell[data-theme="light"] .workflow-node .node-copy small {
+  color:var(--text-secondary)!important;
+}
+.shell[data-theme="light"] .flow {
+  background-color:var(--canvas);
+  background-image:radial-gradient(rgba(87,108,128,.20) .85px,transparent .85px);
+  border-color:var(--border);
+}
+.shell[data-theme="light"] .field-label input,
+.shell[data-theme="light"] .field-label select,
+.shell[data-theme="light"] .field-label textarea,
+.shell[data-theme="light"] .source-field input,
+.shell[data-theme="light"] .config-editor,
+.shell[data-theme="light"] .finding-search,
+.shell[data-theme="light"] .finding-browser select,
+.shell[data-theme="light"] .searchbox,
+.shell[data-theme="light"] .schema-config-field input,
+.shell[data-theme="light"] .schema-config-field select,
+.shell[data-theme="light"] .schema-config-field textarea {
+  background:#fff!important;
+  color:var(--text)!important;
+  border-color:var(--border)!important;
+}
+.shell[data-theme="light"] .actions .ghost,
+.shell[data-theme="light"] .actions .validate,
+.shell[data-theme="light"] .icon-button,
+.shell[data-theme="light"] .theme-toggle,
+.shell[data-theme="light"] .add-node,
+.shell[data-theme="light"] .archive-upload,
+.shell[data-theme="light"] .git-source-button,
+.shell[data-theme="light"] .save-config,
+.shell[data-theme="light"] .workflow-bottom-run {
+  background:#fff;
+  color:var(--text-secondary);
+  border-color:var(--border);
+}
+.shell[data-theme="light"] .app-menu button,
+.shell[data-theme="light"] .app-menu a,
+.shell[data-theme="light"] .finding p,
+.shell[data-theme="light"] .finding-detail p,
+.shell[data-theme="light"] .finding-ai-explanation p,
+.shell[data-theme="light"] .node-output p,
+.shell[data-theme="light"] .project-library-copy small {
+  color:var(--text-secondary);
+}
+.shell[data-theme="light"] .inspector-tabs,
+.shell[data-theme="light"] .left-rail-tabs,
+.shell[data-theme="light"] .project-tree-toolbar,
+.shell[data-theme="light"] .finding-file-heading,
+.shell[data-theme="light"] .telemetry-metrics>div,
+.shell[data-theme="light"] .severity-strip span {
+  background:#f3f6f8;
+  color:var(--text-secondary);
+  border-color:var(--border);
+}
+.shell[data-theme="light"] .react-flow__controls,
+.shell[data-theme="light"] .react-flow__controls-button,
+.shell[data-theme="light"] .react-flow__minimap {
+  background:#fff!important;
+  border-color:var(--border)!important;
+  fill:var(--text-secondary)!important;
+  color:var(--text-secondary)!important;
+}
+.shell .layout { gap:16px; }
+.shell .panel { min-width:0; }
+.shell .palette-folder-body { display:grid; gap:12px; }
+.shell .source-section { margin:0; }
+.shell .inspector-tab-panel { display:flex; flex-direction:column; gap:12px; }
+.shell .edit-section,.shell .telemetry-card,.shell .run-history-card { margin-block:0 12px; }
+.shell .project-library { display:grid; gap:10px; }
+.shell .project-library-item { margin:0; }
+.shell .project-library-actions { flex-wrap:wrap; gap:7px; }
+.shell .workflow-node { margin:0; }
