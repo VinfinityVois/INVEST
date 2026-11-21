@@ -195,7 +195,6 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [userManagementOpen, setUserManagementOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -332,12 +331,13 @@ export default function App() {
     </main>;
   }
 
-  return <AuthenticatedApp onLogout={() => { void handleLogout(); }} />;
+  return <AuthenticatedApp user={user} onLogout={() => { void handleLogout(); }} />;
 }
 
-function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
+function AuthenticatedApp({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
   useEffect(() => {
     window.localStorage.setItem("invest.theme", theme);
     document.documentElement.dataset.theme = theme;
