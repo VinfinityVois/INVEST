@@ -13,7 +13,7 @@ type SessionItem = {
 type Props = { isAdmin: boolean; currentUserId: string; onClose: () => void };
 
 async function request(path: string, init?: RequestInit) {
-  return fetch(path, {
+  const response = await fetch(path, {
     ...init,
     credentials: "same-origin",
     headers: {
@@ -21,6 +21,8 @@ async function request(path: string, init?: RequestInit) {
       ...init?.headers,
     },
   });
+  if (response.status === 401) window.dispatchEvent(new Event("invest:unauthorized"));
+  return response;
 }
 
 export default function UserManagement({ isAdmin, currentUserId, onClose }: Props) {
