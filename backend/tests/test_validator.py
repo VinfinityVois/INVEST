@@ -153,3 +153,10 @@ def test_webhook_uri_format_is_validated():
     result = validate_graph(graph, registry)
     assert not result.valid
     assert any(issue.code == "invalid_node_config" and "URI" in issue.message for issue in result.issues)
+
+
+def test_malformed_uri_does_not_crash_graph_validation():
+    graph = WorkflowGraph(nodes=[{"id": "hook", "type": "notify.webhook", "config": {"url": "https://[invalid"}}], edges=[])
+    result = validate_graph(graph, registry)
+    assert not result.valid
+    assert any(issue.code == "invalid_node_config" for issue in result.issues)
