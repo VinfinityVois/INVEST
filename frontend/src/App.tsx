@@ -183,7 +183,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
     : data.executionStatus === "completed" ? "success"
     : data.executionStatus === "running" ? "active" : "neutral";
   return <div title={data.executionDetail || data.description} className={"workflow-node tone-" + meta.tone + (selected ? " is-selected" : "") + (data.executionStatus && data.executionStatus !== "idle" ? " node-" + data.executionStatus : "")}>
-    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: portColor(port.data_type), boxShadow: "0 0 9px " + portColor(port.data_type) + "88" }} />)}
+    {(data.inputPorts !== undefined ? data.inputPorts : [{ name: "input", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"in-" + port.name} id={ports.length > 1 ? port.name : undefined} type="target" position={Position.Left} className="workflow-port workflow-port-input" title={`Вход: ${port.name} · ${port.data_type}`} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: portColor(port.data_type), boxShadow: "0 0 10px " + portColor(port.data_type) + "99" }} />)}
     <div className="node-topline"><span>{meta.label}</span><span className={"node-state state-" + outputTone}>{data.executionStatus === "running" && <i className="node-live-dot" />}{statusLabel}</span></div>
     <div className="node-main"><div className="node-symbol">{nodeIcon(data.nodeType, data.category)}</div>
       <div className="node-copy"><b>{data.label}</b><small>{data.nodeType}</small></div></div>
@@ -207,7 +207,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       {(data.outputPorts || []).map(port => <span key={"output-" + port.name}><b>OUT</b>{port.name}<i>{port.data_type}</i></span>)}
     </div>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
-    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
+    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} className="workflow-port workflow-port-output" title={`Выход: ${port.name} · ${port.data_type}`} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
   </div>;
 }
 function CategoryEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style }: import("@xyflow/react").EdgeProps<Edge<{ sourceColor?: string; targetColor?: string }>>) {
@@ -2183,12 +2183,12 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       <section className="editor">
         <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowDirty ? "Есть несохранённые изменения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
-        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, type: "category", data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, type: "category", interactionWidth: 32, data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
-          edgesReconnectable deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.2 }}>
+          edgesReconnectable connectionRadius={36} deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.22 }}>
           <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
         </ReactFlow></div>
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
