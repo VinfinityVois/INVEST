@@ -21,7 +21,7 @@
 1. **Users / Accounts / Access** — завершить recovery/reset, MFA по модели угроз, политику удаления/анонимизации и полную permission matrix.
 2. **Organizations / Workspace / Projects** — завершить [ADR-0001](./adr/0001-workspace-tenancy-model.md): invitations/acceptance, export, soft-delete/retention, organization deletion и полный exceptional-route/background isolation review.
 3. **Findings lifecycle** — статусы, назначение ответственного, комментарии, история, массовые действия, обоснование Accepted Risk/False Positive, fingerprints и сравнение запусков.
-4. **Dashboard / Analytics** — метрики на реальных данных, фильтры, drill-down, корректные агрегаты и пустые состояния.
+4. **Dashboard / Analytics** — базовые workspace-scoped metrics/filter/trend/recent-runs UI реализованы; остаются глубокий drill-down, большие объёмы и UX validation.
 5. **Reports / Export** — проверить JSON/HTML, затем CSV и SARIF; PDF/XLSX после фиксации требований к форматам.
 6. **Audit Log** — полный перечень событий, actor identity, поиск, фильтры, экспорт и retention.
 7. **API Tokens / CI/CD** — базовый UI токенов/scopes/expiry/revoke и workspace-bound CI authorization реализованы; остаются rotation workflow, usage history, docs/examples verification и audit.
@@ -90,7 +90,7 @@
 1. Довести CI для миграций 0008/0009, Workspace Manager и API token flows; проверить локальную миграцию и переключение workspace.
 2. Завершить 1.2: invitations, workspace export/delete/retention и полный route/background isolation review.
 3. Довести 1.1: recovery/reset, MFA по модели угроз, account deletion policy.
-4. После стабилизации модели данных завершить Findings lifecycle, Audit Log, Reports/Export и Dashboard.
+4. После стабилизации модели данных завершить Findings lifecycle, Audit Log, Reports/Export и расширить Dashboard drill-down/performance.
 5. Затем Backup/Restore и оставшиеся API token usage/rotation flows.
 6. Только после функционального завершения перейти к системной стабилизации, затем Security Hardening и Release Readiness.
 
