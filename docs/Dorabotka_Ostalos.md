@@ -54,6 +54,18 @@
 4. расширенная IDOR/BOLA матрица для source files, reports, CI, schedule и bulk operations;
 5. audit UI, token usage history и event retention.
 
+### 1.3 Dashboard / Analytics — базовая версия реализована
+
+Добавлен workspace-scoped `GET /api/dashboard/summary` и компактный Dashboard overlay в UI:
+- projects/workflows/scans/findings totals;
+- severity counts, scanner breakdown;
+- trend by scan date;
+- recent runs with report links;
+- filters by 7/30/90-day period, project, severity and scanner;
+- cross-workspace aggregate isolation tests.
+
+Остаётся: UX/drill-down до полноценного списка findings, расширенная динамика по scanner/severity, benchmark производительности агрегатов на больших workspace и проверка пустых/длинных периодов на реальных данных.
+
 ### Другие функциональные пробелы
 
 1. **Regex-условие.** Сейчас `logic.compare` покрывает equals/contains и числовые сравнения, но отдельного regex-оператора/ноды в реестре нет. Добавлять только если это требуется точной формулировкой задания.
