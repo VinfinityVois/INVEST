@@ -61,7 +61,7 @@ def test_downstream_is_blocked_when_upstream_source_is_unconfigured():
     assert result["outputs"]["scan"]["status"] == "blocked"
     scan_trace = next(item for item in result["trace"] if item["node_id"] == "scan")
     assert scan_trace["diagnostic_level"] == "blocked"
-    assert scan_trace["reason_code"] == "UPSTREAM_CONFIGURATION_REQUIRED"
+    assert scan_trace["reason_code"] == "UPSTREAM_SOURCE_UNAVAILABLE"
 
 
 def test_unconfigured_source_is_reported_as_partial_with_actionable_status():

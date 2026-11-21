@@ -603,7 +603,9 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if blocking_parent is not None:
                 parent_status = blocking_parent.get("status")
                 reason_code = (
-                    "UPSTREAM_CONFIGURATION_REQUIRED"
+                    "UPSTREAM_SOURCE_UNAVAILABLE"
+                    if node.type.startswith("scan.")
+                    else "UPSTREAM_CONFIGURATION_REQUIRED"
                     if parent_status == "configuration_required"
                     else "UPSTREAM_EXECUTION_FAILED"
                     if parent_status == "failed"
