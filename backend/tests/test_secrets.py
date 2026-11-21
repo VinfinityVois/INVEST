@@ -114,14 +114,12 @@ def test_selected_rule_pack_patterns_are_executed_and_path_scoped():
 def test_rule_pack_loader_rejects_inheritance_cycles(tmp_path):
     from app.rules_loader import RulePackError, RulePackRegistry
 
-    (tmp_path / "a.yml").write_text(
-        "pack_id: pack-a\\ntitle: A\\nversion: 1\\nanalyzer: secrets\\nextends: [pack-b]\\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "b.yml").write_text(
-        "pack_id: pack-b\\ntitle: B\\nversion: 1\\nanalyzer: secrets\\nextends: [pack-a]\\n",
-        encoding="utf-8",
-    )
+    (tmp_path / "a.yml").write_text("\\n".join([
+        "pack_id: pack-a", "title: A", "version: 1", "analyzer: secrets", "extends: [pack-b]",
+    ]), encoding="utf-8")
+    (tmp_path / "b.yml").write_text("\\n".join([
+        "pack_id: pack-b", "title: B", "version: 1", "analyzer: secrets", "extends: [pack-a]",
+    ]), encoding="utf-8")
     import pytest
     with pytest.raises(RulePackError, match="inheritance cycle"):
         RulePackRegistry(tmp_path)
