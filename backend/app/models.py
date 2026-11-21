@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, BigInteger, String, Text, UniqueConstraint, func, Uuid, JSON
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, BigInteger, String, Text, UniqueConstraint, func, Uuid, JSON, text
 from sqlalchemy.dialects import postgresql
 
 UUID = Uuid(as_uuid=True)
@@ -183,6 +183,7 @@ class OrganizationMembership(Base):
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id"),
         CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_org_membership_role"),
+        Index("uq_organization_single_owner", "organization_id", unique=True, sqlite_where=text("role = 'owner'"), postgresql_where=text("role = 'owner'")),
     )
 
 
