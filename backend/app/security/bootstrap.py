@@ -4,6 +4,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models import User
+from app.security.tenancy import claim_unassigned_legacy_workspace, create_personal_workspace
 from app.security.auth import normalize_email
 from app.security.passwords import hash_password
 
@@ -58,5 +59,7 @@ def create_bootstrap_admin(db: Session, email: str, password: str) -> User:
     )
     db.add(user)
     db.flush()
+    create_personal_workspace(db, user)
+    claim_unassigned_legacy_workspace(db, user)
 
     return user
