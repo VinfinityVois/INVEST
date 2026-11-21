@@ -18,6 +18,7 @@ type ConfigSchemaProperty = { type?: string; title?: string; description?: strin
 type Manifest = { type: string; title: string; category: string; description: string; inputs?: PortManifest[]; outputs?: PortManifest[]; config_schema?: { type?: string; title?: string; description?: string; required?: string[]; properties?: Record<string, ConfigSchemaProperty>; [key: string]: unknown } };
 type RulePack = { id: string; title: string; analyzer: string; version: number; rule_count: number; extends: string[] };
 type Project = { id: string; name: string; workspace_path: string; original_filename?: string | null; file_count: number; expanded_bytes: number; created_at: string; updated_at: string };
+type WorkspaceSummary = { id: string; name: string; organization_id: string; organization_name: string; role: "admin" | "editor" | "analyst" | "viewer"; is_default: boolean; active: boolean };
 type ProjectFile = { path: string; size: number };
 type ProjectTreeNode = { name: string; path: string; kind: "directory" | "file"; size?: number; children: ProjectTreeNode[] };
 type ProjectHistoryEntry = { action: string; created_at: string; details: { file_count?: number; expanded_bytes?: number; previous_name?: string; name?: string; path?: string; changes?: { added_count?: number; removed_count?: number; changed_count?: number; compared_files?: number; added_files?: string[]; removed_files?: string[]; changed_files?: string[]; sample_truncated?: boolean } } };
@@ -337,12 +338,54 @@ export default function App() {
 function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; onUserUpdated: (user: AuthUser) => void; onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
   const [userManagementOpen, setUserManagementOpen] = useState(false);
   useEffect(() => {
     window.localStorage.setItem("invest.theme", theme);
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      apiFetch("/api/workspaces").then(response => {
+        if (!response.ok) throw new Error("Не удалось загрузить рабочие области.");
+        return response.json();
+      }),
+      apiFetch("/api/workspaces/active").then(response => {
+        if (!response.ok) throw new Error("Не удалось определить активную рабочую область.");
+        return response.json();
+      }),
+    ]).then(([workspaceData, activeData]) => {
+      if (!active) return;
+      setWorkspaces(workspaceData.items || []);
+      setActiveWorkspaceId(activeData.id || "");
+      setWorkspaceError("");
+    }).catch(error => {
+      if (active) setWorkspaceError(error instanceof Error ? error.message : "Ошибка загрузки Workspace.");
+    });
+    return () => { active = false; };
+  }, [user.id]);
+
+  const switchWorkspace = async (workspaceId: string) => {
+    if (!workspaceId || workspaceId === activeWorkspaceId || workspaceSwitching) return;
+    setWorkspaceSwitching(true);
+    setWorkspaceError("");
+    try {
+      const response = await apiFetch("/api/workspaces/" + workspaceId + "/switch", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Не удалось переключить Workspace.");
+      setActiveWorkspaceId(data.id);
+      window.location.reload();
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Ошибка переключения Workspace.");
+      setWorkspaceSwitching(false);
+    }
+  };
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(seedEdges);
   const [manifests, setManifests] = useState<Manifest[]>([]);
@@ -1648,6 +1691,14 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     <header className="topbar">
       <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
       <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
+      <div className="workspace-context" title={workspaceError || "Активная рабочая область"}>
+        <span>WORKSPACE</span>
+        <select aria-label="Активная рабочая область" value={activeWorkspaceId} disabled={workspaceSwitching || workspaces.length < 2} onChange={event => void switchWorkspace(event.target.value)}>
+          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.organization_name} / {workspace.name}</option>)}
+          {workspaces.length === 0 && <option value="">Нет доступных Workspace</option>}
+        </select>
+        {workspaceSwitching && <i className="workspace-spinner" />}
+      </div>
       <div className="actions">
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
