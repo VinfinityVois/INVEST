@@ -1291,7 +1291,7 @@ export default function App() {
           .filter(item => item.diagnostic_level === "error" || item.diagnostic_level === "blocked" || item.status === "failed")
           .map(item => [item.node_id, item.message || item.reason].filter(Boolean).join(": "));
         const details = Array.from(new Set([completed.error, ...nodeErrors, ...traceErrors].filter((item): item is string => Boolean(item && item.trim()))));
-        setResult("Проверка завершилась с ошибкой.\\n" + (details.length ? details.join("\\n") : "Worker завершил запуск без диагностического сообщения. Откройте журнал worker для подробностей."));
+        setResult("Проверка завершилась с ошибкой.\n" + (details.length ? details.join("\n") : "Worker завершил запуск без диагностического сообщения. Откройте журнал worker для подробностей."));
       } else {
         setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
       }
