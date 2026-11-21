@@ -1,13 +1,16 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Integer, BigInteger, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import DateTime, ForeignKey, Integer, BigInteger, String, Text, UniqueConstraint, func, Uuid, JSON
+from sqlalchemy.dialects import postgresql
+
+UUID = Uuid(as_uuid=True)
+JSONB = JSON().with_variant(postgresql.JSONB(), "postgresql")
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
 
 class Workflow(Base):
     __tablename__ = "workflows"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -15,8 +18,8 @@ class Workflow(Base):
 
 class WorkflowVersion(Base):
     __tablename__ = "workflow_versions"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     graph: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -24,8 +27,8 @@ class WorkflowVersion(Base):
 
 class WorkflowRun(Base):
     __tablename__ = "runs"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workflow_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="SET NULL"))
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID | None] = mapped_column(UUID, ForeignKey("workflows.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
     source: Mapped[str] = mapped_column(String(24), nullable=False, default="ui")
     graph_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -39,8 +42,8 @@ class WorkflowRun(Base):
 
 class Finding(Base):
     __tablename__ = "findings"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("runs.id", ondelete="CASCADE"), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     rule_id: Mapped[str] = mapped_column(String(160), nullable=False)
     severity: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -50,8 +53,8 @@ class Finding(Base):
 
 class FindingState(Base):
     __tablename__ = "finding_states"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     state: Mapped[str] = mapped_column(String(24), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -60,8 +63,8 @@ class FindingState(Base):
 
 class Credential(Base):
     __tablename__ = "credentials"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     ciphertext: Mapped[bytes] = mapped_column(nullable=False)
@@ -81,7 +84,7 @@ class AuditLog(Base):
 
 class Project(Base):
     __tablename__ = "projects"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     workspace_path: Mapped[str] = mapped_column(String(260), nullable=False, unique=True)
     original_filename: Mapped[str | None] = mapped_column(String(255))
@@ -93,8 +96,8 @@ class Project(Base):
 
 class WorkflowSchedule(Base):
     __tablename__ = "workflow_schedules"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, unique=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, unique=True)
     cron_expression: Mapped[str] = mapped_column(String(120), nullable=False)
     timezone: Mapped[str] = mapped_column(String(80), nullable=False, default="UTC")
     enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
@@ -107,7 +110,7 @@ class WorkflowSchedule(Base):
 
 class WorkflowTemplate(Base):
     __tablename__ = "workflow_templates"
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
     category: Mapped[str] = mapped_column(String(60), nullable=False, default="general")
