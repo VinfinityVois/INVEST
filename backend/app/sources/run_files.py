@@ -1,6 +1,8 @@
 """Resolve source files strictly within the workspace artifact owned by one run."""
 from pathlib import Path, PurePosixPath
 
+from app.sources.project_root import detect_project_root
+
 
 class RunSourceFileError(ValueError):
     pass
@@ -29,12 +31,14 @@ def resolve_run_source_file(
             continue
         source_name = output.get("path")
         if isinstance(source_name, str):
-            candidates.append(source_name)
+            subdirectory = output.get("project_subdirectory") or output.get("subdirectory")
+            candidates.append((source_name, subdirectory))
 
     if len(candidates) != 1:
         raise RunSourceFileError("Run source artifact is ambiguous or unavailable")
 
-    source_name = PurePosixPath(candidates[0])
+    source_path, project_subdirectory = candidates[0]
+    source_name = PurePosixPath(source_path)
     if source_name.is_absolute() or any(part in {"", ".", ".."} for part in source_name.parts):
         raise RunSourceFileError("Invalid run source artifact")
     if len(source_name.parts) == 1 and source_name.parts[0].startswith(("upload-", "git-")):
@@ -59,7 +63,26 @@ def resolve_run_source_file(
     if not source_root.is_relative_to(workspace) or not source_root.is_dir():
         raise RunSourceFileError("Run source artifact is outside the workspace")
 
-    candidate = source_root
+    if project_subdirectory is not None:
+        if not isinstance(project_subdirectory, str) or not project_subdirectory:
+            raise RunSourceFileError("Invalid project subdirectory")
+        subdirectory = PurePosixPath(project_subdirectory)
+        if subdirectory.is_absolute() or any(part in {"", ".", ".."} for part in subdirectory.parts):
+            raise RunSourceFileError("Invalid project subdirectory")
+        project_root = source_root.joinpath(*subdirectory.parts)
+    else:
+        project_root = detect_project_root(source_root)
+
+    if project_root.is_symlink():
+        raise RunSourceFileError("Symlink project roots are not allowed")
+    try:
+        project_root = project_root.resolve(strict=True)
+    except OSError as exc:
+        raise RunSourceFileError("Project root is unavailable") from exc
+    if not project_root.is_relative_to(source_root) or not project_root.is_dir():
+        raise RunSourceFileError("Project root is outside the run workspace")
+
+    candidate = project_root
     for part in relative.parts:
         candidate = candidate / part
         if candidate.is_symlink():
@@ -68,6 +91,6 @@ def resolve_run_source_file(
         resolved = candidate.resolve(strict=True)
     except OSError as exc:
         raise RunSourceFileError("Source file is unavailable") from exc
-    if not resolved.is_relative_to(source_root) or not resolved.is_file():
+    if not resolved.is_relative_to(project_root) or not resolved.is_file():
         raise RunSourceFileError("Source file is outside the run workspace")
     return resolved

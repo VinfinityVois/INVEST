@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "presets": [
+    {
+      "id": "pr-gate",
+      "file": "pr-gate.json",
+      "name": "PR Gate",
+      "version": 1,
+      "category": "CI",
+      "description": "Полный детерминированный security gate для pull request: Secrets, SCA, Kotlin/Spring SAST, объединение находок и CI policy.",
+      "tags": ["pull-request", "security", "secrets", "sca", "sast", "ci"],
+      "setup_required": ["source.git.url"],
+      "node_count": 7
+    }
+  ]
+}

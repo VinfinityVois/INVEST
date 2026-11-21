@@ -1,0 +1,84 @@
+{
+  "dataset": "training",
+  "category": "SAST",
+  "expected": 5,
+  "detected": 5,
+  "missed": [],
+  "false_positives": 0,
+  "controls_triggered": [],
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "findings": [
+    {
+      "rule_id": "kotlin.spring.credentialed-cors-wildcard",
+      "class": "credentialed-cors-wildcard",
+      "category": "SAST",
+      "path": "src/main/kotlin/lab/repairdesk/config/RepairCors.kt",
+      "line": 13,
+      "severity": "MEDIUM",
+      "confidence": 0.94,
+      "cwe": [
+        "CWE-942"
+      ],
+      "message": "CORS для /api/customer/summary разрешает любой origin вместе с credentials.",
+      "fingerprint": "02d07a4a6c3f45158c131f28cd606ce5a18fc5250116d17aefd271ce917ab9e0"
+    },
+    {
+      "rule_id": "kotlin.spring.public-sensitive-route",
+      "class": "public-sensitive-route",
+      "category": "SAST",
+      "path": "src/main/kotlin/lab/repairdesk/config/RepairSecurity.kt",
+      "line": 18,
+      "severity": "HIGH",
+      "confidence": 0.88,
+      "cwe": [
+        "CWE-862"
+      ],
+      "message": "Чувствительный маршрут /api/pickup/export явно открыт через permitAll().",
+      "fingerprint": "e63939092c40ca44440a3d47d854ebb7616e9049ea45e1e3ba0a2edcd5cc6aae"
+    },
+    {
+      "rule_id": "kotlin.tls.hostname-verification-disabled",
+      "class": "hostname-verification-disabled",
+      "category": "SAST",
+      "path": "src/main/kotlin/lab/repairdesk/integration/SupplierHttpsClient.kt",
+      "line": 13,
+      "severity": "MEDIUM",
+      "confidence": 0.99,
+      "cwe": [
+        "CWE-295"
+      ],
+      "message": "HostnameVerifier принимает любое имя хоста; используйте штатную проверку TLS.",
+      "fingerprint": "0120b5b9e910fba45bda43c26b638bc8caeafb3ba97393e7027cdc7207333ab6"
+    },
+    {
+      "rule_id": "kotlin.jdbc.sql-injection",
+      "class": "sql-injection",
+      "category": "SAST",
+      "path": "src/main/kotlin/lab/repairdesk/repair/RepairLookupController.kt",
+      "line": 13,
+      "severity": "HIGH",
+      "confidence": 0.96,
+      "cwe": [
+        "CWE-89"
+      ],
+      "message": "Параметр запроса frameTag попадает в SQL-строку; используйте placeholder и отдельный bind-параметр.",
+      "fingerprint": "7a2995df6a968fb5715924c7a66bdc8abef7901be4513edf38d86fdb28a5366b"
+    },
+    {
+      "rule_id": "kotlin.spring.idor.unscoped-object-read",
+      "class": "unscoped-object-read",
+      "category": "SAST",
+      "path": "src/main/kotlin/lab/repairdesk/repair/RepairTicketReader.kt",
+      "line": 10,
+      "severity": "HIGH",
+      "confidence": 0.84,
+      "cwe": [
+        "CWE-639"
+      ],
+      "message": "Запись читается только по переданному object ID; отсутствует ограничение по владельцу из Principal.",
+      "fingerprint": "549108dcc1ccff3133670bd4f574acdf622e218e19f67e6a00f3387c7f7950a1"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+from app.rules_loader import rule_packs
+from app.workflows.presets import list_presets, load_preset
+from app.workflows.registry import registry
+from app.workflows.schemas import WorkflowGraph
+from app.workflows.templates import clone_graph, sanitize_graph
+from app.workflows.validator import validate_graph
+
+
+def test_builtin_pr_gate_preset_is_registered():
+    presets = list_presets()
+
+    assert any(item["id"] == "pr-gate" and item["node_count"] == 7 for item in presets)
+
+
+def test_builtin_pr_gate_graph_is_valid_and_uses_registered_packs():
+    preset = load_preset("pr-gate")
+    graph = WorkflowGraph.model_validate(preset["graph"])
+    validation = validate_graph(graph, registry)
+
+    assert validation.valid, validation.model_dump()
+    assert sum(node.type == "ci.gate" for node in graph.nodes) == 1
+    assert {node.type for node in graph.nodes} >= {
+        "trigger.manual", "source.git", "scan.secrets", "scan.sca",
+        "scan.sast", "findings.merge", "ci.gate",
+    }
+    assert rule_packs.resolve(["sca-spring-boot"], analyzer="sca")
+
+
+def test_builtin_pr_gate_clone_gets_fresh_graph_ids():
+    preset = load_preset("pr-gate")
+    source = sanitize_graph(preset["graph"])
+    cloned = clone_graph(source, "PR Gate copy")
+
+    assert cloned["name"] == "PR Gate copy"
+    assert {node["id"] for node in cloned["nodes"]}.isdisjoint(
+        {node["id"] for node in source["nodes"]}
+    )
+    assert len({edge["id"] for edge in cloned["edges"]}) == len(cloned["edges"])

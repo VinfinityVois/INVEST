@@ -1,0 +1,112 @@
+name: INVEST security check
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflow_id:
+        description: Saved INVEST workflow UUID (must include exactly one Security Gate)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      workflow_id:
+        description: Saved INVEST workflow UUID (must include exactly one Security Gate)
+        required: true
+        type: string
+    secrets:
+      INVEST_API_BASE_URL:
+        required: true
+      INVEST_CI_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: invest-security-check-${{ inputs.workflow_id }}
+  cancel-in-progress: false
+
+jobs:
+  security-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate configuration
+        env:
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          WORKFLOW_ID: ${{ inputs.workflow_id }}
+        run: |
+          set -euo pipefail
+          test -n "$API_BASE_URL" || { echo "::error::Set repository secret INVEST_API_BASE_URL"; exit 1; }
+          test -n "$CI_TOKEN" || { echo "::error::Set repository secret INVEST_CI_TOKEN"; exit 1; }
+          [[ "$WORKFLOW_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "::error::workflow_id must be a UUID"; exit 1; }
+
+      - name: Queue security workflow
+        id: queue
+        env:
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          WORKFLOW_ID: ${{ inputs.workflow_id }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            -X POST "$API_BASE_URL/api/ci/workflows/$WORKFLOW_ID/runs" \
+            -H "X-CI-Token: $CI_TOKEN" \
+            -H "Accept: application/json")"
+          run_id="$(jq -er '.run_id' <<< "$response")"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "Queued INVEST run: $run_id"
+
+      - name: Wait for Security Gate
+        env:
+          API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+          CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+          RUN_ID: ${{ steps.queue.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 900))
+          while (( SECONDS < deadline )); do
+            response="$(curl --fail-with-body --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              "$API_BASE_URL/api/ci/runs/$RUN_ID" \
+              -H "X-CI-Token: $CI_TOKEN" \
+              -H "Accept: application/json")"
+            status="$(jq -r '.status // "unknown"' <<< "$response")"
+            decision="$(jq -r '.security_gate.decision // "MISSING"' <<< "$response")"
+            echo "INVEST run=$RUN_ID status=$status gate=$decision"
+
+            case "$status" in
+              completed)
+                case "$decision" in
+                  PASS|WARN)
+                    echo "Security Gate: $decision"
+                    exit 0
+                    ;;
+                  BLOCK)
+                    echo "::error::Security Gate blocked this build"
+                    exit 1
+                    ;;
+                  *)
+                    echo "::error::Run completed without a valid Security Gate decision"
+                    exit 1
+                    ;;
+                esac
+                ;;
+              failed|partial|cancelled)
+                echo "::error::INVEST workflow ended with status $status"
+                jq -r '.error // empty' <<< "$response"
+                exit 1
+                ;;
+              queued|running|cancelling)
+                sleep 5
+                ;;
+              *)
+                echo "::error::Unexpected INVEST run status: $status"
+                exit 1
+                ;;
+            esac
+          done
+          echo "::error::Timed out waiting for INVEST Security Gate"
+          exit 1

@@ -13,7 +13,8 @@ from zoneinfo import ZoneInfo
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.background import BackgroundTask
@@ -24,16 +25,22 @@ from croniter import croniter
 
 from app.config import settings
 from app.ai.explanations import provider_configuration
+from app.ai.fixes import AIFixError, generate_fix_proposal
+from app.ai.workflow_generation import WorkflowGenerationError, generate_workflow_graph
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
+from app.sources.project_root import detect_project_root
 from app.scanners.presentation import _redact
 from app.security.redaction import redact_text
 from app.db import SessionLocal
-from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule
+from app.models import AuditLog, Finding, FindingState, Project, Workflow, WorkflowRun, WorkflowVersion, WorkflowSchedule, WorkflowTemplate
 from app.workflows.registry import registry
+from app.rules_loader import rule_packs
 from app.workflows.schemas import WorkflowGraph
 from app.workflows.validator import validate_graph
 from app.workflows.engine import CACHE_TTL_SECONDS, execute_graph, WorkflowExecutionError
+from app.workflows.templates import sanitize_graph, clone_graph
+from app.workflows.presets import PresetError, list_presets, load_preset
 
 class ProjectRename(BaseModel):
     name: str = Field(min_length=1, max_length=200)
@@ -44,6 +51,18 @@ class ProjectRename(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Название проекта не может быть пустым.")
+        return value
+
+
+class WorkflowGenerateRequest(BaseModel):
+    prompt: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Опишите желаемый workflow (от 10 символов).")
         return value
 
 
@@ -65,8 +84,34 @@ class SelectedRunRequest(BaseModel):
         return normalized
 
 
+
+
+def _lock_workflow_for_version_write(session, workflow_id: UUID):
+    """Serialize workflow version allocation across concurrent writers."""
+    return session.scalar(
+        select(Workflow).where(Workflow.id == workflow_id).with_for_update()
+    )
+
+
+def _lock_run_for_update(session, run_id: UUID):
+    """Serialize run state transitions with worker claims and completion."""
+    return session.scalar(
+        select(WorkflowRun).where(WorkflowRun.id == run_id).with_for_update()
+    )
+
+
+def _lock_schedule_for_update(session, workflow_id: UUID, schedule_id: UUID):
+    """Serialize schedule mutations with the due-schedule dispatcher."""
+    return session.scalar(
+        select(WorkflowSchedule).where(
+            WorkflowSchedule.id == schedule_id,
+            WorkflowSchedule.workflow_id == workflow_id,
+        ).with_for_update()
+    )
+
+
 class FindingStateUpdate(BaseModel):
-    state: Literal["open", "accepted_risk", "fixed", "false_positive"]
+    state: Literal["open", "in_progress", "resolved", "accepted_risk", "false_positive", "fixed"]
     reason: str = Field(min_length=3, max_length=2000)
     expires_at: datetime | None = None
 
@@ -81,12 +126,146 @@ class FindingStateUpdate(BaseModel):
 app = FastAPI(title="AI Security Workflow API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.allowed_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+from app.security.api import router as auth_router, SESSION_COOKIE
+from app.security.users_api import router as users_router
+from app.security.workspaces_api import router as workspaces_router
+from app.security.tokens_api import router as tokens_router, require_workspace_api_token
+from app.security.dashboard_api import router as dashboard_router
+from app.security.findings_api import router as findings_router
+from app.security.tenancy import require_active_workspace
+from app.security.sessions import get_session_context
+from app.security.file_versions import sha256_text, version_matches, project_file_lock
+from app.security.project_file_history import save_project_file_version, load_project_file_version
+from filelock import Timeout as FileLockTimeout
+
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(workspaces_router)
+app.include_router(tokens_router)
+app.include_router(dashboard_router)
+app.include_router(findings_router)
+
+
+def _project_in_active_workspace(session, request: Request, project_id: UUID, *, write: bool = False):
+    roles = {"admin", "editor"} if write else None
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    project = session.scalar(
+        select(Project).where(
+            Project.id == project_id,
+            Project.workspace_id == workspace.id,
+        )
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _workflow_in_active_workspace(session, request: Request, workflow_id: UUID, *, write: bool = False, allowed_roles=None):
+    roles = allowed_roles if allowed_roles is not None else ({"admin", "editor"} if write else None)
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    workflow = session.scalar(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.workspace_id == workspace.id,
+        )
+    )
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow
+
+
+def _run_in_active_workspace(session, request: Request, run_id: UUID, *, write: bool = False):
+    roles = {"admin", "editor"} if write else None
+    workspace, _ = require_active_workspace(session, request, allowed_roles=roles)
+    run = session.scalar(
+        select(WorkflowRun)
+        .join(Workflow, Workflow.id == WorkflowRun.workflow_id)
+        .where(
+            WorkflowRun.id == run_id,
+            Workflow.workspace_id == workspace.id,
+        )
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+
+def _validate_graph_workspace_sources(session, workspace_id: UUID, graph: WorkflowGraph) -> UUID | None:
+    project_ids = set()
+    for node in graph.nodes:
+        if node.type != "source.upload":
+            continue
+        source_path = node.config.get("path")
+        if not isinstance(source_path, str) or not source_path.strip():
+            continue
+        project_id = session.scalar(
+            select(Project.id).where(
+                Project.workspace_id == workspace_id,
+                Project.workspace_path == source_path,
+            )
+        )
+        if project_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Workflow source project is not available in the active workspace.",
+            )
+        project_ids.add(project_id)
+    return next(iter(project_ids)) if len(project_ids) == 1 else None
+
+
+@app.middleware("http")
+async def authentication_middleware(request: Request, call_next):
+    path = request.url.path
+    method = request.method.upper()
+
+    if not path.startswith("/api/") or method == "OPTIONS":
+        return await call_next(request)
+
+    # CI and template publishing use their own dedicated tokens.
+    if path.startswith("/api/ci/") or path == "/api/templates/publish":
+        return await call_next(request)
+
+    if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        if origin not in settings.allowed_origin_list:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Invalid or missing Origin"},
+            )
+
+    if path == "/api/auth/login":
+        return await call_next(request)
+    if path == "/api/auth/logout" and method == "POST":
+        return await call_next(request)
+
+    token = request.cookies.get(SESSION_COOKIE)
+    try:
+        with SessionLocal() as db:
+            session_context = get_session_context(db, token)
+            if session_context is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Authentication required"},
+                )
+            user, user_session = session_context
+            request.state.user = user
+            request.state.user_session_id = user_session.id
+            request.state.current_workspace_id = user_session.current_workspace_id
+            db.commit()
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Authentication service unavailable"},
+        )
+
+    return await call_next(request)
 
 @app.get("/api/ai/status")
 def ai_provider_status():
@@ -110,20 +289,47 @@ def database_health():
 
 
 @app.post("/api/sources/upload", status_code=201)
-def upload_source(file: UploadFile = File(...)):
+def upload_source(request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
+    project_id = uuid4()
+    workspace_path = f"projects/project-{project_id}"
     try:
-        result = extract_project_archive(file.file, settings.workspace_root)
-        return {
-            **result,
-            "source": "workspace-upload",
-            "message": "Архив безопасно распакован. Команды проекта не запускались.",
-        }
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        result = extract_project_archive(file.file, settings.workspace_root, workspace_path)
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+            project = Project(
+                id=project_id,
+                workspace_id=workspace.id,
+                name=_safe_project_name(file.filename),
+                workspace_path=workspace_path,
+                original_filename=Path(file.filename).name[:255],
+                file_count=result["files"],
+                expanded_bytes=result["expanded_bytes"],
+            )
+            session.add(project)
+            session.add(AuditLog(
+                action="project.created",
+                entity="project",
+                entity_id=str(project_id),
+                details={"file_count": result["files"], "expanded_bytes": result["expanded_bytes"], "source": "source-upload"},
+            ))
+            session.commit()
+            return {
+                **result,
+                "project_id": str(project.id),
+                "source": "workspace-upload",
+                "message": "Архив добавлен в активную рабочую область. Команды проекта не исполнялись.",
+            }
     except ArchiveValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
+        shutil.rmtree(Path(settings.workspace_root) / workspace_path, ignore_errors=True)
         raise HTTPException(status_code=500, detail="Не удалось сохранить архив в рабочую директорию.") from exc
+    finally:
+        file.file.close()
 
 
 
@@ -262,28 +468,33 @@ def _project_snapshot_diff(before: dict, after: dict) -> dict:
 
 
 @app.get("/api/projects")
-def list_projects():
+def list_projects(request: Request):
     with SessionLocal() as session:
-        rows = session.scalars(select(Project).order_by(Project.updated_at.desc(), Project.name)).all()
+        workspace, _ = require_active_workspace(session, request)
+        rows = session.scalars(select(Project).where(Project.workspace_id == workspace.id).order_by(Project.updated_at.desc(), Project.name)).all()
         return [_project_payload(item) for item in rows]
 
 
 @app.post("/api/projects", status_code=201)
-def create_project(file: UploadFile = File(...)):
+def create_project(request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
     project_id = uuid4()
     workspace_path = f"projects/project-{project_id}"
     staging_path = f"projects/.staging-{project_id}"
     try:
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
         result = extract_project_archive(file.file, settings.workspace_root, staging_path)
         root = Path(settings.workspace_root).resolve()
         destination = root / workspace_path
         result_path = root / staging_path
         result_path.rename(destination)
         with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
             project = Project(
                 id=project_id,
+                workspace_id=workspace.id,
                 name=_safe_project_name(file.filename),
                 workspace_path=workspace_path,
                 original_filename=Path(file.filename).name[:255],
@@ -307,11 +518,11 @@ def create_project(file: UploadFile = File(...)):
 
 
 @app.put("/api/projects/{project_id}/archive")
-def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
+def update_project_archive(project_id: UUID, request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
@@ -354,9 +565,9 @@ def update_project_archive(project_id: UUID, file: UploadFile = File(...)):
 
 
 @app.patch("/api/projects/{project_id}")
-def rename_project(project_id: UUID, payload: ProjectRename):
+def rename_project(project_id: UUID, payload: ProjectRename, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         previous = project.name
@@ -370,9 +581,9 @@ def rename_project(project_id: UUID, payload: ProjectRename):
 
 
 @app.delete("/api/projects/{project_id}", status_code=204)
-def delete_project(project_id: UUID):
+def delete_project(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
@@ -389,9 +600,9 @@ def delete_project(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/history")
-def project_history(project_id: UUID):
+def project_history(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         rows = session.scalars(
@@ -411,9 +622,9 @@ def project_history(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/files")
-def list_project_files(project_id: UUID):
+def list_project_files(project_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -439,11 +650,19 @@ def list_project_files(project_id: UUID):
 
 class ProjectFileUpdate(BaseModel):
     content: str = Field(max_length=1_000_000)
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    ai_fix_run_id: UUID | None = None
+    ai_fix_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+class ProjectFileRollback(BaseModel):
+    target_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 @app.get("/api/projects/{project_id}/file")
 def preview_project_file(
     project_id: UUID,
+    request: Request,
     path: str = Query(min_length=1, max_length=1000),
     start_line: int = Query(default=1, ge=1),
 ):
@@ -451,7 +670,7 @@ def preview_project_file(
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -479,6 +698,7 @@ def preview_project_file(
             "start_line": first,
             "end_line": last,
             "total_lines": len(lines),
+            "sha256": sha256_text(content),
             "editable": editable,
             "content": content if editable else None,
             "lines": [{"line": number, "text": _redact(lines[number - 1])[:1000]} for number in range(first, last + 1)],
@@ -486,12 +706,12 @@ def preview_project_file(
 
 
 @app.get("/api/projects/{project_id}/download")
-def download_project_archive(project_id: UUID):
+def download_project_archive(project_id: UUID, request: Request):
     """Export a project without VCS metadata, symlinks, or likely credentials."""
     max_archive_bytes = 1024 * 1024 * 1024
     temporary_path = None
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -561,14 +781,14 @@ def download_project_archive(project_id: UUID):
 
 
 @app.get("/api/projects/{project_id}/file/download")
-def download_project_file(project_id: UUID, path: str = Query(min_length=1, max_length=1000)):
+def download_project_file(project_id: UUID, request: Request, path: str = Query(min_length=1, max_length=1000)):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
     if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=404, detail="Project file is unavailable")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -612,6 +832,7 @@ def download_project_file(project_id: UUID, path: str = Query(min_length=1, max_
 @app.api_route("/api/projects/{project_id}/preview", methods=["GET", "HEAD"])
 def preview_project_asset(
     project_id: UUID,
+    request: Request,
     path: str = Query(min_length=1, max_length=1000),
 ):
     relative = PurePosixPath(path)
@@ -631,7 +852,7 @@ def preview_project_asset(
     if _project_path_is_sensitive(relative):
         raise HTTPException(status_code=404, detail="Project file is unavailable")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -666,7 +887,7 @@ def preview_project_asset(
 
 
 @app.put("/api/projects/{project_id}/file")
-def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str = Query(min_length=1, max_length=1000)):
+def update_project_file(project_id: UUID, request: Request, payload: ProjectFileUpdate, path: str = Query(min_length=1, max_length=1000)):
     relative = PurePosixPath(path)
     if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
         raise HTTPException(status_code=400, detail="Invalid project file path")
@@ -679,11 +900,126 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
     if not _project_content_is_safe(payload.content):
         raise HTTPException(status_code=400, detail="Сохранение отменено: содержимое похоже на секрет или учётные данные.")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
             raise HTTPException(status_code=409, detail="Проект используется активным workflow; редактирование временно заблокировано.")
+        ai_fix_metadata = None
+        if payload.ai_fix_run_id is not None or payload.ai_fix_fingerprint is not None:
+            if payload.ai_fix_run_id is None or payload.ai_fix_fingerprint is None:
+                raise HTTPException(status_code=422, detail="AI Fix audit metadata must include both run ID and finding fingerprint.")
+            ai_run = _run_in_active_workspace(session, request, payload.ai_fix_run_id)
+            ai_finding = session.scalar(
+                select(Finding).where(
+                    Finding.run_id == payload.ai_fix_run_id,
+                    Finding.fingerprint == payload.ai_fix_fingerprint,
+                ).limit(1)
+            )
+            if ai_run is None or ai_finding is None:
+                raise HTTPException(status_code=404, detail="AI Fix source finding is unavailable.")
+            ai_payload = ai_finding.payload if isinstance(ai_finding.payload, dict) else {}
+            if str(ai_payload.get("category", "")).upper() not in {"SAST", "SCA"}:
+                raise HTTPException(status_code=403, detail="AI Fix audit metadata is not valid for this finding.")
+            ai_result = ai_run.result if isinstance(ai_run.result, dict) else {}
+            ai_outputs = ai_result.get("outputs", {}) if isinstance(ai_result.get("outputs"), dict) else {}
+            ai_graph = ai_run.graph_snapshot if isinstance(ai_run.graph_snapshot, dict) else {}
+            matching_source = None
+            for node in ai_graph.get("nodes", []):
+                if not isinstance(node, dict) or node.get("type") != "source.upload":
+                    continue
+                output = ai_outputs.get(node.get("id"), {})
+                if isinstance(output, dict) and output.get("status") == "ready" and output.get("path") == project.workspace_path:
+                    matching_source = output
+                    break
+            if matching_source is None:
+                raise HTTPException(status_code=403, detail="AI Fix finding does not belong to this project.")
+            canonical = PurePosixPath(_canonical_finding_path(ai_run, ai_finding.path))
+            prefix = matching_source.get("project_subdirectory")
+            expected_relative = (PurePosixPath(prefix) / canonical) if isinstance(prefix, str) and prefix else canonical
+            if expected_relative.as_posix() != relative.as_posix():
+                raise HTTPException(status_code=403, detail="AI Fix finding path does not match the edited file.")
+            ai_fix_metadata = {
+                "run_id": str(payload.ai_fix_run_id),
+                "fingerprint": payload.ai_fix_fingerprint,
+            }
+
+        root = _project_root(project)
+        try:
+            # The OS-backed lock serializes writers across API/worker processes sharing this workspace.
+            with project_file_lock(settings.workspace_root, project_id, relative):
+                candidate = root.joinpath(*relative.parts)
+                current = candidate
+                while current != root:
+                    if current.is_symlink():
+                        raise HTTPException(status_code=404, detail="Project file is unavailable")
+                    current = current.parent
+                resolved = candidate.resolve(strict=True)
+                if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                    raise OSError("File is unavailable or too large")
+                original = resolved.read_text(encoding="utf-8")
+                if not _project_content_is_safe(original):
+                    raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
+                current_sha256 = sha256_text(original)
+                if not version_matches(original, payload.expected_sha256):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PROJECT_FILE_VERSION_CONFLICT",
+                            "message": "Файл изменился после открытия. Обнови его перед сохранением, чтобы не затереть чужие изменения.",
+                            "current_sha256": current_sha256,
+                        },
+                    )
+                save_project_file_version(settings.workspace_root, project_id, relative, original)
+                temp_name = None
+                try:
+                    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
+                        temp_name = temporary.name
+                        temporary.write(payload.content)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.replace(temp_name, resolved)
+                finally:
+                    if temp_name and os.path.exists(temp_name):
+                        os.unlink(temp_name)
+                session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
+                    "path": relative.as_posix(),
+                    "bytes": len(payload.content.encode("utf-8")),
+                    "previous_sha256": current_sha256,
+                    "new_sha256": sha256_text(payload.content),
+                    "change_source": "ai_fix" if ai_fix_metadata else "manual",
+                    **({
+                        "ai_fix_run_id": ai_fix_metadata["run_id"],
+                        "ai_fix_fingerprint": ai_fix_metadata["fingerprint"],
+                    } if ai_fix_metadata else {}),
+                }))
+                session.commit()
+        except FileLockTimeout as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_FILE_UPDATE_IN_PROGRESS",
+                    "message": "Этот файл уже сохраняется в другом запросе. Повтори попытку через несколько секунд.",
+                },
+            ) from exc
+        except HTTPException:
+            raise
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="Не удалось сохранить файл. Проверь размер и кодировку UTF-8.") from exc
+    return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
+
+
+@app.get("/api/projects/{project_id}/file-versions")
+def list_project_file_versions(project_id: UUID, request: Request, path: str = Query(min_length=1, max_length=1000)):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=403, detail="История файлов с потенциальными секретами недоступна.")
+    with SessionLocal() as session:
+        project = _project_in_active_workspace(session, request, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
         candidate = root.joinpath(*relative.parts)
         current = candidate
@@ -695,39 +1031,147 @@ def update_project_file(project_id: UUID, payload: ProjectFileUpdate, path: str 
             resolved = candidate.resolve(strict=True)
             if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
                 raise OSError("File is unavailable or too large")
-            original = resolved.read_text(encoding="utf-8")
-            if not _project_content_is_safe(original):
-                raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и доступен только для чтения.")
-            temp_name = None
+            content = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Файл недоступен для просмотра истории.") from exc
+        if not _project_content_is_safe(content):
+            raise HTTPException(status_code=403, detail="История файла с потенциальными секретами недоступна.")
+        current_sha = sha256_text(content)
+        rows = session.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.entity == "project",
+                AuditLog.entity_id == str(project_id),
+                AuditLog.action.in_(["project.file_updated", "project.file_rolled_back"]),
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(200)
+        ).all()
+        versions = [{"sha256": current_sha, "current": True, "available": True, "created_at": None, "source": "current"}]
+        seen = {current_sha}
+        for row in rows:
+            details = row.details if isinstance(row.details, dict) else {}
+            digest = details.get("previous_sha256")
+            if details.get("path") != relative.as_posix() or not isinstance(digest, str) or len(digest) != 64 or digest in seen:
+                continue
+            seen.add(digest)
             try:
-                with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-edit-", delete=False) as temporary:
-                    temp_name = temporary.name
-                    temporary.write(payload.content)
-                    temporary.flush()
-                    os.fsync(temporary.fileno())
-                os.replace(temp_name, resolved)
-            finally:
-                if temp_name and os.path.exists(temp_name):
-                    os.unlink(temp_name)
+                load_project_file_version(settings.workspace_root, project_id, relative, digest)
+                available = True
+            except (OSError, UnicodeDecodeError, ValueError):
+                available = False
+            versions.append({
+                "sha256": digest,
+                "current": False,
+                "available": available,
+                "created_at": row.created_at,
+                "source": "rollback" if row.action == "project.file_rolled_back" else "edit",
+            })
+        return {"path": relative.as_posix(), "current_sha256": current_sha, "versions": versions}
+
+
+@app.post("/api/projects/{project_id}/file-rollback")
+def rollback_project_file(
+    project_id: UUID,
+    request: Request,
+    payload: ProjectFileRollback,
+    path: str = Query(min_length=1, max_length=1000),
+):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if relative.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}:
+        raise HTTPException(status_code=415, detail="Этот тип файла нельзя восстановить через браузер.")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами нельзя восстанавливать через браузер.")
+    with SessionLocal() as session:
+        project = _project_in_active_workspace(session, request, project_id, write=True)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if _project_has_active_run(session, project):
+            raise HTTPException(status_code=409, detail="Проект используется активным workflow; восстановление временно заблокировано.")
+        root = _project_root(project)
+        try:
+            with project_file_lock(settings.workspace_root, project_id, relative):
+                candidate = root.joinpath(*relative.parts)
+                current = candidate
+                while current != root:
+                    if current.is_symlink():
+                        raise HTTPException(status_code=404, detail="Project file is unavailable")
+                    current = current.parent
+                resolved = candidate.resolve(strict=True)
+                if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                    raise OSError("File is unavailable or too large")
+                current_content = resolved.read_text(encoding="utf-8")
+                if not _project_content_is_safe(current_content):
+                    raise HTTPException(status_code=403, detail="Текущий файл содержит потенциальные секреты; восстановление запрещено.")
+                current_sha = sha256_text(current_content)
+                if not version_matches(current_content, payload.expected_sha256):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PROJECT_FILE_VERSION_CONFLICT",
+                            "message": "Файл изменился после просмотра истории. Обнови историю перед восстановлением.",
+                            "current_sha256": current_sha,
+                        },
+                    )
+                if payload.target_sha256 == current_sha:
+                    raise HTTPException(status_code=400, detail="Выбранная версия уже является текущей.")
+                try:
+                    target_content = load_project_file_version(settings.workspace_root, project_id, relative, payload.target_sha256)
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail="Сохранённая версия не найдена. Восстановление невозможно.") from exc
+                if not _project_content_is_safe(target_content):
+                    raise HTTPException(status_code=403, detail="Сохранённая версия содержит потенциальные секреты.")
+                save_project_file_version(settings.workspace_root, project_id, relative, current_content)
+                temp_name = None
+                try:
+                    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-rollback-", delete=False) as temporary:
+                        temp_name = temporary.name
+                        temporary.write(target_content)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.replace(temp_name, resolved)
+                    temp_name = None
+                finally:
+                    if temp_name and os.path.exists(temp_name):
+                        os.unlink(temp_name)
+                target_sha = sha256_text(target_content)
+                session.add(AuditLog(
+                    action="project.file_rolled_back",
+                    entity="project",
+                    entity_id=str(project_id),
+                    details={
+                        "path": relative.as_posix(),
+                        "previous_sha256": current_sha,
+                        "new_sha256": target_sha,
+                        "rollback_target_sha256": payload.target_sha256,
+                    },
+                ))
+                session.commit()
+        except FileLockTimeout as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_FILE_UPDATE_IN_PROGRESS",
+                    "message": "Этот файл уже изменяется другим запросом. Повтори попытку через несколько секунд.",
+                },
+            ) from exc
         except HTTPException:
             raise
         except (OSError, UnicodeDecodeError) as exc:
-            raise HTTPException(status_code=400, detail="Не удалось сохранить файл. Проверь размер и кодировку UTF-8.") from exc
-        session.add(AuditLog(action="project.file_updated", entity="project", entity_id=str(project_id), details={
-            "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))
-        }))
-        session.commit()
-    return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
+            raise HTTPException(status_code=400, detail="Не удалось восстановить сохранённую версию файла.") from exc
+    return {"restored": True, "path": relative.as_posix(), "sha256": target_sha}
 
 
 @app.get("/api/projects/{project_id}/search")
-def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_length=100)):
+def search_project_contents(project_id: UUID, request: Request, q: str = Query(min_length=2, max_length=100)):
     needle = q.casefold()
     text_suffixes = {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}
     results = []
     scanned = 0
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
+        project = _project_in_active_workspace(session, request, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         root = _project_root(project)
@@ -756,9 +1200,27 @@ def search_project_contents(project_id: UUID, q: str = Query(min_length=2, max_l
     return {"results": results, "scanned_files": scanned, "truncated": len(results) >= 100 or scanned >= 3000}
 
 
+@app.get("/api/rule-packs")
+def list_rule_packs(analyzer: str | None = Query(default=None, pattern="^(secrets|sca|sast|policy)$")):
+    """List repository-owned, validated rule packs for configuration forms."""
+    return rule_packs.list(analyzer=analyzer)
+
+
 @app.get("/api/node-types")
 def node_types():
     return [manifest.model_dump() for manifest in registry.all()]
+
+
+@app.post("/api/workflows/generate")
+def generate_workflow_draft(payload: WorkflowGenerateRequest, request: Request):
+    with SessionLocal() as session:
+        require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+    try:
+        return generate_workflow_graph(payload.prompt)
+    except WorkflowGenerationError as exc:
+        message = str(exc)
+        status = 503 if "Настройте LLM_" in message or "endpoint" in message.lower() else 422
+        raise HTTPException(status_code=status, detail=message) from exc
 
 
 @app.post("/api/workflows/validate")
@@ -767,9 +1229,10 @@ def validate_workflow(graph: WorkflowGraph):
 
 
 @app.get("/api/workflows")
-def list_workflows():
+def list_workflows(request: Request):
     with SessionLocal() as session:
-        rows = session.scalars(select(Workflow).order_by(Workflow.updated_at.desc())).all()
+        workspace, _ = require_active_workspace(session, request)
+        rows = session.scalars(select(Workflow).where(Workflow.workspace_id == workspace.id).order_by(Workflow.updated_at.desc())).all()
         return [
             {"id": str(item.id), "name": item.name, "description": item.description, "updated_at": item.updated_at}
             for item in rows
@@ -777,12 +1240,14 @@ def list_workflows():
 
 
 @app.post("/api/workflows", status_code=201)
-def create_workflow(graph: WorkflowGraph):
+def create_workflow(graph: WorkflowGraph, request: Request):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
-        workflow = Workflow(name=graph.name)
+        workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=graph.name, workspace_id=workspace.id, project_id=linked_project_id)
         session.add(workflow)
         session.flush()
         session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
@@ -791,11 +1256,12 @@ def create_workflow(graph: WorkflowGraph):
 
 
 @app.get("/api/workflows/{workflow_id}")
-def get_workflow(workflow_id: UUID):
+def get_workflow(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "workflow:run")
         version = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
@@ -811,12 +1277,15 @@ def get_workflow(workflow_id: UUID):
 
 
 @app.put("/api/workflows/{workflow_id}")
-def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
+def update_workflow(workflow_id: UUID, graph: WorkflowGraph, request: Request):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise HTTPException(status_code=422, detail=validation.model_dump())
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        active_workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        active_workflow.project_id = _validate_graph_workspace_sources(session, active_workflow.workspace_id, graph)
+        _workflow_lock = _lock_workflow_for_version_write(session, workflow_id)
+        workflow = _workflow_lock
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         latest = session.scalar(
@@ -860,9 +1329,9 @@ def update_workflow(workflow_id: UUID, graph: WorkflowGraph):
 
 
 @app.get("/api/workflows/{workflow_id}/schedule")
-def get_workflow_schedule(workflow_id: UUID):
+def get_workflow_schedule(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         schedule = session.scalar(
@@ -881,14 +1350,17 @@ def get_workflow_schedule(workflow_id: UUID):
 
 
 @app.put("/api/workflows/{workflow_id}/schedule")
-def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate):
+def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         schedule = session.scalar(
             select(WorkflowSchedule).where(WorkflowSchedule.workflow_id == workflow_id)
         )
+        if schedule is not None:
+            schedule = _lock_schedule_for_update(session, workflow_id, schedule.id)
         if not payload.enabled:
             if schedule is not None:
                 schedule.enabled = False
@@ -953,10 +1425,10 @@ def update_workflow_schedule(workflow_id: UUID, payload: WorkflowScheduleUpdate)
 
 
 @app.post("/api/workflows/{workflow_id}/runs", status_code=202)
-def execute_saved_workflow(workflow_id: UUID, force_full_scan: bool = Query(default=False)):
+def execute_saved_workflow(workflow_id: UUID, request: Request, force_full_scan: bool = Query(default=False)):
     """Persist a run request; the dedicated worker performs the scan asynchronously."""
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id, write=True)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -972,6 +1444,7 @@ def execute_saved_workflow(workflow_id: UUID, force_full_scan: bool = Query(defa
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
 
         graph_snapshot = dict(version.graph)
         graph_snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": force_full_scan}
@@ -992,10 +1465,97 @@ def execute_saved_workflow(workflow_id: UUID, force_full_scan: bool = Query(defa
         }
 
 
-@app.post("/api/workflows/{workflow_id}/runs/selected", status_code=202)
-def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
+@app.post("/api/ci/workflows/{workflow_id}/runs", status_code=202)
+def execute_ci_workflow(workflow_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
+    """Queue a saved workflow for CI; requires a dedicated secret and an explicit Security Gate."""
     with SessionLocal() as session:
         workflow = session.get(Workflow, workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "workflow:run")
+        version = session.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
+        gate_nodes = [node for node in graph.nodes if node.type == "ci.gate"]
+        if len(gate_nodes) != 1:
+            raise HTTPException(status_code=422, detail="CI workflow must contain exactly one Security Gate node")
+        gate_node = gate_nodes[0]
+        nodes_by_id = {node.id: node for node in graph.nodes}
+        gate_merge_ids = {
+            edge.source for edge in graph.edges
+            if edge.target == gate_node.id
+            and edge.source in nodes_by_id
+            and nodes_by_id[edge.source].type == "findings.merge"
+        }
+        if not gate_merge_ids:
+            raise HTTPException(status_code=422, detail="Security Gate must receive findings from a Merge findings node")
+        has_scanner_input = any(
+            edge.target in gate_merge_ids
+            and edge.source in nodes_by_id
+            and nodes_by_id[edge.source].type in {"scan.secrets", "scan.sca", "scan.sast"}
+            for edge in graph.edges
+        )
+        if not has_scanner_input:
+            raise HTTPException(status_code=422, detail="The findings merge connected to Security Gate must receive at least one scanner output")
+        snapshot = graph.model_dump(mode="json")
+        snapshot["__execution_scope"] = {"requested_node_ids": [], "force_full_scan": False}
+        run = WorkflowRun(
+            workflow_id=workflow_id,
+            status="queued",
+            source="ci",
+            graph_snapshot=snapshot,
+        )
+        session.add(run)
+        session.commit()
+        return {
+            "run_id": str(run.id),
+            "workflow_id": str(workflow_id),
+            "workflow_version": version.version,
+            "status": "queued",
+        }
+
+
+@app.get("/api/ci/runs/{run_id}")
+def get_ci_run(run_id: UUID, x_ci_token: str = Header(default="", alias="X-CI-Token")):
+    """Return a minimal CI polling contract without exposing findings or source excerpts."""
+    with SessionLocal() as session:
+        run = session.scalar(
+            select(WorkflowRun)
+            .join(Workflow, Workflow.id == WorkflowRun.workflow_id)
+            .where(WorkflowRun.id == run_id)
+        )
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        workflow = session.get(Workflow, run.workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "run:read")
+        result = run.result if isinstance(run.result, dict) else {}
+        gate = result.get("security_gate") if isinstance(result, dict) else None
+        return {
+            "id": str(run.id),
+            "workflow_id": str(run.workflow_id) if run.workflow_id else None,
+            "status": run.status,
+            "security_gate": gate,
+            "error": run.error,
+            "finished_at": run.finished_at,
+        }
+
+
+@app.post("/api/workflows/{workflow_id}/runs/selected", status_code=202)
+def execute_selected_workflow(workflow_id: UUID, request: Request, payload: SelectedRunRequest):
+    with SessionLocal() as session:
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         version = session.scalar(
@@ -1010,15 +1570,16 @@ def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         known_ids = {node.id for node in graph.nodes}
-        unknown = sorted(set(request.node_ids) - known_ids)
+        unknown = sorted(set(payload.node_ids) - known_ids)
         if unknown:
             raise HTTPException(status_code=422, detail={"message": "Выбраны отсутствующие блоки.", "unknown_node_ids": unknown})
         snapshot = graph.model_dump(mode="json")
-        known_force_ids = set(request.force_node_ids)
+        known_force_ids = set(payload.force_node_ids)
         if not known_force_ids.issubset(known_ids):
             raise HTTPException(status_code=422, detail={"message": "Для сброса кэша выбраны неизвестные блоки.", "unknown_node_ids": sorted(known_force_ids - known_ids)})
-        snapshot["__execution_scope"] = {"requested_node_ids": request.node_ids, "force_full_scan": request.force_full_scan, "force_node_ids": request.force_node_ids}
+        snapshot["__execution_scope"] = {"requested_node_ids": payload.node_ids, "force_full_scan": payload.force_full_scan, "force_node_ids": payload.force_node_ids}
         run = WorkflowRun(
             workflow_id=workflow_id,
             status="queued",
@@ -1031,15 +1592,15 @@ def execute_selected_workflow(workflow_id: UUID, request: SelectedRunRequest):
             "run_id": str(run.id),
             "workflow_id": str(workflow_id),
             "workflow_version": version.version,
-            "requested_node_ids": request.node_ids,
+            "requested_node_ids": payload.node_ids,
             "status": "queued",
         }
 
 
 @app.get("/api/workflows/{workflow_id}/versions")
-def list_workflow_versions(workflow_id: UUID):
+def list_workflow_versions(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         versions = session.scalars(
@@ -1062,13 +1623,14 @@ def list_workflow_versions(workflow_id: UUID):
 @app.get("/api/workflows/{workflow_id}/versions/compare")
 def compare_workflow_versions(
     workflow_id: UUID,
+    request: Request,
     from_version: int = Query(ge=1),
     to_version: int = Query(ge=1),
 ):
     if from_version == to_version:
         raise HTTPException(status_code=422, detail="Выберите две разные версии.")
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(select(WorkflowVersion).where(
             WorkflowVersion.workflow_id == workflow_id,
@@ -1082,9 +1644,10 @@ def compare_workflow_versions(
 
 
 @app.post("/api/workflows/{workflow_id}/versions/{version}/restore", status_code=201)
-def restore_workflow_version(workflow_id: UUID, version: int):
+def restore_workflow_version(workflow_id: UUID, version: int, request: Request):
     with SessionLocal() as session:
-        workflow = session.get(Workflow, workflow_id)
+        _workflow_in_active_workspace(session, request, workflow_id, write=True)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         source_version = session.scalar(
@@ -1099,6 +1662,7 @@ def restore_workflow_version(workflow_id: UUID, version: int):
         validation = validate_graph(graph, registry)
         if not validation.valid:
             raise HTTPException(status_code=422, detail=validation.model_dump())
+        workflow.project_id = _validate_graph_workspace_sources(session, workflow.workspace_id, graph)
         latest = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
@@ -1117,9 +1681,10 @@ def restore_workflow_version(workflow_id: UUID, version: int):
 
 
 @app.post("/api/runs/{run_id}/cancel")
-def cancel_workflow_run(run_id: UUID):
+def cancel_workflow_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id, write=True)
+        run = _lock_run_for_update(session, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         if run.status in {"completed", "partial", "failed", "cancelled"}:
@@ -1137,9 +1702,10 @@ def cancel_workflow_run(run_id: UUID):
 
 
 @app.post("/api/runs/{run_id}/retry", status_code=202)
-def retry_workflow_run(run_id: UUID):
+def retry_workflow_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        previous = session.get(WorkflowRun, run_id)
+        _run_in_active_workspace(session, request, run_id, write=True)
+        previous = _lock_run_for_update(session, run_id)
         if previous is None:
             raise HTTPException(status_code=404, detail="Run not found")
         if previous.status not in {"completed", "partial", "failed", "cancelled"}:
@@ -1160,9 +1726,9 @@ def retry_workflow_run(run_id: UUID):
 
 
 @app.get("/api/workflows/{workflow_id}/runs")
-def list_workflow_runs(workflow_id: UUID):
+def list_workflow_runs(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(
             select(WorkflowRun).where(WorkflowRun.workflow_id == workflow_id).order_by(WorkflowRun.queued_at.desc())
@@ -1182,11 +1748,12 @@ def list_workflow_runs(workflow_id: UUID):
 @app.get("/api/workflows/{workflow_id}/security-trend")
 def workflow_security_trend(
     workflow_id: UUID,
+    request: Request,
     limit: int = Query(default=20, ge=2, le=100),
 ):
     """Return a bounded chronological security trend for the workflow."""
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         rows = session.scalars(
             select(WorkflowRun)
@@ -1449,6 +2016,7 @@ def _annotate_finding_source_relation(findings: list, source_comparison: dict) -
 @app.get("/api/workflows/{workflow_id}/runs/compare")
 def compare_workflow_runs(
     workflow_id: UUID,
+    request: Request,
     from_run: UUID = Query(...),
     to_run: UUID = Query(...),
 ):
@@ -1456,7 +2024,7 @@ def compare_workflow_runs(
         raise HTTPException(status_code=422, detail="Выберите два разных запуска.")
     terminal = {"completed", "partial", "failed", "cancelled"}
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         before = session.get(WorkflowRun, from_run)
         after = session.get(WorkflowRun, to_run)
@@ -1589,9 +2157,9 @@ def _run_telemetry(session, run: WorkflowRun):
 
 
 @app.get("/api/workflows/{workflow_id}/telemetry/latest")
-def latest_workflow_telemetry(workflow_id: UUID):
+def latest_workflow_telemetry(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         run = session.scalar(
             select(WorkflowRun)
@@ -1662,6 +2230,40 @@ def _compare_workflow_graphs(before: dict, after: dict) -> dict:
     }
 
 
+def _canonical_finding_path(run: WorkflowRun, path: str) -> str:
+    """Normalize legacy archive-wrapper prefixes in API and exported reports."""
+    if not isinstance(path, str) or not path:
+        return path
+    result = run.result if isinstance(run.result, dict) else {}
+    outputs = result.get("outputs", {}) if isinstance(result.get("outputs"), dict) else {}
+    graph_snapshot = getattr(run, "graph_snapshot", None)
+    nodes = graph_snapshot.get("nodes", []) if isinstance(graph_snapshot, dict) else []
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("type") not in {"source.upload", "source.git"}:
+            continue
+        output = outputs.get(node.get("id"), {})
+        if not isinstance(output, dict) or output.get("status") != "ready":
+            continue
+        prefix = output.get("project_subdirectory")
+        if not prefix and node.get("type") == "source.upload":
+            source_path = output.get("path")
+            if isinstance(source_path, str):
+                relative = PurePosixPath(source_path)
+                if not relative.is_absolute() and all(part not in {"", ".", ".."} for part in relative.parts):
+                    try:
+                        workspace = Path(settings.workspace_root).resolve()
+                        artifact = workspace.joinpath(*relative.parts).resolve(strict=True)
+                        if artifact.is_relative_to(workspace) and artifact.is_dir():
+                            detected = detect_project_root(artifact)
+                            if detected != artifact:
+                                prefix = detected.relative_to(artifact).as_posix()
+                    except (OSError, ValueError):
+                        prefix = None
+        if isinstance(prefix, str) and prefix and prefix != "." and path.startswith(prefix + "/"):
+            return path[len(prefix) + 1:]
+        break
+    return path
+
 def _build_run_report(session, run: WorkflowRun) -> dict:
     telemetry = _safe_report_value(_run_telemetry(session, run))
     rows = session.scalars(
@@ -1669,12 +2271,12 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
     ).all()
     findings = [
         _safe_report_value({
+            **(item.payload if isinstance(item.payload, dict) else {}),
             "fingerprint": item.fingerprint,
             "rule_id": item.rule_id,
             "severity": item.severity,
-            "path": item.path,
+            "path": _canonical_finding_path(run, item.path),
             "line": item.line,
-            **(item.payload if isinstance(item.payload, dict) else {}),
         })
         for item in rows
     ]
@@ -1698,10 +2300,10 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
 
 
 @app.post("/api/projects/{project_id}/reports/{run_id}", status_code=201)
-def save_run_report_to_project(project_id: UUID, run_id: UUID):
+def save_run_report_to_project(project_id: UUID, run_id: UUID, request: Request):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        run = session.get(WorkflowRun, run_id)
+        project = _project_in_active_workspace(session, request, project_id, write=True)
+        run = _run_in_active_workspace(session, request, run_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         if run is None:
@@ -1737,18 +2339,18 @@ def save_run_report_to_project(project_id: UUID, run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}/report.json")
-def export_run_report_json(run_id: UUID):
+def export_run_report_json(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return _build_run_report(session, run)
 
 
 @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
-def export_run_report_html(run_id: UUID):
+def export_run_report_html(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         report = _build_run_report(session, run)
@@ -1766,22 +2368,23 @@ main{{max-width:1100px;margin:auto}}h1{{font-size:22px}}.meta{{color:#8ea5b9}}pr
 
 
 @app.get("/api/runs/{run_id}/telemetry")
-def get_run_telemetry(run_id: UUID):
+def get_run_telemetry(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return _run_telemetry(session, run)
 
 
 @app.get("/api/runs/{run_id}/events")
-def stream_run_events(run_id: UUID):
+def stream_run_events(run_id: UUID, request: Request):
     def event_stream():
         deadline = time.monotonic() + 1800
         while time.monotonic() < deadline:
             with SessionLocal() as session:
-                run = session.get(WorkflowRun, run_id)
-                if run is None:
+                try:
+                    run = _run_in_active_workspace(session, request, run_id)
+                except HTTPException:
                     payload = {"status": "not_found", "run_id": str(run_id)}
                     yield "event: error\ndata: " + json.dumps(payload) + "\n\n"
                     return
@@ -1799,9 +2402,9 @@ def stream_run_events(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: UUID):
+def get_run(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return {
@@ -1818,31 +2421,47 @@ def get_run(run_id: UUID):
 
 
 @app.get("/api/runs/{run_id}/findings")
-def list_run_findings(run_id: UUID):
+def list_run_findings(run_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(WorkflowRun, run_id) is None:
+        run = _run_in_active_workspace(session, request, run_id)
+        if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         rows = session.scalars(
             select(Finding).where(Finding.run_id == run_id).order_by(Finding.severity, Finding.path, Finding.line)
         ).all()
-        return [
-            {
+        run_result = run.result if isinstance(run.result, dict) else {}
+        outputs = run_result.get("outputs", {}) if isinstance(run_result.get("outputs"), dict) else {}
+        ai_output = outputs.get("ai-explain", {}) if isinstance(outputs.get("ai-explain"), dict) else {}
+        explanations = ai_output.get("explanations", []) if isinstance(ai_output.get("explanations"), list) else []
+        explanation_by_fingerprint = {
+            str(item.get("fingerprint")): item
+            for item in explanations
+            if isinstance(item, dict) and item.get("fingerprint")
+        }
+        result = []
+        for item in rows:
+            payload = item.payload if isinstance(item.payload, dict) else {}
+            explanation = explanation_by_fingerprint.get(item.fingerprint)
+            result.append({
+                "id": str(item.id),
+                "fingerprint": item.fingerprint,
+                **payload,
                 "id": str(item.id),
                 "fingerprint": item.fingerprint,
                 "rule_id": item.rule_id,
                 "severity": item.severity,
-                "path": item.path,
+                "path": _canonical_finding_path(run, item.path),
                 "line": item.line,
-                **item.payload,
-            }
-            for item in rows
-        ]
+                **({"ai_explanation": explanation} if explanation else {}),
+            })
+        return result
 
 
 @app.get("/api/runs/{run_id}/findings/{fingerprint}/source")
 def get_finding_source(
     run_id: UUID,
     fingerprint: str,
+    request: Request,
     start_line: int | None = Query(default=None, ge=1),
     end_line: int | None = Query(default=None, ge=1),
 ):
@@ -1855,7 +2474,7 @@ def get_finding_source(
         raise HTTPException(status_code=422, detail="Source window is limited to 300 lines")
 
     with SessionLocal() as session:
-        run = session.get(WorkflowRun, run_id)
+        run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         finding = session.scalar(
@@ -1902,9 +2521,175 @@ def get_finding_source(
         }
 
 
-@app.post("/api/workflows/run")
-def run_workflow(graph: WorkflowGraph):
+@app.post("/api/runs/{run_id}/findings/{fingerprint}/fix-preview")
+def preview_ai_finding_fix(run_id: UUID, fingerprint: str, request: Request):
+    """Generate a bounded AI proposal for a safe project file; never apply it."""
+    if not fingerprint or len(fingerprint) > 64:
+        raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
+
+    with SessionLocal() as session:
+        run = _run_in_active_workspace(session, request, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        finding = session.scalar(
+            select(Finding).where(
+                Finding.run_id == run_id,
+                Finding.fingerprint == fingerprint,
+            ).limit(1)
+        )
+        if finding is None:
+            raise HTTPException(status_code=404, detail="Finding not found in this run")
+        finding_payload = finding.payload if isinstance(finding.payload, dict) else {}
+        category = str(finding_payload.get("category", "")).upper()
+        if category not in {"SAST", "SCA"}:
+            raise HTTPException(
+                status_code=403,
+                detail="AI Fix доступен только для находок SAST и SCA. Секреты автоматически не исправляются.",
+            )
+
+        result = run.result if isinstance(run.result, dict) else {}
+        outputs = result.get("outputs", {}) if isinstance(result.get("outputs"), dict) else {}
+        graph = run.graph_snapshot if isinstance(run.graph_snapshot, dict) else {}
+        ready_sources = []
+        for node in graph.get("nodes", []):
+            if not isinstance(node, dict) or node.get("type") != "source.upload":
+                continue
+            output = outputs.get(node.get("id"), {})
+            if isinstance(output, dict) and output.get("status") == "ready":
+                ready_sources.append(output)
+        if len(ready_sources) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="AI Fix доступен только для запуска с одним источником проекта из рабочей области.",
+            )
+        source_output = ready_sources[0]
+        source_path = source_output.get("path")
+        workflow = session.get(Workflow, run.workflow_id) if run.workflow_id else None
+        if not isinstance(source_path, str) or workflow is None:
+            raise HTTPException(status_code=409, detail="Не удалось связать запуск с проектом рабочей области.")
+        project = session.scalar(
+            select(Project).where(
+                Project.workspace_id == workflow.workspace_id,
+                Project.workspace_path == source_path,
+            )
+        )
+        if project is None:
+            raise HTTPException(
+                status_code=409,
+                detail="AI Fix доступен только для файлов проекта, сохранённого в рабочей области.",
+            )
+
+        canonical_path = _canonical_finding_path(run, finding.path)
+        finding_relative = PurePosixPath(canonical_path)
+        if (
+            finding_relative.is_absolute()
+            or not finding_relative.parts
+            or any(part in {"", ".", ".."} for part in finding_relative.parts)
+        ):
+            raise HTTPException(status_code=400, detail="Invalid finding source path")
+        subdirectory_value = source_output.get("project_subdirectory")
+        if subdirectory_value:
+            subdirectory = PurePosixPath(subdirectory_value)
+            if (
+                subdirectory.is_absolute()
+                or not subdirectory.parts
+                or any(part in {"", ".", ".."} for part in subdirectory.parts)
+            ):
+                raise HTTPException(status_code=400, detail="Invalid project subdirectory")
+            project_relative = subdirectory / finding_relative
+        else:
+            project_relative = finding_relative
+
+        editable_suffixes = {
+            ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss",
+            ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml",
+            ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1",
+        }
+        if project_relative.suffix.lower() not in editable_suffixes or _project_path_is_sensitive(project_relative):
+            raise HTTPException(status_code=403, detail="Этот файл нельзя передавать AI Fix или редактировать.")
+        root = _project_root(project)
+        candidate = root.joinpath(*project_relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            run_source = resolve_run_source_file(
+                settings.workspace_root, run.graph_snapshot, run.result or {}, finding.path
+            ).resolve(strict=True)
+            if (
+                not resolved.is_relative_to(root)
+                or not resolved.is_file()
+                or resolved != run_source
+                or resolved.stat().st_size > 32 * 1024
+            ):
+                raise OSError("File is unavailable, mismatched, or too large for AI Fix")
+            source_content = resolved.read_text(encoding="utf-8")
+        except (RunSourceFileError, OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Исходный файл недоступен для безопасного AI Fix.") from exc
+        if not _project_content_is_safe(source_content):
+            raise HTTPException(status_code=403, detail="Файл содержит потенциальные секреты и не может передаваться AI Fix.")
+        proposal_context = {
+            "project_id": str(project.id),
+            "path": project_relative.as_posix(),
+            "content": source_content,
+            "sha256": sha256_text(source_content),
+            "finding": {
+                **finding_payload,
+                "fingerprint": finding.fingerprint,
+                "rule_id": finding.rule_id,
+                "severity": finding.severity,
+                "path": canonical_path,
+                "line": finding.line,
+            },
+        }
+
     try:
+        proposal = generate_fix_proposal(
+            proposal_context["finding"],
+            proposal_context["content"],
+            proposal_context["path"],
+        )
+    except AIFixError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    with SessionLocal() as session:
+        session.add(AuditLog(
+            action="project.ai_fix_proposed",
+            entity="project",
+            entity_id=proposal_context["project_id"],
+            details={
+                "run_id": str(run_id),
+                "fingerprint": fingerprint,
+                "path": proposal_context["path"],
+                "original_sha256": proposal_context["sha256"],
+                "proposed_sha256": sha256_text(proposal["proposed_content"]),
+                "diff_sha256": hashlib.sha256(proposal["diff"].encode("utf-8")).hexdigest(),
+                "model": proposal.get("model"),
+            },
+        ))
+        session.commit()
+
+    return {
+        "project_id": proposal_context["project_id"],
+        "run_id": str(run_id),
+        "fingerprint": fingerprint,
+        "path": proposal_context["path"],
+        "original_sha256": proposal_context["sha256"],
+        **proposal,
+        "auto_applied": False,
+        "apply_requires_confirmation": True,
+    }
+
+
+@app.post("/api/workflows/run")
+def run_workflow(graph: WorkflowGraph, request: Request):
+    try:
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+            _validate_graph_workspace_sources(session, workspace.id, graph)
         return execute_graph(graph, registry)
     except WorkflowExecutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1912,35 +2697,78 @@ def run_workflow(graph: WorkflowGraph):
 
 
 @app.get("/api/workflows/{workflow_id}/finding-states")
-def list_finding_states(workflow_id: UUID):
+def list_finding_states(workflow_id: UUID, request: Request):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        _workflow_in_active_workspace(session, request, workflow_id)
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
+        if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
+
         rows = session.scalars(
             select(FindingState)
             .where(FindingState.workflow_id == workflow_id)
             .order_by(FindingState.fingerprint)
         ).all()
+
+        now = datetime.now(timezone.utc)
+        changed = False
+        for row in rows:
+            if row.state != "accepted_risk" or row.expires_at is None:
+                continue
+            expiry = row.expires_at
+            if expiry.tzinfo is None or expiry.utcoffset() is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if expiry <= now:
+                previous_state = row.state
+                row.state = "open"
+                row.reason = "Срок принятого риска истёк."
+                row.expires_at = None
+                session.add(AuditLog(
+                    action="finding.state.expired",
+                    entity="finding_state",
+                    entity_id=f"{workflow_id}:{row.fingerprint}",
+                    details={
+                        "workflow_id": str(workflow_id),
+                        "fingerprint": row.fingerprint,
+                        "previous_state": previous_state,
+                        "new_state": "open",
+                    },
+                ))
+                changed = True
+
+        if changed:
+            session.commit()
+
         return [
             {
                 "fingerprint": row.fingerprint,
                 "state": row.state,
                 "reason": row.reason,
                 "expires_at": row.expires_at,
+                "assigned_to_user_id": str(getattr(row, "assigned_to_user_id", None)) if getattr(row, "assigned_to_user_id", None) else None,
             }
             for row in rows
         ]
 
 
 @app.put("/api/workflows/{workflow_id}/findings/{fingerprint}/state")
-def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingStateUpdate):
+def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingStateUpdate, request: Request):
     if not fingerprint or len(fingerprint) > 64:
         raise HTTPException(status_code=422, detail="Invalid finding fingerprint")
-    if payload.state != "accepted_risk" and payload.expires_at is not None:
+    normalized_state = "resolved" if payload.state == "fixed" else payload.state
+    if normalized_state != "accepted_risk" and payload.expires_at is not None:
         raise HTTPException(status_code=422, detail="Срок действия допускается только для accepted_risk.")
 
+    if normalized_state == "accepted_risk" and payload.expires_at is not None:
+        expiry = payload.expires_at
+        if expiry.tzinfo is None or expiry.utcoffset() is None:
+            raise HTTPException(status_code=422, detail="Срок принятого риска должен содержать часовой пояс.")
+        if expiry <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=422, detail="Срок принятого риска должен быть в будущем.")
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        _workflow_in_active_workspace(session, request, workflow_id, allowed_roles={"admin", "editor", "analyst"})
+        workflow = _lock_workflow_for_version_write(session, workflow_id)
+        if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         finding = session.scalar(
             select(Finding)
@@ -1955,20 +2783,20 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
             select(FindingState).where(
                 FindingState.workflow_id == workflow_id,
                 FindingState.fingerprint == fingerprint,
-            )
+            ).with_for_update()
         )
         previous_state = state_row.state if state_row else None
         if state_row is None:
             state_row = FindingState(
                 workflow_id=workflow_id,
                 fingerprint=fingerprint,
-                state=payload.state,
+                state=normalized_state,
                 reason=payload.reason,
                 expires_at=payload.expires_at,
             )
             session.add(state_row)
         else:
-            state_row.state = payload.state
+            state_row.state = normalized_state
             state_row.reason = payload.reason
             state_row.expires_at = payload.expires_at
 
@@ -1980,7 +2808,7 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
                 "workflow_id": str(workflow_id),
                 "fingerprint": fingerprint,
                 "previous_state": previous_state,
-                "new_state": payload.state,
+                "new_state": normalized_state,
                 "reason": payload.reason,
                 "expires_at": payload.expires_at.isoformat() if payload.expires_at else None,
             },
@@ -1991,20 +2819,23 @@ def update_finding_state(workflow_id: UUID, fingerprint: str, payload: FindingSt
             "previous_state": previous_state,
             "state": state_row.state,
             "reason": state_row.reason,
+            "assigned_to_user_id": str(state_row.assigned_to_user_id) if state_row.assigned_to_user_id else None,
             "expires_at": state_row.expires_at,
         }
 
 
 @app.get("/api/workflows/{workflow_id}/findings/{fingerprint}/history")
-def finding_state_history(workflow_id: UUID, fingerprint: str):
+def finding_state_history(workflow_id: UUID, fingerprint: str, request: Request, limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0)):
     with SessionLocal() as session:
-        if session.get(Workflow, workflow_id) is None:
+        if _workflow_in_active_workspace(session, request, workflow_id) is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
         entity_id = f"{workflow_id}:{fingerprint}"
         rows = session.scalars(
             select(AuditLog)
             .where(AuditLog.entity == "finding_state", AuditLog.entity_id == entity_id)
             .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(limit)
+            .offset(offset)
         ).all()
         return [
             {
@@ -2014,3 +2845,160 @@ def finding_state_history(workflow_id: UUID, fingerprint: str):
             }
             for row in rows
         ]
+
+
+class TemplatePublishRequest(BaseModel):
+    workflow_id: UUID
+    name: str = Field(min_length=3, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    category: str = Field(default="general", min_length=2, max_length=60)
+
+
+class TemplateCloneRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+
+
+class PresetCloneRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+
+
+@app.get("/api/presets")
+def list_builtin_presets():
+    try:
+        return list_presets()
+    except PresetError as exc:
+        raise HTTPException(status_code=500, detail="Built-in preset catalog is unavailable") from exc
+
+
+@app.get("/api/presets/{preset_id}")
+def get_builtin_preset(preset_id: str):
+    try:
+        preset = load_preset(preset_id)
+    except PresetError as exc:
+        status = 404 if str(exc).startswith("Unknown preset:") else 500
+        detail = "Preset not found" if status == 404 else "Built-in preset catalog is unavailable"
+        raise HTTPException(status_code=status, detail=detail) from exc
+    return {key: value for key, value in preset.items() if key != "file"} | {"graph": sanitize_graph(preset["graph"])}
+
+
+@app.post("/api/presets/{preset_id}/clone", status_code=201)
+def clone_builtin_preset(preset_id: str, payload: PresetCloneRequest, request: Request):
+    try:
+        preset = load_preset(preset_id)
+    except PresetError as exc:
+        status = 404 if str(exc).startswith("Unknown preset:") else 500
+        detail = "Preset not found" if status == 404 else "Built-in preset catalog is unavailable"
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    base_name = payload.name.strip() if payload.name else preset["name"]
+    if not base_name:
+        raise HTTPException(status_code=422, detail="Workflow name cannot be empty")
+    graph_data = clone_graph(sanitize_graph(preset["graph"]), base_name[:200])
+    graph = WorkflowGraph.model_validate(graph_data)
+    validation = validate_graph(graph, registry)
+    if not validation.valid:
+        raise HTTPException(status_code=422, detail=validation.model_dump())
+
+    with SessionLocal() as session:
+        workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, project_id=linked_project_id, description=f"Created from built-in preset: {preset['id']}")
+        session.add(workflow)
+        session.flush()
+        session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
+        session.add(AuditLog(
+            action="workflow_preset.cloned",
+            entity="workflow",
+            entity_id=str(workflow.id),
+            details={"preset_id": preset["id"], "preset_version": preset["version"]},
+        ))
+        session.commit()
+        return {
+            "id": str(workflow.id),
+            "name": workflow.name,
+            "version": 1,
+            "executed": False,
+            "setup_required": preset["setup_required"],
+        }
+
+
+@app.get("/api/templates")
+def list_workflow_templates(category: str | None = Query(default=None, max_length=60), q: str | None = Query(default=None, max_length=100)):
+    with SessionLocal() as session:
+        query = select(WorkflowTemplate).where(WorkflowTemplate.published.is_(True))
+        if category:
+            query = query.where(WorkflowTemplate.category == category)
+        if q:
+            query = query.where(WorkflowTemplate.name.ilike(f"%{q.strip()}%"))
+        rows = session.scalars(query.order_by(WorkflowTemplate.category, WorkflowTemplate.name).limit(100)).all()
+        return [{
+            "id": str(row.id), "name": row.name, "description": row.description,
+            "category": row.category, "node_count": len(row.graph.get("nodes", [])),
+            "created_at": row.created_at,
+        } for row in rows]
+
+
+@app.get("/api/templates/{template_id}")
+def get_workflow_template(template_id: UUID):
+    with SessionLocal() as session:
+        row = session.get(WorkflowTemplate, template_id)
+        if row is None or not row.published:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return {"id": str(row.id), "name": row.name, "description": row.description,
+                "category": row.category, "graph": sanitize_graph(row.graph)}
+
+
+@app.post("/api/templates/publish", status_code=201)
+def publish_workflow_template(payload: TemplatePublishRequest, x_template_publish_token: str = Header(default="", alias="X-Template-Publish-Token")):
+    with SessionLocal() as session:
+        workflow = session.get(Workflow, payload.workflow_id)
+        if workflow is None:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        require_workspace_api_token(session, x_template_publish_token, workflow.workspace_id, "template:publish")
+        version = session.scalar(select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == payload.workflow_id
+        ).order_by(WorkflowVersion.version.desc()).limit(1))
+        if version is None:
+            raise HTTPException(status_code=409, detail="Workflow has no saved version")
+        graph = WorkflowGraph.model_validate(version.graph)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        safe_graph = sanitize_graph(graph.model_dump(mode="json"))
+        row = WorkflowTemplate(name=payload.name.strip(), description=payload.description.strip(),
+                               category=payload.category.strip().lower(), graph=safe_graph, published=True)
+        session.add(row)
+        session.flush()
+        session.add(AuditLog(action="workflow_template.published", entity="workflow_template",
+                             entity_id=str(row.id), details={"source_workflow_id": str(workflow.id), "version": version.version}))
+        session.commit()
+        return {"id": str(row.id), "name": row.name, "published": True, "sanitized": True}
+
+
+@app.post("/api/templates/{template_id}/clone", status_code=201)
+def clone_workflow_template(template_id: UUID, payload: TemplateCloneRequest, request: Request):
+    with SessionLocal() as session:
+        template = session.get(WorkflowTemplate, template_id)
+        if template is None or not template.published:
+            raise HTTPException(status_code=404, detail="Template not found")
+        base_name = payload.name.strip() if payload.name else f"{template.name} (copy)"
+        if not base_name:
+            raise HTTPException(status_code=422, detail="Workflow name cannot be empty")
+        graph_data = clone_graph(sanitize_graph(template.graph), base_name[:200])
+        graph = WorkflowGraph.model_validate(graph_data)
+        validation = validate_graph(graph, registry)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail=validation.model_dump())
+        workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        linked_project_id = _validate_graph_workspace_sources(session, workspace.id, graph)
+        workflow = Workflow(name=base_name[:200], workspace_id=workspace.id, project_id=linked_project_id, description=f"Cloned from template: {template.name}")
+        session.add(workflow)
+        session.flush()
+        session.add(WorkflowVersion(workflow_id=workflow.id, version=1, graph=graph.model_dump(mode="json")))
+        session.add(AuditLog(action="workflow_template.cloned", entity="workflow", entity_id=str(workflow.id),
+                             details={"template_id": str(template.id)}))
+        session.commit()
+        return {"id": str(workflow.id), "name": workflow.name, "version": 1, "executed": False}
+
+
+

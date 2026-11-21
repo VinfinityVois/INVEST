@@ -1,0 +1,151 @@
+{
+  "report_schema": "invest.security.scan-report.v1",
+  "report_type": "vulnerability_scan",
+  "generated_at": "2026-11-21",
+  "project": {
+    "name": "NEVZ",
+    "source_archive": "workspace-upload",
+    "source_path": "projects/project-4ffdbcfc-7abf-46af-aa19-98a863bfc03c",
+    "scope_note": "This report describes the uploaded NEVZ archive scanned by the local INVEST instance. It is not a scan report for the INVEST repository itself."
+  },
+  "execution": {
+    "run_id": "002ffd30-327b-4f59-918d-a0504b16f421",
+    "workflow_id": "b3c28619-acb7-406a-abaf-928cff9f9d29",
+    "workflow_name": "NEVZ-main (2)",
+    "source": "ui",
+    "status": "completed",
+    "error": null,
+    "started_at": "2026-11-21T16:03:36.709821+00:00",
+    "finished_at": "2026-11-21T16:04:00.622651+00:00",
+    "duration_ms": 23913
+  },
+  "source_manifest": {
+    "complete": true,
+    "schema_version": 1,
+    "file_count": 194,
+    "total_bytes": 3020851,
+    "note": "Per-file paths and hashes are intentionally omitted from this report."
+  },
+  "scan_summary": {
+    "nodes_completed": 8,
+    "nodes_total": 8,
+    "scanners": {
+      "secrets": {
+        "status": "completed",
+        "findings": 4,
+        "duration_ms": 1762.35
+      },
+      "sca": {
+        "status": "completed",
+        "findings": 0,
+        "duration_ms": 347.15
+      },
+      "sast": {
+        "status": "completed",
+        "findings": 0,
+        "duration_ms": 250.14
+      }
+    },
+    "merged_findings": 4
+  },
+  "security_gate": {
+    "decision": "WARN",
+    "blocked": false,
+    "counts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 4,
+      "low": 0,
+      "info": 0
+    },
+    "policy": {
+      "warn_on": [
+        "INFO",
+        "LOW",
+        "MEDIUM"
+      ],
+      "block_on": [
+        "CRITICAL",
+        "HIGH"
+      ]
+    },
+    "interpretation": "The run was not blocked. Four MEDIUM findings triggered a warning."
+  },
+  "findings": [
+    {
+      "id": "NEVZ-SECRET-001",
+      "category": "SECRET",
+      "severity": "MEDIUM",
+      "rule_id": "generic_assignment",
+      "confidence": 0.78,
+      "file": "NEVZ-main/EVA/manufacturing-optimizer/electron-app/renderer/js/auth.js",
+      "line": 90,
+      "classification": "unverified_secret_candidate"
+    },
+    {
+      "id": "NEVZ-SECRET-002",
+      "category": "SECRET",
+      "severity": "MEDIUM",
+      "rule_id": "generic_assignment",
+      "confidence": 0.78,
+      "file": "NEVZ-main/EVA/manufacturing-optimizer/electron-app/renderer/js/auth.js",
+      "line": 94,
+      "classification": "unverified_secret_candidate"
+    },
+    {
+      "id": "NEVZ-SECRET-003",
+      "category": "SECRET",
+      "severity": "MEDIUM",
+      "rule_id": "generic_assignment",
+      "confidence": 0.78,
+      "file": "NEVZ-main/EVA/manufacturing-optimizer/electron-app/renderer/js/app.js",
+      "line": 446,
+      "classification": "unverified_secret_candidate"
+    },
+    {
+      "id": "NEVZ-SECRET-004",
+      "category": "SECRET",
+      "severity": "MEDIUM",
+      "rule_id": "generic_assignment",
+      "confidence": 0.78,
+      "file": "NEVZ-main/EVA/manufacturing-optimizer/electron-app/renderer/js/app.js",
+      "line": 456,
+      "classification": "unverified_secret_candidate"
+    }
+  ],
+  "ai_explain": {
+    "status": "completed",
+    "provider": "openai-compatible",
+    "model": "qwen2.5:3b",
+    "http_status": 200,
+    "analyzed_count": 4,
+    "explained_count": 4,
+    "skipped_count": 0,
+    "unexplained_count": 0,
+    "coverage": 1,
+    "per_finding": {
+      "impact": "MEDIUM",
+      "confidence": 0.8,
+      "root_cause": "generic_assignment"
+    },
+    "evidence_quality": "insufficient_redacted_context",
+    "evidence_observation": "Each explanation contained five evidence lines; all five were identical redaction markers of 41 characters. No original source context was available to the model.",
+    "assessment": "Processing coverage is 100%, but substantive classification quality is not established. The model repeated the scanner rule and generic remediation advice; it did not establish whether the matched values are active credentials, placeholders, or test data.",
+    "output_encoding_issue": "Russian recommendation and evidence-limit strings were observed as mojibake in the PowerShell/API output. The precise layer causing the encoding issue has not yet been isolated."
+  },
+  "limitations": [
+    "The four SECRET findings are candidates, not confirmed active credentials. The original values are deliberately excluded.",
+    "The source files were not independently inspected because the protected source-preview path redacts complete SECRET-bearing files.",
+    "Zero SCA and SAST findings means those scanners reported no findings in this run; it is not a proof that the source is vulnerability-free.",
+    "No GitHub webhook delivery or GitHub-side workflow execution is established by this local UI run.",
+    "AI Explain completion counters measure processing coverage, not correctness of the model's conclusions."
+  ],
+  "recommended_follow_up": [
+    "Trace where finding.code_context is constructed and sanitized before AI Explain.",
+    "Introduce a separate, secret-safe AI evidence contract that masks matched values while preserving useful structural context.",
+    "Add tests proving secrets never reach the model in clear text and redaction placeholders are not treated as meaningful evidence.",
+    "Add semantic validation so a response based only on redaction markers is marked insufficient_evidence rather than fully explained.",
+    "Investigate UTF-8 handling for AI explanation fields end-to-end.",
+    "Review the four candidate assignments in the original NEVZ project and rotate any credential confirmed to be real."
+  ]
+}

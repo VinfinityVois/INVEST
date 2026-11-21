@@ -8,7 +8,8 @@
     {"id":"sast","type":"scan.sast","position":{"x":600,"y":380},"config":{}},
     {"id":"merge","type":"findings.merge","position":{"x":880,"y":230},"config":{}},
     {"id":"ai","type":"ai.explain","position":{"x":1140,"y":230},"config":{"language":"ru","max_findings":20}},
-    {"id":"notify","type":"notify.webhook","position":{"x":1400,"y":230},"config":{"url":""}}
+    {"id":"notify","type":"notify.webhook","position":{"x":1400,"y":230},"config":{"url":""}},
+    {"id":"gate","type":"ci.gate","position":{"x":1140,"y":430},"config":{"block_on":["CRITICAL","HIGH"],"warn_on":["MEDIUM","LOW","INFO"]}}
   ],
   "edges": [
     {"id":"e-trigger-source","source":"trigger","target":"source"},
@@ -19,6 +20,7 @@
     {"id":"e-sca-merge","source":"sca","target":"merge"},
     {"id":"e-sast-merge","source":"sast","target":"merge"},
     {"id":"e-merge-ai","source":"merge","target":"ai"},
-    {"id":"e-ai-notify","source":"ai","target":"notify"}
+    {"id":"e-ai-notify","source":"ai","target":"notify"},
+    {"id":"e-merge-gate","source":"merge","target":"gate"}
   ]
 }

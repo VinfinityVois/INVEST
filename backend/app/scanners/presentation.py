@@ -3,10 +3,25 @@ from pathlib import Path
 import re
 
 _SECRET_ASSIGNMENT = re.compile(
-    r'(?i)(\b(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|authorization)\b\s*[:=]\s*)(["\'])(.*?)(\2)'
+    r'(?i)(\b(?:password|passwd|api[_-]?key|access[_-]?token|client[_-]?secret|secret|token|credential|authorization)\b\s*[:=]\s*)(["\'])(.*?)(\2)'
 )
 _BEARER = re.compile(r'(?i)(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}')
 _LONG_TOKEN = re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b')
+_QUOTED_DOUBLE = re.compile(r'"(?:\\.|[^"\\])*"')
+_QUOTED_SINGLE = re.compile(r"'(?:\\.|[^'\\])*'")
+_UNQUOTED_ASSIGNMENT_VALUE = re.compile(
+    r'(\b[\w.-]+\s*[:=]\s*)([A-Za-z0-9_./+:-]{12,})(?=\s*[,;)}\]]|\s*$)'
+)
+
+
+def _redact_secret_evidence_line(line: str) -> str:
+    """Conservatively retain code shape while masking all string literals on a SECRET line."""
+    line = _QUOTED_DOUBLE.sub('"[REDACTED]"', line)
+    line = _QUOTED_SINGLE.sub("'[REDACTED]'", line)
+    line = _BEARER.sub(r"\1[REDACTED]", line)
+    line = _LONG_TOKEN.sub("[REDACTED]", line)
+    line = _UNQUOTED_ASSIGNMENT_VALUE.sub(r"\1[REDACTED]", line)
+    return line[:350]
 
 _REMEDIATION = {
     "sql": ("Входные данные попадают в SQL-запрос через интерполяцию или конкатенацию.",
@@ -82,6 +97,25 @@ def enrich_finding(finding: dict, root: Path) -> dict:
         }
         for number in range(start, end + 1)
     ]
+    # Keep the user-facing source preview fully redacted for SECRET findings.
+    # AI receives a separate, bounded excerpt with known credential forms masked.
+    if secret_context:
+        contains_private_key = any(
+            "-----BEGIN " in line and "PRIVATE KEY-----" in line
+            for line in lines
+        )
+        if contains_private_key:
+            item["ai_code_context"] = []
+            item["ai_evidence_status"] = "withheld_private_key"
+        else:
+            # Only send the exact finding line. Adjacent source lines may contain
+            # unrelated credentials; every quoted literal on this line is masked.
+            item["ai_code_context"] = [{
+                "line": line_number,
+                "text": _redact_secret_evidence_line(lines[line_number - 1]),
+                "is_finding": True,
+            }]
+            item["ai_evidence_status"] = "safe_redacted" if item["ai_code_context"] else "unavailable"
     item["start_line"] = start
     item["end_line"] = end
     return item

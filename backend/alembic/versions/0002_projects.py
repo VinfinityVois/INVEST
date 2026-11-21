@@ -3,6 +3,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+UUID_TYPE = sa.Uuid(as_uuid=True)
+
 revision = "0002_projects"
 down_revision = "0001_initial"
 branch_labels = None
@@ -12,7 +14,7 @@ depends_on = None
 def upgrade():
     op.create_table(
         "projects",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", UUID_TYPE, primary_key=True),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("workspace_path", sa.String(260), nullable=False, unique=True),
         sa.Column("original_filename", sa.String(255)),

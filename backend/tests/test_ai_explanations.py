@@ -40,6 +40,7 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     def fake_post(url, **kwargs):
         captured["url"] = url
         captured["payload"] = kwargs["json"]
+        captured["timeout"] = kwargs["timeout"]
         return FakeResponse({
             "choices": [{
                 "message": {
@@ -73,6 +74,8 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     }])
 
     assert captured["url"] == "https://llm.example/v1/chat/completions"
+    assert captured["timeout"].read == 90.0
+    assert captured["payload"]["max_tokens"] == 1400
     prompt = captured["payload"]["messages"][1]["content"]
     assert "must-not-be-sent" not in prompt
     assert "masked_value" not in prompt
@@ -319,3 +322,105 @@ def test_gateway_returns_machine_readable_provider_failure(monkeypatch):
     assert result["provider_http_status"] == 429
     assert result["provider_attempts"] == 1
     assert "never-expose-this" not in json.dumps(result)
+
+
+def test_gateway_allows_http_host_docker_internal_for_local_ollama(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "http://host.docker.internal:11434/v1")
+    monkeypatch.setattr(settings, "llm_model", "qwen2.5:3b")
+    monkeypatch.setattr(settings, "llm_api_key", "ollama")
+
+    status = explanations.provider_configuration()
+
+    assert status["configured"] is True
+    assert status["endpoint_valid"] is True
+    assert status["base_url"] == "http://host.docker.internal:11434/v1"
+
+
+def test_gateway_still_rejects_plain_http_for_other_hosts(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "http://192.168.1.20:11434/v1")
+    monkeypatch.setattr(settings, "llm_model", "qwen2.5:3b")
+    monkeypatch.setattr(settings, "llm_api_key", "ollama")
+
+    status = explanations.provider_configuration()
+
+    assert status["endpoint_valid"] is False
+
+
+
+def test_secret_finding_with_redaction_only_context_is_not_counted_as_explained(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(kwargs)
+        raise AssertionError("AI provider must not receive redaction-only evidence")
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "secret-1",
+        "category": "SECRET",
+        "rule_id": "generic_assignment",
+        "code_context": [{
+            "line": 10,
+            "text": "[REDACTED: secret-bearing source context]",
+            "is_finding": True,
+        }],
+    }])
+
+    assert calls == []
+    assert result["status"] == "completed"
+    assert result["explained_count"] == 0
+    assert result["analyzed_count"] == 0
+    assert result["unexplained_count"] == 0
+    assert result["insufficient_evidence_count"] == 1
+    assert result["evidence_coverage"] == 0.0
+    assert result["coverage"] == 0.0
+    assert "безопасный исходный контекст" in result["message"]
+
+
+def test_secret_finding_sends_only_dedicated_masked_ai_context(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["prompt"] = kwargs["json"]["messages"][1]["content"]
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "secret-2",
+                "root_cause": "Credential is hard-coded",
+                "impact": "May be exposed through source control",
+                "recommendation": "Load it from a secret manager",
+                "confidence": 0.8,
+                "evidence_limits": "Runtime validity is unknown",
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "secret-2",
+        "category": "SECRET",
+        "rule_id": "generic_assignment",
+        "code_context": [{
+            "line": 10,
+            "text": "[REDACTED: secret-bearing source context]",
+            "is_finding": True,
+        }],
+        "ai_code_context": [{
+            "line": 10,
+            "text": 'api_key = "[REDACTED]"',
+            "is_finding": True,
+        }],
+    }])
+
+    prompt_data = json.loads(captured["prompt"])
+    sent_context = prompt_data["findings"][0]["code_context"][0]["text"]
+    assert sent_context == 'api_key = "[REDACTED]"'
+    assert "[REDACTED: secret-bearing source context]" not in captured["prompt"]
+    assert result["explained_count"] == 1
+    assert result["insufficient_evidence_count"] == 0
+    assert result["evidence_coverage"] == 1.0
+    assert result["explanations"][0]["source_evidence"][0]["text"] == 'api_key = "[REDACTED]"'

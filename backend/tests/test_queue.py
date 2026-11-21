@@ -216,3 +216,91 @@ def test_due_schedule_with_missing_version_is_disabled(monkeypatch):
     assert schedule.enabled is False
     assert schedule.next_run_at is None
     assert session.committed is True
+
+
+
+def _sqlite_queue_session(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import app.queue as queue
+    from app.db import Base
+    import app.models  # noqa: F401
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(queue, "SessionLocal", factory)
+    return engine, factory
+
+
+def test_claim_recovers_stale_running_run_without_heartbeat(monkeypatch):
+    from datetime import timedelta
+    from app.models import WorkflowRun
+    from app.queue import claim_next_run
+
+    engine, factory = _sqlite_queue_session(monkeypatch)
+    try:
+        stale_started = datetime.now(timezone.utc) - timedelta(minutes=5)
+        with factory() as session:
+            run = WorkflowRun(
+                status="running",
+                source="ui",
+                graph_snapshot={"nodes": [], "edges": []},
+                started_at=stale_started,
+                heartbeat_at=None,
+                locked_by="dead-worker",
+            )
+            session.add(run)
+            session.commit()
+            run_id = str(run.id)
+
+        claimed_id = claim_next_run("replacement-worker")
+
+        assert claimed_id == run_id
+        with factory() as session:
+            recovered = session.get(WorkflowRun, run.id)
+            assert recovered.status == "running"
+            assert recovered.locked_by == "replacement-worker"
+            assert recovered.heartbeat_at is not None
+            assert recovered.started_at.replace(tzinfo=timezone.utc) > stale_started
+    finally:
+        engine.dispose()
+
+
+def test_claim_finalizes_stale_cancellation_without_heartbeat(monkeypatch):
+    from datetime import timedelta
+    from app.models import WorkflowRun
+    from app.queue import claim_next_run
+
+    engine, factory = _sqlite_queue_session(monkeypatch)
+    try:
+        stale_started = datetime.now(timezone.utc) - timedelta(minutes=5)
+        with factory() as session:
+            run = WorkflowRun(
+                status="cancelling",
+                source="ui",
+                graph_snapshot={"nodes": [], "edges": []},
+                started_at=stale_started,
+                heartbeat_at=None,
+                locked_by="dead-worker",
+            )
+            session.add(run)
+            session.commit()
+            run_id = run.id
+
+        assert claim_next_run("replacement-worker") is None
+        with factory() as session:
+            finalized = session.get(WorkflowRun, run_id)
+            assert finalized.status == "cancelled"
+            assert finalized.finished_at is not None
+            assert finalized.locked_by is None
+            assert finalized.heartbeat_at is None
+            assert finalized.error == "Cancellation finalized after worker heartbeat expired"
+    finally:
+        engine.dispose()

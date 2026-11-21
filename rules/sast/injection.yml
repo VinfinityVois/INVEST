@@ -1,0 +1,15 @@
+pack_id: sast-injection
+title: Kotlin / Spring injection
+version: 1
+analyzer: sast
+rules:
+  - id: kotlin.jdbc.sql-injection
+    severity: HIGH
+    confidence: 0.96
+    cwe: [CWE-89]
+    description: Request parameter interpolated into SQL
+  - id: kotlin.taint.interprocedural-sql-injection
+    severity: HIGH
+    confidence: 0.91
+    cwe: [CWE-89]
+    description: HTTP input reaches SQL sink through a direct helper call

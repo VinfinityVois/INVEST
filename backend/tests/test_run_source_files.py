@@ -33,7 +33,12 @@ def test_rejects_symlink_inside_source(tmp_path: Path):
     root.mkdir()
     outside = tmp_path / "outside.txt"
     outside.write_text("secret", encoding="utf-8")
-    (root / "link.txt").symlink_to(outside)
+    try:
+        (root / "link.txt").symlink_to(outside)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Creating symlinks requires Windows Developer Mode or elevated privileges")
+        raise
     graph, result = _run()
     with pytest.raises(RunSourceFileError):
         resolve_run_source_file(tmp_path, graph, result, "link.txt")
@@ -60,3 +65,26 @@ def test_rejects_project_artifact_outside_project_namespace(tmp_path: Path):
     graph, result = _run(source_name="projects/../outside")
     with pytest.raises(RunSourceFileError):
         resolve_run_source_file(tmp_path, graph, result, "secret.txt")
+
+
+def test_resolves_file_relative_to_wrapped_project_root(tmp_path: Path):
+    artifact = tmp_path / "projects" / "project-demo"
+    project = artifact / "training-project"
+    (project / "src" / "main" / "kotlin").mkdir(parents=True)
+    expected = project / "src" / "main" / "kotlin" / "DepotStatusClient.kt"
+    expected.write_text("class DepotStatusClient", encoding="utf-8")
+    graph, result = _run(source_name="projects/project-demo")
+    resolved = resolve_run_source_file(tmp_path, graph, result, "src/main/kotlin/DepotStatusClient.kt")
+    assert resolved == expected
+
+
+def test_resolves_file_using_explicit_project_subdirectory(tmp_path: Path):
+    artifact = tmp_path / "projects" / "project-demo"
+    project = artifact / "training-project"
+    (project / "src").mkdir(parents=True)
+    expected = project / "src" / "Main.kt"
+    expected.write_text("class Main", encoding="utf-8")
+    graph, result = _run(source_name="projects/project-demo")
+    result["outputs"]["src"]["project_subdirectory"] = "training-project"
+    resolved = resolve_run_source_file(tmp_path, graph, result, "src/Main.kt")
+    assert resolved == expected
