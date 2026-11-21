@@ -71,6 +71,7 @@ type Telemetry = {
   security_gate?: { decision: "PASS" | "WARN" | "BLOCK"; blocked: boolean; counts: Record<string, number>; policy: { block_on: string[]; warn_on: string[] } } | null;
   trace?: Array<{ node_id: string; type: string; status: string; diagnostic_level?: "info" | "warning" | "error" | "blocked"; reason_code?: string; reason?: string; message?: string; provider?: string; model?: string; provider_request_ms?: number; provider_attempts?: number; provider_http_status?: number; provider_error_code?: string | null; duration_ms?: number; findings?: number; cached?: boolean; cache_bypass_reason?: string; cache_age_seconds?: number }>;
   scanner_progress?: { files_scanned: number; total_files: number; current_file: string } | null;
+  error?: string | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
 type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
@@ -1282,8 +1283,18 @@ export default function App() {
       if (findingsResponse.ok) setFindings(await findingsResponse.json());
       const telemetryResponse = await fetch("/api/runs/" + queued.run_id + "/telemetry");
       if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json());
-      setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
-      if (completed.status === "failed") setResult("Проверка завершилась с ошибкой.");
+      if (completed.status === "failed") {
+        const nodeErrors = Object.entries(completed.node_results || {})
+          .filter(([, item]) => ["failed", "configuration_required", "blocked"].includes(String(item.status || "")))
+          .map(([nodeId, item]) => nodeId + ": " + (item.message || item.status));
+        const traceErrors = (completed.trace || [])
+          .filter(item => item.diagnostic_level === "error" || item.diagnostic_level === "blocked" || item.status === "failed")
+          .map(item => [item.node_id, item.message || item.reason].filter(Boolean).join(": "));
+        const details = Array.from(new Set([completed.error, ...nodeErrors, ...traceErrors].filter((item): item is string => Boolean(item && item.trim()))));
+        setResult("Проверка завершилась с ошибкой.\\n" + (details.length ? details.join("\\n") : "Worker завершил запуск без диагностического сообщения. Откройте журнал worker для подробностей."));
+      } else {
+        setResult("Проверка завершена · " + completed.status + " · " + completed.total_findings + " находок");
+      }
       await refreshWorkflowRuns(id);
     } catch (error) { setResult("Запуск не выполнен: " + String(error)); setShowResult(true); }
     finally { setBusy(false); }
