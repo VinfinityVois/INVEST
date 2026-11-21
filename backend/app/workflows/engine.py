@@ -32,6 +32,29 @@ MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
+def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -> list[dict]:
+    """Apply only presentation-independent scanner options declared in the node schema."""
+    minimum = config.get("min_confidence", 0.0)
+    try:
+        minimum = float(minimum)
+    except (TypeError, ValueError):
+        minimum = 0.0
+    include_tests = config.get("include_tests", False) is True
+    if minimum < 0 or minimum > 1:
+        minimum = 0.0
+    test_markers = {"test", "tests", "androidtest", "testfixtures"}
+    filtered = []
+    for finding in findings:
+        if float(finding.get("confidence", 0.0) or 0.0) < minimum:
+            continue
+        if scanner in {"secrets", "sast"} and not include_tests:
+            parts = {part.lower() for part in PurePosixPath(str(finding.get("path", ""))).parts}
+            if parts & test_markers:
+                continue
+        filtered.append(finding)
+    return filtered
+
+
 def _source_fingerprint(root: Path) -> str:
     digest = hashlib.sha256()
     skipped = {".git", "node_modules", ".gradle", "build", "dist", "target", ".venv"}
@@ -397,11 +420,11 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     cache_hit = True
                 else:
                     if node.type == "scan.secrets":
-                        raw_findings = scan_directory(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(scan_directory(source_root, on_progress=report_scanner_progress), node.config, "secrets")
                     elif node.type == "scan.sca":
-                        raw_findings = scan_project(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(scan_project(source_root, on_progress=report_scanner_progress), node.config, "sca")
                     else:
-                        raw_findings = scan_kotlin_project(source_root, on_progress=report_scanner_progress)
+                        raw_findings = _filter_scanner_findings(scan_kotlin_project(source_root, on_progress=report_scanner_progress), node.config, "sast")
                     findings = [enrich_finding(item, source_root) for item in raw_findings]
                     output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
                     try:
@@ -421,7 +444,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_project(artifacts[source_node], on_progress=report_scanner_progress)]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(scan_project(artifacts[source_node], on_progress=report_scanner_progress), node.config, "sca")]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "scan.sast":
             source_node = next(
@@ -430,7 +453,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             if source_node is None:
                 output = {"status": "blocked", "findings": [], "message": "Нет доступного source-каталога."}
             else:
-                findings = [enrich_finding(item, artifacts[source_node]) for item in scan_kotlin_project(artifacts[source_node], on_progress=report_scanner_progress)]
+                findings = [enrich_finding(item, artifacts[source_node]) for item in _filter_scanner_findings(scan_kotlin_project(artifacts[source_node], on_progress=report_scanner_progress), node.config, "sast")]
                 output = {"status": "completed", "findings": findings, "summary": {"total": len(findings)}}
         elif node.type == "findings.merge":
             merged = []
