@@ -37,6 +37,32 @@
   position:sticky;top:0;z-index:30;height:52px;min-height:52px;gap:16px;
   border-bottom:1px solid var(--border);background:var(--surface);
 }
+.shell .workspace-context {
+  display:flex;align-items:center;gap:7px;min-width:150px;max-width:260px;
+  padding:4px 8px;border:1px solid var(--border);border-radius:5px;
+  background:var(--page);color:var(--muted);
+}
+.shell .workspace-context > span {
+  flex:none;font:600 9px "JetBrains Mono",monospace;letter-spacing:.08em;
+}
+.shell .workspace-context select {
+  min-width:0;width:100%;border:0;outline:0;background:transparent;
+  color:var(--text);font-size:11px;font-weight:600;cursor:pointer;
+}
+.shell .workspace-context select:disabled { cursor:default;opacity:.72; }
+.shell .workspace-spinner {
+  width:10px;height:10px;flex:none;border:1px solid var(--border);
+  border-top-color:var(--accent-500);border-radius:50%;animation:workspace-spin .7s linear infinite;
+}
+@keyframes workspace-spin { to { transform:rotate(360deg); } }
+@media(max-width:900px) {
+  .shell .workspace-context { max-width:190px; }
+  .shell .workspace-context > span { display:none; }
+}
+@media(max-width:640px) {
+  .shell .workspace-context { min-width:0;max-width:145px;padding:3px 5px; }
+  .shell .workspace-context select { font-size:10px; }
+}
 .shell .brand { min-width:250px;gap:9px; }
 .shell .mark { width:30px;height:30px;border:1px solid var(--border);border-radius:4px;
   background:var(--soft-accent);color:var(--accent-600);box-shadow:none; }
