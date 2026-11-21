@@ -6,11 +6,12 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import UserManagement from "./UserManagement";
+import WorkspaceManager from "./WorkspaceManager";
 import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
   UploadCloud, Workflow, X, Zap, Copy, Save, RefreshCw, ArrowLeftRight,
-  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Users, FolderOpen, FileText, Pencil, ChevronRight, Download, Library, SearchCheck, Sparkles, Sun, Moon, Menu, BookOpen, CircleCheck, CircleX, CircleAlert, LoaderCircle, MinusCircle, Building2,
 } from "lucide-react";
 
 type PortManifest = { name: string; data_type: string };
@@ -338,6 +339,7 @@ export default function App() {
 function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; onUserUpdated: (user: AuthUser) => void; onLogout: () => void }) {
   const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
@@ -1699,6 +1701,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         </select>
         {workspaceSwitching && <i className="workspace-spinner" />}
       </div>
+      <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Доступы</button>
       <div className="actions">
         <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
         <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
@@ -1727,6 +1730,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       </div>
     </header>
     <div className="desktop-recommendation"><Activity size={14}/><span>Для полноценной работы с графом рекомендуется экран от 1280 px. На узких экранах панели доступны в адаптированном режиме.</span></div>
+    <WorkspaceManager open={workspaceManagerOpen} onClose={() => setWorkspaceManagerOpen(false)} onChanged={() => window.location.reload()} />
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
       <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>
         {leftCollapsed ? <button className="collapsed-rail" onClick={() => setLeftCollapsed(false)} title="Развернуть библиотеку блоков" aria-label="Развернуть библиотеку блоков"><PanelLeftOpen size={17} /><span>БЛОКИ</span></button> : <>
