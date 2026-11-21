@@ -1338,7 +1338,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     try {
       const params = new URLSearchParams({ path: projectFilePreview.path });
       const response = await apiFetch(`/api/projects/${activeProject.id}/file?${params}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft }),
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: projectDraft, expected_sha256: projectFilePreview.sha256 }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось сохранить файл");
