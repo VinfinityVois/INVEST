@@ -44,10 +44,6 @@ if ($run.result) {
         $gate = $result.security_gate
         Write-Host ("Security Gate: {0}" -f $gate.decision) -ForegroundColor $(if ($gate.decision -eq "BLOCK") { "Red" } elseif ($gate.decision -eq "WARN") { "Yellow" } else { "Green" })
         $gate.counts | Format-List
-        if ($gate.decision -eq "BLOCK") {
-            Write-Error "Security Gate blocked the demo workflow. Run ID: $runId"
-            exit 1
-        }
         if ($gate.decision -notin @("PASS", "WARN")) {
             Write-Error "Security Gate returned no valid decision. Run ID: $runId"
             exit 1
@@ -56,14 +52,25 @@ if ($run.result) {
         Write-Error "Demo workflow completed without a Security Gate decision. Run ID: $runId"
         exit 1
     }
-    if ($result.outputs.notify) {
-        Write-Host "Webhook:" -ForegroundColor Cyan
-        $result.outputs.notify | ConvertTo-Json -Depth 10
+    $notify = $null
+    if ($result.outputs) { $notify = $result.outputs.notify }
+    if (-not $notify -or $notify.delivered -ne $true) {
+        Write-Error "Webhook was not delivered successfully. Run ID: $runId"
+        exit 1
     }
+    Write-Host "Webhook delivered:" -ForegroundColor Green
+    $notify | ConvertTo-Json -Depth 10
 }
 
 Write-Host "Run details: $ApiBaseUrl/api/runs/$runId" -ForegroundColor Green
-if ($run.status -ne "completed") {
+$gateBlocked = $false
+if ($result -and $result.security_gate) { $gateBlocked = $result.security_gate.decision -eq "BLOCK" }
+if ($run.status -ne "completed" -and -not ($gateBlocked -and $run.status -eq "failed")) {
     Write-Error "Demo workflow finished with status '$($run.status)'. Run ID: $runId"
     exit 1
+}
+if ($gateBlocked) {
+    Write-Host "Expected result: Security Gate BLOCK. The run is marked failed by gate policy; scanners, AI and webhook were still executed." -ForegroundColor Yellow
+} else {
+    Write-Host "Demo workflow completed successfully." -ForegroundColor Green
 }
