@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 
-PRESETS_ROOT = Path(__file__).resolve().parents[3] / "presets"
+_MODULE_PATH = Path(__file__).resolve()
+# In the repository, presets/ is next to backend/. In the Docker image,
+# Dockerfile copies presets/ into /app/presets beside the application package.
+_PRESET_ROOT_CANDIDATES = (_MODULE_PATH.parents[2] / "presets", _MODULE_PATH.parents[3] / "presets")
+PRESETS_ROOT = next((candidate for candidate in _PRESET_ROOT_CANDIDATES if candidate.is_dir()), _PRESET_ROOT_CANDIDATES[0])
 _PRESET_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 _MAX_MANIFEST_BYTES = 128_000
 _MAX_PRESET_BYTES = 512_000
