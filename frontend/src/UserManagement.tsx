@@ -10,7 +10,7 @@ type SessionItem = {
   expires_at: string; revoked: boolean; current: boolean;
 };
 
-type Props = { isAdmin: boolean; currentUserId: string; currentEmail: string; onClose: () => void };
+type Props = { isAdmin: boolean; currentUserId: string; currentEmail: string; onProfileUpdated: (user: { id: string; email: string; is_admin: boolean }) => void; onClose: () => void };
 
 async function request(path: string, init?: RequestInit) {
   const response = await fetch(path, {
@@ -25,7 +25,7 @@ async function request(path: string, init?: RequestInit) {
   return response;
 }
 
-export default function UserManagement({ isAdmin, currentUserId, currentEmail, onClose }: Props) {
+export default function UserManagement({ isAdmin, currentUserId, currentEmail, onProfileUpdated, onClose }: Props) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [query, setQuery] = useState("");
@@ -124,6 +124,7 @@ export default function UserManagement({ isAdmin, currentUserId, currentEmail, o
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Не удалось обновить профиль.");
       setProfileEmail(data.email); setProfilePassword("");
+      onProfileUpdated({ id: data.id, email: data.email, is_admin: data.is_admin });
       setNotice("Email профиля обновлён.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка обновления профиля.");
