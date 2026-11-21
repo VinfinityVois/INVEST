@@ -1,9 +1,17 @@
 # INVEST — что осталось по кейсу Центр-инвест / CyberGarden 2026
 
 **Ветка:** `feat/platform-foundation`  
-**Срез исходников:** `bd05d31d8a804535c542cc16759fb61c4af4439f`  
+**Срез исходников:** `21758f1f5e24c67de1e0d373b53aa909b26b88e7`  
 **Дата:** 2026-11-21  
 **Метод:** повторная проверка исходников, тестов, workflow и документации GitHub. Это не локальный E2E-прогон и не penetration test.
+
+## Последнее подтверждение CI — 2026-11-21
+
+- Проверенный HEAD: `21758f1f5e24c67de1e0d373b53aa909b26b88e7`; PR [#2](https://github.com/VinfinityVois/INVEST/pull/2) остаётся Draft и направлен в `main`.
+- GitHub Actions run `44922979633`: backend, frontend, benchmark и container — **4/4 jobs success**.
+- Benchmark на `TBagirov/training`, commit `fe1fcbe212669783480666b9b60147c8a8c6eef4`: Secrets **5/5**, SCA **5/5**, SAST **5/5**; для каждой категории precision/recall/F1 = **1.0**, false positives = 0, missed = 0, controls triggered = 0.
+- Это подтверждает статические benchmark-проверки, но не полный runtime E2E: локальный Git → scanners → AI → webhook → Gate, фактическая доставка webhook и миграции/worker recovery остаются отдельными проверками.
+- Для внешнего PR Gate LESS ранее подтверждён PASS (run `3d78271f-0217-4202-8450-e03a7f91f475`, 0 findings); NEVZ пока не имеет подтверждённого E2E run.
 
 ## Короткий вывод
 
@@ -73,7 +81,7 @@
 3. **SAST coverage.** Текущий Kotlin/Spring анализ остаётся ограниченным лексическим/эвристическим анализом с ограниченным межфайловым taint propagation; полноценные Kotlin AST/PSI, type resolution, call graph и flow-sensitive анализ отсутствуют. Не выдавать его за эквивалент промышленного компиляционного анализатора.
 4. **Secrets precision.** Дальше улучшать контекст, placeholder suppression и entropy только по измерениям FP/FN; не расширять regex-набор вслепую.
 5. **Account lifecycle.** Password reset/recovery, MFA, policy удаления/анонимизации и проверка account deletion remain open.
-6. **Reports.** Добавить CSV/SARIF в первую очередь; PDF/XLSX — после уточнения формата.
+6. **Reports.** CSV-экспорт текущей отфильтрованной выборки findings добавлен в HEAD `21758f1`; остаётся SARIF. PDF/XLSX — после уточнения формата.
 7. **Finding management.** Не хватает назначения ответственного, комментариев, labels, due date и полноценной истории переходов/повторного открытия.
 8. **Audit log.** Нет полноценного actor-aware audit UI, поиска/экспорта, tamper-evident хранения и retention controls.
 9. **UX.** Остаются usability-проверки на реальных ширинах экрана, длинных finding payloads и заполненном проекте.
@@ -86,7 +94,7 @@
 | P0-1 | Полный E2E на закреплённом Kotlin-репозитории | Скрипт и demo graph есть, но удалённая проверка исходников не доказывает запуск на пользовательском Docker | Один реальный прогон: Git → Secrets/SCA/SAST → Merge → AI → Webhook + Gate |
 | P0-2 | Проверить webhook delivery | Реализация и тесты есть; нужен фактический приём JSON на уникальном endpoint | В webhook.site получен payload; скрипт подтвердил delivered |
 | P0-3 | Проверить AI в целевом окружении | Код поддерживает provider timeout 90s, но наличие/доступность LLM credentials зависит от локального .env и сети | AI node completed, объяснения привязаны к evidence, нет configuration_required |
-| P0-4 | Пересчитать benchmark на закреплённом эталоне | CI benchmarks есть, но результат ограничен конкретной версией training repo и ground truth | Сохранить precision/recall/F1 и список FP/FN для трёх сканеров |
+| P0-4 | Пересчитать benchmark на закреплённом эталоне | Выполнено в CI run `44922979633` на pinned commit `fe1fcbe212669783480666b9b60147c8a8c6eef4` | Secrets/SCA/SAST: 15/15, precision/recall/F1 = 1.0 по каждой категории, 0 FP/FN/controls; сохранять эти отчёты как regression baseline |
 | P0-5 | Прогнать миграции и восстановление очереди | CI и unit tests не заменяют проверку существующей пользовательской БД и рестарта worker | Upgrade на пустой и существующей БД; прерванный run восстанавливается без дублирования |
 
 **Demo automation:** `scripts/demo.ps1` теперь входит через `/api/auth/login`, использует session cookie в памяти процесса и отзывает сессию. Для него нужны `INVEST_DEMO_EMAIL` и `INVEST_DEMO_PASSWORD`; инструкция добавлена в README и demo runbook. Сам скрипт ещё нужно выполнить локально.
@@ -108,9 +116,9 @@
 ## Release / branch readiness
 
 - Ветка `feat/platform-foundation` содержит рабочую линию разработки.
-- Сравнение с `main` показывает diverged history: foundation на 953 коммита впереди и на 2 коммита позади. В `main` есть отдельные revert-коммиты. Не выполнять слепой merge и не переключать default branch без анализа этих двух коммитов и согласованного PR.
-- CI backend/frontend/benchmarks/container проходит на промежуточных коммитах workspace implementation; новые migration/token/UI changes ещё ожидают финального зелёного run.
-- Локальный Docker пользователя не проверен после последних удалённых изменений.
+- Сравнение `main...feat/platform-foundation` на 2026-11-21: ветка diverged, **1146 commits ahead / 2 behind**; merge base `98e20dd`. В `main` есть два отдельных коммита после merge base, включая revert. Не выполнять слепой merge/rebase и не менять default branch без отдельного анализа.
+- На HEAD `21758f1` CI run `44922979633` прошёл: backend, frontend, benchmark и container — 4/4 success. Это не заменяет локальные migration/runtime проверки.
+- Локальный Docker пользователя и полный NEVZ E2E не проверены после последних удалённых изменений; не считать их закрытыми по GitHub CI.
 
 ## Приоритет следующей итерации
 
