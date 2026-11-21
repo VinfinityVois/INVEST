@@ -50,3 +50,27 @@
 - Benchmark: команды и формат отчётов находятся в \`eval/README.md\`.
 
 Не показывать \`.env\`, API keys, masked values или секреты из тестового проекта на слайдах и в записи экрана.
+
+
+## Автоматический запуск из CI/CD
+
+`.github/workflows/security-check.yml` поддерживает и ручной `workflow_dispatch`, и reusable workflow через `workflow_call`. Чтобы запускать проверку на каждый Pull Request в целевом репозитории, добавьте туда файл `.github/workflows/invest-security.yml`:
+
+```yaml
+name: INVEST security gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  security:
+    uses: VinfinityVois/INVEST/.github/workflows/security-check.yml@feat/platform-foundation
+    with:
+      workflow_id: ${{ vars.INVEST_WORKFLOW_ID }}
+    secrets:
+      INVEST_API_BASE_URL: ${{ secrets.INVEST_API_BASE_URL }}
+      INVEST_CI_TOKEN: ${{ secrets.INVEST_CI_TOKEN }}
+```
+
+В целевом репозитории задайте Actions variable `INVEST_WORKFLOW_ID` (UUID сохранённого workflow) и secrets `INVEST_API_BASE_URL` и `INVEST_CI_TOKEN`. Для production закрепите reusable workflow на проверенном release tag или commit SHA вместо изменяемой feature-ветки. Не используйте `pull_request_target`: проверка не должна получать секреты в контексте недоверенного кода PR.
