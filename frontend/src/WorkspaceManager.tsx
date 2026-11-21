@@ -4,6 +4,7 @@ import { Building2, Plus, Users, X, RefreshCw, Trash2, Crown, FolderOpen, Shield
 type Organization = { id: string; name: string; kind: string; role: "owner" | "admin" | "member" };
 type Workspace = { id: string; name: string; organization_id: string; organization_name: string; role: string; is_default: boolean; active: boolean };
 type Member = { user_id: string; email: string; role: string; is_active: boolean };
+type ApiToken = { id: string; name: string; scopes: string[]; created_at: string; expires_at?: string | null; revoked_at?: string | null; last_used_at?: string | null };
 
 async function api(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -25,6 +26,10 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   const [workspaceId, setWorkspaceId] = useState("");
   const [organizationMembers, setOrganizationMembers] = useState<Member[]>([]);
   const [workspaceMembers, setWorkspaceMembers] = useState<Member[]>([]);
+  const [apiTokens, setApiTokens] = useState<ApiToken[]>([]);
+  const [tokenName, setTokenName] = useState("");
+  const [tokenScopes, setTokenScopes] = useState<string[]>(["workflow:run", "run:read"]);
+  const [issuedToken, setIssuedToken] = useState("");
   const [newOrganization, setNewOrganization] = useState("");
   const [newWorkspace, setNewWorkspace] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
@@ -68,6 +73,15 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
     return () => { active = false; };
   }, [open, workspaceId]);
 
+  useEffect(() => {
+    if (!open || !workspaceId) { setApiTokens([]); return; }
+    let active = true;
+    api("/api/workspaces/" + workspaceId + "/tokens")
+      .then(data => { if (active) setApiTokens(data.items || []); })
+      .catch(() => { if (active) setApiTokens([]); });
+    return () => { active = false; };
+  }, [open, workspaceId]);
+
   const run = async (action: () => Promise<unknown>, success: string) => {
     setBusy(true); setError(""); setNotice("");
     try {
@@ -103,6 +117,33 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
       method: "PATCH", body: JSON.stringify({ role }),
     });
   }, "Роль участника обновлена.");
+
+  const createToken = async () => {
+    setBusy(true); setError(""); setNotice(""); setIssuedToken("");
+    try {
+      const data = await api("/api/workspaces/" + workspaceId + "/tokens", {
+        method: "POST",
+        body: JSON.stringify({ name: tokenName, scopes: tokenScopes }),
+      });
+      setIssuedToken(data.token);
+      setTokenName("");
+      const listed = await api("/api/workspaces/" + workspaceId + "/tokens");
+      setApiTokens(listed.items || []);
+      setNotice("API token создан. Скопируйте его сейчас: повторно показать секрет нельзя.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось создать API token.");
+    } finally { setBusy(false); }
+  };
+
+  const revokeToken = (token: ApiToken) => {
+    if (!window.confirm("Отозвать API token «" + token.name + "»? Интеграция перестанет работать.")) return;
+    void run(async () => {
+      await api("/api/workspaces/" + workspaceId + "/tokens/" + token.id, { method: "DELETE" });
+      const listed = await api("/api/workspaces/" + workspaceId + "/tokens");
+      setApiTokens(listed.items || []);
+      setIssuedToken("");
+    }, "API token отозван.");
+  };
 
   const removeWorkspaceMember = (member: Member) => {
     if (!window.confirm("Удалить " + member.email + " из этой рабочей области?")) return;
@@ -188,6 +229,33 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
               <button type="submit" disabled={busy || !canManageOrganization || !organizationId}><Plus size={13}/> Добавить в организацию и Workspace</button>
               <small>Добавляется существующий аккаунт. Приглашения по email пока не включены.</small>
             </form>
+          </section>
+          <section className="workspace-manager-section">
+            <h3><ShieldCheck size={14}/> API Tokens / CI</h3>
+            {canManageWorkspace && <>
+              <form className="workspace-manager-add-member" onSubmit={event => { event.preventDefault(); void createToken(); }}>
+                <input value={tokenName} onChange={event => setTokenName(event.target.value)} placeholder="Название токена" maxLength={120} required/>
+                <div className="workspace-token-scopes">
+                  {[
+                    ["workflow:run", "Запуск workflow"],
+                    ["run:read", "Статус запусков"],
+                    ["findings:read", "Чтение findings"],
+                    ["reports:read", "Чтение отчётов"],
+                    ["template:publish", "Публикация шаблонов"],
+                  ].map(([scope, label]) => <label key={scope}><input type="checkbox" checked={tokenScopes.includes(scope)} onChange={event => setTokenScopes(current => event.target.checked ? [...current, scope] : current.filter(item => item !== scope))}/>{label}</label>)}
+                </div>
+                <button type="submit" disabled={busy || tokenName.trim().length < 2 || tokenScopes.length === 0}><Plus size={13}/> Создать токен</button>
+              </form>
+              {issuedToken && <div className="workspace-issued-token"><b>Секрет показан один раз</b><code>{issuedToken}</code><button type="button" onClick={() => void navigator.clipboard.writeText(issuedToken)}>Копировать</button></div>}
+              <div className="workspace-manager-members">
+                {apiTokens.map(token => <div className="workspace-manager-member" key={token.id}>
+                  <span><b>{token.name}</b><small>{token.scopes.join(" · ")}{token.revoked_at ? " · отозван" : token.expires_at ? " · до " + new Date(token.expires_at).toLocaleDateString() : ""}</small></span>
+                  {!token.revoked_at && <button type="button" title="Отозвать токен" disabled={busy} onClick={() => revokeToken(token)}><Trash2 size={13}/></button>}
+                </div>)}
+                {apiTokens.length === 0 && <p className="workspace-manager-hint">Токены ещё не созданы.</p>}
+              </div>
+            </>}
+            {!canManageWorkspace && <p className="workspace-manager-hint">Создавать и отзывать токены может только администратор Workspace.</p>}
           </section>
           <section className="workspace-manager-section">
             <h3><Users size={14}/> Доступ к выбранному Workspace</h3>
