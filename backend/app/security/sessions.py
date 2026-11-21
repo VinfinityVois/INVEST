@@ -61,11 +61,11 @@ def create_session(
     return token, session
 
 
-def get_user_for_session(
+def get_session_context(
     db: Session,
     token: str | None,
-) -> User | None:
-    """Return the active user for a valid, non-revoked session."""
+) -> tuple[User, UserSession] | None:
+    """Return the active user and session for a valid opaque token."""
     if not isinstance(token, str) or not token:
         return None
 
@@ -87,7 +87,16 @@ def get_user_for_session(
     session, user = result
     session.last_seen_at = now
     db.flush()
-    return user
+    return user, session
+
+
+def get_user_for_session(
+    db: Session,
+    token: str | None,
+) -> User | None:
+    """Compatibility helper returning only the authenticated user."""
+    context = get_session_context(db, token)
+    return context[0] if context is not None else None
 
 
 def revoke_session(
