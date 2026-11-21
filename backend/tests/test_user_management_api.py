@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import Organization, OrganizationMembership, Project, User, UserSession, Workspace, WorkspaceMembership
+from app.models import Organization, OrganizationMembership, Project, User, UserSession, Workflow, WorkflowRun, Workspace, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
@@ -251,8 +251,23 @@ def test_workspace_membership_isolation_and_switching(user_client):
             expanded_bytes=10,
         )
         db.add(admin_project)
+        admin_workflow = Workflow(
+            name="Private admin workflow",
+            workspace_id=admin_workspace.id,
+        )
+        db.add(admin_workflow)
         db.flush()
         admin_project_id = admin_project.id
+        admin_workflow_id = admin_workflow.id
+        admin_run = WorkflowRun(
+            workflow_id=admin_workflow.id,
+            status="completed",
+            source="ui",
+            graph_snapshot={"nodes": [], "edges": []},
+        )
+        db.add(admin_run)
+        db.flush()
+        admin_run_id = admin_run.id
 
     own_workspaces = client.get("/api/workspaces")
     assert own_workspaces.status_code == 200
@@ -291,6 +306,10 @@ def test_workspace_membership_isolation_and_switching(user_client):
     assert client.get("/api/projects").json() == []
     hidden_project = client.get(f"/api/projects/{admin_project_id}/files")
     assert hidden_project.status_code == 404
+    assert client.get("/api/workflows").json() == []
+    assert client.get(f"/api/workflows/{admin_workflow_id}").status_code == 404
+    assert client.get(f"/api/runs/{admin_run_id}").status_code == 404
+    assert client.get(f"/api/runs/{admin_run_id}/findings").status_code == 404
     member_workspaces = client.get("/api/workspaces")
     assert member_workspaces.status_code == 200
     visible_ids = {item["id"] for item in member_workspaces.json()["items"]}
