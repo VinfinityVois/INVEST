@@ -71,6 +71,13 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   }, [workspaceId, workspaces]);
 
   useEffect(() => {
+    const firstInOrganization = workspaces.find(item => item.organization_id === organizationId);
+    if (firstInOrganization && !workspaces.some(item => item.id === workspaceId && item.organization_id === organizationId)) {
+      setWorkspaceId(firstInOrganization.id);
+    }
+  }, [organizationId, workspaces, workspaceId]);
+
+  useEffect(() => {
     if (!open || !workspaceId) { setWorkspaceMembers([]); return; }
     let active = true;
     api("/api/workspaces/" + workspaceId + "/members")
