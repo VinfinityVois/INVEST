@@ -358,4 +358,4 @@ API:
 - `GET /api/presets/{preset_id}` returns a sanitized graph preview;
 - `POST /api/presets/{preset_id}/clone` creates a new saved workflow with fresh node/edge IDs and does not execute it.
 
-In the editor, open **Каталог workflow** → **Создать workflow** on **PR Gate**. Then replace the example Git URL with a repository URL already permitted by `ALLOWED_TARGETS`, save the workflow, and run it. The resulting graph contains exactly one `ci.gate` node and can be used with the protected `/api/ci/workflows/{workflow_id}/runs` endpoint after `CI_TRIGGER_TOKEN` is configured. Cloning never starts a scan automatically.
+In the editor, open **Каталог workflow** → **Создать workflow** on **PR Gate**. Then replace the example Git URL with a repository URL already permitted by `ALLOWED_TARGETS`, save the workflow, and run it. The resulting graph contains exactly one `ci.gate` node and can be used with the protected `/api/ci/workflows/{workflow_id}/runs` endpoint after a workspace API token with `workflow:run` and `run:read` scopes is created. Cloning never starts a scan automatically.
