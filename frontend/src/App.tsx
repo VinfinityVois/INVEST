@@ -619,8 +619,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
 
 
   const [edgeLabel, setEdgeLabel] = useState("");
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(true);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<"properties" | "findings" | "telemetry">("properties");
   const [leftTab, setLeftTab] = useState<"nodes" | "projects">("nodes");
   const [projectFolderOpen, setProjectFolderOpen] = useState(true);
@@ -2059,46 +2059,47 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
 
   return <main className="shell" data-theme={theme}>
     <header className="topbar">
-      <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
-      <div className="status"><i className={notice.startsWith("API подключён") ? "online" : ""} />{notice}</div>
-      <div className="workspace-context" title={workspaceError || "Активная рабочая область"}>
-        <span>WORKSPACE</span>
-        <select aria-label="Активная рабочая область" value={activeWorkspaceId} disabled={workspaceSwitching || workspaces.length < 2} onChange={event => void switchWorkspace(event.target.value)}>
-          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.organization_name} / {workspace.name}</option>)}
-          {workspaces.length === 0 && <option value="">Нет доступных Workspace</option>}
-        </select>
-        {workspaceSwitching && <i className="workspace-spinner" />}
+      <div className="topbar-leading">
+        <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
+        <div className="app-menu-wrap app-menu-wrap-leading">
+          <button className="icon-button app-menu-trigger" type="button" onClick={() => setAppMenuOpen(value => !value)} aria-label="Открыть главное меню" aria-expanded={appMenuOpen} title="Главное меню"><Menu size={17}/><ChevronDown size={11}/></button>
+          {appMenuOpen && <div className="app-menu" role="menu">
+            <div className="app-menu-heading"><span>INVEST WORKSPACE</span><small>Навигация и действия</small></div>
+            <button role="menuitem" disabled={busy || !selectedNodeId} onClick={() => { setAppMenuOpen(false); if (selectedNodeId) void runWorkflow([selectedNodeId]); }}><Zap size={15}/><span><b>Запустить выбранный блок</b><small>Выполнить выделенную ноду</small></span></button>
+            <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void runWorkflow(undefined, true); }}><RefreshCw size={15}/><span><b>Полный анализ</b><small>Пересканировать проект без кэша</small></span></button>
+            <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void saveWorkflow(); }}><Save size={15}/><span><b>Сохранить граф</b><small>Зафиксировать текущую схему</small></span></button>
+            <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void validateWorkflow(); }}><Check size={15}/><span><b>Проверить граф</b><small>Проверить структуру и связи</small></span></button>
+            <div className="app-menu-divider"/>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Библиотека проектов</b><small>Исходные проекты и файлы</small></span></button>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны workflow</b><small>Готовые security-сценарии</small></span></button>
+            <button role="menuitem" disabled={busy || aiGraphBusy} onClick={() => { setAppMenuOpen(false); setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={15}/><span><b>Создать граф с AI</b><small>Сгенерировать черновик схемы</small></span></button>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setDashboardOpen(true); }}><BarChart3 size={15}/><span><b>Аналитика</b><small>Сводка активной рабочей области</small></span></button>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setWorkspaceManagerOpen(true); }}><Building2 size={15}/><span><b>Рабочие области</b><small>Организации и участники</small></span></button>
+            <div className="app-menu-divider"/>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementTab("profile"); setUserManagementOpen(true); }}><Shield size={15}/><span><b>Профиль и безопасность</b><small>Пароль и активные сессии</small></span></button>
+            {user?.is_admin && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementTab("users"); setUserManagementOpen(true); }}><Users size={15}/><span><b>Пользователи</b><small>Роли и доступы</small></span></button>}
+            <button role="menuitem" onClick={() => { setTheme(value => value === "light" ? "dark" : "light"); setAppMenuOpen(false); }}>{theme === "light" ? <Moon size={15}/> : <Sun size={15}/>}<span><b>Оформление</b><small>{theme === "light" ? "Тёмная тема" : "Светлая тема"}</small></span></button>
+            <a role="menuitem" href="/api/v1/docs" target="_blank" rel="noreferrer" onClick={() => setAppMenuOpen(false)}><BookOpen size={15}/><span><b>Документация API</b><small>OpenAPI reference</small></span></a>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); onLogout(); }}><LockKeyhole size={15}/><span><b>Выйти из аккаунта</b><small>Завершить текущую сессию</small></span></button>
+          </div>}
+        </div>
+        <div className="status" title={notice}><i className={notice.startsWith("API подключён") ? "online" : ""} /></div>
       </div>
-      <button className="ghost account-profile-trigger" type="button" onClick={() => { setUserManagementTab("profile"); setUserManagementOpen(true); }} title="Личный профиль, пароль и сессии"><Shield size={13}/> Мой профиль</button>
-      <button className="ghost account-logout-trigger" type="button" onClick={onLogout} title="Завершить текущую сессию"><LockKeyhole size={13}/> Выйти</button>
-      {user?.is_admin && <button className="ghost account-users-trigger" type="button" onClick={() => { setUserManagementTab("users"); setUserManagementOpen(true); }} title="Управление пользователями"><Users size={13}/> Пользователи</button>}
-      <button className="ghost dashboard-open-trigger" type="button" onClick={() => setDashboardOpen(true)} title="Аналитика активного Workspace"><BarChart3 size={13}/> Обзор</button>
-      <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Workspace</button>
-      <div className="actions">
-        <button className="ghost template-library-trigger" disabled={busy} onClick={() => setTemplateLibraryOpen(true)}><Library size={13} /> Шаблоны</button>
-        <button className="ghost ai-graph-trigger" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={13}/> AI-граф</button>
-        <button className="ghost" disabled={busy} onClick={saveWorkflow}><Save size={13} /> Сохранить</button>
-        <button className="validate" disabled={busy} onClick={validateWorkflow}><Check size={14} /> Проверить</button>
-        <button className="run" disabled={busy} onClick={() => void runWorkflow()}><CirclePlay size={14} /> {busy ? "Выполняется…" : "Запустить всё"}</button><button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === "light" ? "dark" : "light")} title={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"} aria-label={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"}>{theme === "light" ? <Moon size={16}/> : <Sun size={16}/>}</button>
-         <div className="app-menu-wrap">
-           <button className="icon-button app-menu-trigger" type="button" onClick={() => setAppMenuOpen(value => !value)} aria-label="Открыть меню приложения" aria-expanded={appMenuOpen} title="Меню приложения"><Menu size={16}/></button>
-           {appMenuOpen && <div className="app-menu" role="menu">
-             <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Быстрые действия</small></div>
-             <button role="menuitem" disabled={busy || !selectedNodeId} onClick={() => { setAppMenuOpen(false); if (selectedNodeId) void runWorkflow([selectedNodeId]); }}><Zap size={15}/><span><b>Запустить выбранный блок</b><small>Выполнить только выделенную ноду</small></span></button>
-             <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void runWorkflow(undefined, true); }}><RefreshCw size={15}/><span><b>Полный анализ</b><small>Игнорировать кэш и пересканировать проект</small></span></button>
-             <div className="app-menu-divider"/>
-             <div className="app-menu-heading"><span>AI SECURITY WORKFLOW</span><small>Навигация</small></div>
-             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Projects library</b><small>Исходные проекты и файлы</small></span></button>
-             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны</b><small>Готовые security-сценарии</small></span></button>
-             <button role="menuitem" onClick={() => { setAppMenuOpen(false); const ai = nodes.find(node => node.data.nodeType === "ai.explain"); if (ai) { setSelectedNodeId(ai.id); setSelectedEdgeId(null); setRightCollapsed(false); setInspectorTab("properties"); } else setAiGraphOpen(true); }}><Activity size={15}/><span><b>AI profile</b><small>Провайдер и параметры объяснений</small></span></button>
-             <div className="app-menu-divider"/>
-             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><LockKeyhole size={15}/><span><b>Безопасность аккаунта</b><small>Пароль и активные сессии</small></span></button>
-             {user?.is_admin && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><Users size={15}/><span><b>Пользователи и доступы</b><small>Создание, роли и блокировка</small></span></button>}
-             <div className="app-menu-divider"/>
-             <a role="menuitem" href="/api/v1/docs" target="_blank" rel="noreferrer" onClick={() => setAppMenuOpen(false)}><BookOpen size={15}/><span><b>Документация API</b><small>OpenAPI reference</small></span></a>
-             <button role="menuitem" onClick={() => { setTheme(value => value === "light" ? "dark" : "light"); setAppMenuOpen(false); }}>{theme === "light" ? <Moon size={15}/> : <Sun size={15}/>}<span><b>Оформление</b><small>{theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}</small></span></button>
-           </div>}
-         </div>
+      <div className="topbar-trailing">
+        <div className="workspace-context" title={workspaceError || "Активная рабочая область"}>
+          <Building2 size={14}/>
+          <select aria-label="Активная рабочая область" value={activeWorkspaceId} disabled={workspaceSwitching || workspaces.length < 2} onChange={event => void switchWorkspace(event.target.value)}>
+            {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.organization_name} / {workspace.name}</option>)}
+            {workspaces.length === 0 && <option value="">Нет доступных Workspace</option>}
+          </select>
+          {workspaceSwitching && <i className="workspace-spinner" />}
+        </div>
+        <button className="icon-button" type="button" disabled={busy} onClick={() => setTemplateLibraryOpen(true)} title="Библиотека шаблонов" aria-label="Библиотека шаблонов"><Library size={16}/></button>
+        <button className="icon-button" type="button" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }} title="Создать граф с AI" aria-label="Создать граф с AI"><Sparkles size={16}/></button>
+        <button className="icon-button" type="button" disabled={busy} onClick={saveWorkflow} title="Сохранить workflow" aria-label="Сохранить workflow"><Save size={16}/></button>
+        <button className="icon-button" type="button" disabled={busy} onClick={validateWorkflow} title="Проверить workflow" aria-label="Проверить workflow"><Check size={16}/></button>
+        <button className="icon-button run-icon-button" type="button" disabled={busy} onClick={() => void runWorkflow()} title={busy ? "Выполняется" : "Запустить весь workflow"} aria-label="Запустить весь workflow">{busy ? <LoaderCircle size={16}/> : <CirclePlay size={16}/>}</button>
+        <button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === "light" ? "dark" : "light")} title={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"} aria-label={theme === "light" ? "Включить тёмную тему" : "Включить светлую тему"}>{theme === "light" ? <Moon size={16}/> : <Sun size={16}/>}</button>
       </div>
     </header>
     <div className="desktop-recommendation"><Activity size={14}/><span>Для полноценной работы с графом рекомендуется экран от 1280 px. На узких экранах панели доступны в адаптированном режиме.</span></div>
@@ -2188,7 +2189,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
           onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
-          edgesReconnectable connectionRadius={36} deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.22 }}>
+          edgesReconnectable connectionRadius={36} deleteKeyCode={["Backspace", "Delete"]} fitView minZoom={0.12} maxZoom={2} fitViewOptions={{ padding: 0.12 }}>
           <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
         </ReactFlow></div>
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
