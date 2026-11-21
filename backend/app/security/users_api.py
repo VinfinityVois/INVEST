@@ -50,6 +50,19 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=12, max_length=1024)
 
 
+class ProfileUpdate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    current_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        normalized = normalize_email(value)
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("Enter a valid email address.")
+        return normalized
+
+
 def _actor(db, request: Request, *, admin: bool = False) -> User:
     session_user = getattr(request.state, "user", None)
     if session_user is None:
@@ -263,6 +276,27 @@ def revoke_other_sessions(request: Request):
         )
         db.commit()
         return {"status": "revoked", "count": count}
+
+
+@router.patch("/api/auth/profile")
+def update_my_profile(payload: ProfileUpdate, request: Request):
+    with SessionLocal() as db:
+        actor = _actor(db, request)
+        if not verify_password(payload.current_password, actor.password_hash):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+        duplicate = db.scalar(select(User.id).where(User.email == payload.email, User.id != actor.id))
+        if duplicate:
+            raise HTTPException(status_code=409, detail="A user with this email already exists.")
+        previous_email = actor.email
+        actor.email = payload.email
+        db.add(AuditLog(
+            action="user.profile_updated",
+            entity="user",
+            entity_id=str(actor.id),
+            details={"actor_user_id": str(actor.id), "previous_email": previous_email, "email_changed": previous_email != actor.email},
+        ))
+        db.commit()
+        return {"id": str(actor.id), "email": actor.email, "is_admin": actor.is_admin}
 
 
 @router.post("/api/auth/password")
