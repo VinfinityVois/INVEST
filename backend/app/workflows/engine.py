@@ -27,7 +27,7 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.7"
+SCANNER_CACHE_VERSION = "2026-11-21.8"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -490,7 +490,12 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             for finding in merged:
                 unique.setdefault(finding.get("fingerprint") or repr(sorted(finding.items())), finding)
             try:
-                evaluation = evaluate_security_gate(list(unique.values()), node.config, finding_states)
+                gate_config = dict(node.config)
+                policy_id = gate_config.get("policy_pack")
+                if policy_id:
+                    policy = rule_packs.resolve([policy_id], analyzer="policy")[0]
+                    gate_config = {**policy, **gate_config}
+                evaluation = evaluate_security_gate(list(unique.values()), gate_config, finding_states)
                 output = {
                     "status": "blocked" if evaluation["blocked"] else "completed",
                     "decision": evaluation["decision"],
