@@ -2001,7 +2001,8 @@ def _canonical_finding_path(run: WorkflowRun, path: str) -> str:
         return path
     result = run.result if isinstance(run.result, dict) else {}
     outputs = result.get("outputs", {}) if isinstance(result.get("outputs"), dict) else {}
-    nodes = run.graph_snapshot.get("nodes", []) if isinstance(run.graph_snapshot, dict) else []
+    graph_snapshot = getattr(run, "graph_snapshot", None)
+    nodes = graph_snapshot.get("nodes", []) if isinstance(graph_snapshot, dict) else []
     for node in nodes:
         if not isinstance(node, dict) or node.get("type") not in {"source.upload", "source.git"}:
             continue
