@@ -758,13 +758,19 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 # Progress reporting must never break a security scan.
                 pass
 
+    # AI explanations enrich scanner evidence but must never invalidate a completed
+    # security scan or hide its findings when an external provider is unavailable.
     failed = any(
-        item.get("status") == "failed"
+        (item.get("status") == "failed" and nodes[node_id].type != "ai.explain")
         or (nodes[node_id].type == "ci.gate" and item.get("status") == "blocked")
         for node_id, item in outputs.items()
     )
     pending = any(item["status"] in {"adapter_required", "scanner_pending", "llm_profile_required", "configuration_required"} for item in outputs.values())
-    status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending else "completed"))
+    enrichment_degraded = any(
+        nodes[node_id].type == "ai.explain" and item.get("status") == "failed"
+        for node_id, item in outputs.items()
+    )
+    status = "cancelled" if cancelled else ("failed" if failed else ("partial" if pending or enrichment_degraded else "completed"))
     gate_results = [value for value in outputs.values() if "decision" in value]
     security_gate = gate_results[-1] if gate_results else None
     source_manifests = {node_id: _source_file_manifest(root) for node_id, root in artifacts.items()}
