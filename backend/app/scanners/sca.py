@@ -688,8 +688,8 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
 
         properties = _load_properties(build_file.parent / "gradle.properties")
         constants = _resolve_variables(build_text, properties)
-        lockfile_path = _find_project_lockfile(build_file.parent, project)
-        locked = _load_lockfile(lockfile_path) if lockfile_path else {}
+        lockfile_path = _find_project_lockfile(build_file.parent, project) if use_lockfile else None
+        locked = _load_lockfile(lockfile_path, include_dev=include_dev) if lockfile_path else {}
         if lockfile_path:
             lockfile_paths.add(lockfile_path)
         managed_versions = _spring_boot_bom_versions(build_text, constants, bom_snapshots)
@@ -703,6 +703,9 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
             )
             for alias_match in alias_pattern.finditer(block):
+                configuration_match = re.search(r"([A-Za-z_]\\w*)\\s*\\(\\s*$", block[:alias_match.start()])
+                if not include_dev and configuration_match and _is_dev_configuration(configuration_match.group(1)):
+                    continue
                 catalog_name = alias_match.group("catalog") or alias_match.group("add_catalog")
                 accessor = alias_match.group(2) or alias_match.group(4)
                 normalized = _catalog_alias_key(accessor.lstrip("."))
@@ -719,10 +722,13 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                         continue
                     for advisory in advisory_index.get((group, artifact), []):
                         if _affected(version, advisory.get("ranges", [])):
-                            finding = _make_finding(group, artifact, version, advisory, relative_path, line)
+                            finding = _make_finding(group, artifact, version, advisory, relative_path, line, ecosystem="Gradle")
                             findings.setdefault(finding["fingerprint"], finding)
 
             for match in DEPENDENCY_CALL.finditer(block):
+                call_name = re.match(r"\\s*([A-Za-z_]\\w*)", match.group("call") or "")
+                if not include_dev and call_name and _is_dev_configuration(call_name.group(1)):
+                    continue
                 coordinate = match.group("coordinate") or match.group("add_coordinate")
                 if not coordinate:
                     continue
@@ -752,14 +758,19 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
                 pass
 
     # Scan each lockfile once, after collecting direct coordinates from every module.
-    for lockfile_path in sorted(lockfile_paths):
+    for lockfile_path in sorted(lockfile_paths) if use_lockfile else []:
         lockfile_relative = lockfile_path.relative_to(project).as_posix()
+        lock_rows = (_read_text(lockfile_path) or "").splitlines()
         for group, artifact, version, lock_line in _load_lockfile_entries(lockfile_path):
             if (group, artifact) in declared_coordinates:
                 continue
+            if not include_dev and lock_line <= len(lock_rows):
+                configuration = lock_rows[lock_line - 1].split("=", 1)[0].rsplit(":", 1)[-1]
+                if _is_dev_configuration(configuration):
+                    continue
             for advisory in advisory_index.get((group, artifact), []):
                 if _affected(version, advisory.get("ranges", [])):
-                    finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line)
+                    finding = _make_finding(group, artifact, version, advisory, lockfile_relative, lock_line, ecosystem="Gradle")
                     findings.setdefault(finding["fingerprint"], finding)
 
     return sorted(findings.values(), key=lambda item: (item["path"], item["line"], item["rule_id"]))
