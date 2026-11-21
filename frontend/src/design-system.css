@@ -2654,3 +2654,158 @@
 .finding-collaboration form button:disabled { opacity:.45;cursor:not-allowed; }
 .finding-collaboration-error { margin:0;color:var(--danger);font-size:9px; }
 .finding-lifecycle-summary .is-in-progress { color:var(--warning); }
+
+
+/* Responsive workspace refinement — fluid canvas and peek-out side tabs */
+.shell {
+  --workspace-gap:clamp(6px, .8vw, 14px);
+  --workspace-pad:clamp(6px, 1vw, 16px);
+  padding-inline:var(--workspace-pad);
+  height:100dvh;
+  min-height:0;
+}
+.shell .layout {
+  min-height:0;
+  grid-template-columns:minmax(220px, clamp(220px, 19vw, 300px)) minmax(0,1fr) minmax(270px, clamp(270px, 23vw, 370px));
+  gap:var(--workspace-gap);
+  padding-block:var(--workspace-gap);
+}
+.shell .layout.left-collapsed {
+  grid-template-columns:30px minmax(0,1fr) minmax(270px, clamp(270px, 23vw, 370px));
+}
+.shell .layout.right-collapsed {
+  grid-template-columns:minmax(220px, clamp(220px, 19vw, 300px)) minmax(0,1fr) 30px;
+}
+.shell .layout.left-collapsed.right-collapsed {
+  grid-template-columns:30px minmax(0,1fr) 30px;
+}
+.shell .layout .panel {
+  min-height:0;
+  min-width:0;
+  padding:clamp(9px, .9vw, 16px);
+  border-radius:8px;
+}
+.shell .layout .panel.is-collapsed {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  overflow:visible;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+.shell .collapsed-rail {
+  position:relative;
+  z-index:4;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  width:30px;
+  min-width:30px;
+  min-height:112px;
+  padding:12px 4px;
+  border:1px solid var(--border);
+  border-radius:0 9px 9px 0;
+  background:var(--surface);
+  color:var(--text-secondary);
+  box-shadow:0 5px 18px rgba(0,0,0,.10);
+  writing-mode:vertical-rl;
+  font:600 9px "JetBrains Mono",monospace;
+  letter-spacing:.12em;
+  transition:width .18s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease;
+}
+.shell .inspector.is-collapsed .collapsed-rail {
+  border-radius:9px 0 0 9px;
+}
+.shell .collapsed-rail svg { flex:none; }
+.shell .collapsed-rail:hover {
+  width:36px;
+  border-color:var(--accent-400);
+  background:var(--soft-accent);
+  color:var(--accent-text);
+  box-shadow:0 8px 22px rgba(0,0,0,.16);
+}
+.shell .editor { min-width:0;min-height:0; }
+.shell .flow { min-width:0;min-height:0; }
+.shell .editor-head { min-width:0;gap:clamp(8px,1vw,18px); }
+.shell .editor-head h1 { font-size:clamp(16px,1.15vw,22px); }
+.shell .counts { flex-wrap:wrap;justify-content:flex-end; }
+.shell .topbar { min-width:0;padding-inline:clamp(2px,.4vw,8px); }
+.shell .brand { min-width:0;flex:0 1 auto; }
+.shell .status { min-width:80px; }
+.shell .actions { min-width:0;flex-wrap:wrap;justify-content:flex-end; }
+.shell .panel-intro,.shell .library-copy b,.shell .finding p { overflow-wrap:anywhere; }
+
+@media (max-width:1279px) and (min-width:1024px) {
+  .shell .layout { grid-template-columns:minmax(190px,22vw) minmax(0,1fr) minmax(240px,27vw); }
+  .shell .layout.left-collapsed { grid-template-columns:30px minmax(0,1fr) minmax(240px,27vw); }
+  .shell .layout.right-collapsed { grid-template-columns:minmax(190px,22vw) minmax(0,1fr) 30px; }
+  .shell .layout.left-collapsed.right-collapsed { grid-template-columns:30px minmax(0,1fr) 30px; }
+  .shell .brand { min-width:0; }
+  .shell .brand small { display:none; }
+}
+@media (max-width:1023px) and (min-width:761px) {
+  .shell { height:100dvh; }
+  .shell .layout,.shell .layout.left-collapsed,.shell .layout.right-collapsed,.shell .layout.left-collapsed.right-collapsed {
+    position:relative;
+    grid-template-columns:30px minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    gap:8px;
+  }
+  .shell .layout .palette { grid-column:1;grid-row:1;z-index:26; }
+  .shell .layout .editor { grid-column:2;grid-row:1; }
+  .shell .layout .inspector { grid-column:2;grid-row:1;z-index:24; }
+  .shell .layout .inspector.is-collapsed { display:flex;grid-column:1;grid-row:1;justify-self:end; }
+  .shell .layout .palette:not(.is-collapsed) {
+    position:absolute;top:0;bottom:0;left:0;width:min(320px,42vw);
+    box-shadow:var(--shadow);
+  }
+  .shell .layout .inspector:not(.is-collapsed) {
+    position:absolute;top:0;bottom:0;right:0;width:min(360px,44vw);
+    max-height:none;box-shadow:var(--shadow);
+  }
+  .shell .layout.left-collapsed { grid-template-columns:30px minmax(0,1fr); }
+}
+@media (max-width:760px) {
+  .shell { height:auto;min-height:100dvh;padding-inline:8px; }
+  .shell .layout,.shell .layout.left-collapsed,.shell .layout.right-collapsed,.shell .layout.left-collapsed.right-collapsed {
+    position:relative;
+    display:grid;
+    grid-template-columns:28px minmax(0,1fr) 28px;
+    grid-template-rows:minmax(560px,calc(100dvh - 150px));
+    gap:5px;
+    padding-block:8px;
+  }
+  .shell .layout .palette,.shell .layout .inspector {
+    position:relative;
+    top:auto;right:auto;bottom:auto;left:auto;
+    width:auto;max-height:none;overflow:visible;
+    grid-row:1;z-index:20;
+  }
+  .shell .layout .palette { grid-column:1; }
+  .shell .layout .inspector { grid-column:3; }
+  .shell .layout .editor { grid-column:2;grid-row:1;min-height:0; }
+  .shell .layout .panel:not(.is-collapsed) {
+    position:absolute;top:0;bottom:0;width:min( min(340px, calc(100vw - 54px)), 88vw);
+    max-height:none;overflow:auto;box-shadow:var(--shadow);
+  }
+  .shell .layout .palette:not(.is-collapsed) { left:0;z-index:30; }
+  .shell .layout .inspector:not(.is-collapsed) { right:0;z-index:31; }
+  .shell .layout .panel.is-collapsed { display:flex; }
+  .shell .collapsed-rail { min-height:104px;width:28px;min-width:28px;font-size:8px; }
+  .shell .flow { height:auto;min-height:0;flex:1; }
+  .shell .editor-head { min-height:68px;align-items:flex-start;padding:4px 0; }
+  .shell .editor-head p { display:none; }
+  .shell .counts { gap:6px;font-size:9px; }
+}
+@media (max-height:720px) and (min-width:761px) {
+  .shell .layout { padding-block:6px; }
+  .shell .panel { padding-block:9px; }
+  .shell .editor-head { min-height:58px; }
+}
+@media (min-width:1800px) {
+  .shell .layout { max-width:2400px;margin-inline:auto;width:100%; }
+}
