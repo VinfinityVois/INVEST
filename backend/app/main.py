@@ -28,6 +28,7 @@ from app.ai.explanations import provider_configuration
 from app.ai.workflow_generation import WorkflowGenerationError, generate_workflow_graph
 from app.sources.archive import ArchiveValidationError, extract_project_archive
 from app.sources.run_files import RunSourceFileError, resolve_run_source_file
+from app.sources.project_root import detect_project_root
 from app.scanners.presentation import _redact
 from app.security.redaction import redact_text
 from app.db import SessionLocal
@@ -2001,12 +2002,12 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
     ).all()
     findings = [
         _safe_report_value({
+            **(item.payload if isinstance(item.payload, dict) else {}),
             "fingerprint": item.fingerprint,
             "rule_id": item.rule_id,
             "severity": item.severity,
             "path": item.path,
             "line": item.line,
-            **(item.payload if isinstance(item.payload, dict) else {}),
         })
         for item in rows
     ]
@@ -2175,11 +2176,13 @@ def list_run_findings(run_id: UUID, request: Request):
             result.append({
                 "id": str(item.id),
                 "fingerprint": item.fingerprint,
+                **payload,
+                "id": str(item.id),
+                "fingerprint": item.fingerprint,
                 "rule_id": item.rule_id,
                 "severity": item.severity,
                 "path": item.path,
                 "line": item.line,
-                **payload,
                 **({"ai_explanation": explanation} if explanation else {}),
             })
         return result
