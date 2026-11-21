@@ -26,7 +26,7 @@ class WorkflowExecutionError(RuntimeError):
 
 
 CACHE_SCHEMA_VERSION = "node-cache-v1"
-SCANNER_CACHE_VERSION = "2026-11-21.5"
+SCANNER_CACHE_VERSION = "2026-11-21.6"
 CACHEABLE_NODE_TYPES = {"scan.secrets", "scan.sca", "scan.sast"}
 MAX_CACHE_ENTRY_BYTES = 2_000_000
 CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -420,7 +420,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     cache_hit = True
                 else:
                     if node.type == "scan.secrets":
-                        raw_findings = _filter_scanner_findings(scan_directory(source_root, on_progress=report_scanner_progress), node.config, "secrets")
+                        raw_findings = _filter_scanner_findings(scan_directory(source_root, on_progress=report_scanner_progress, selected_rule_packs=node.config.get("rule_packs", ["secrets-core"])), node.config, "secrets")
                     elif node.type == "scan.sca":
                         raw_findings = _filter_scanner_findings(scan_project(source_root, on_progress=report_scanner_progress), node.config, "sca")
                     else:
