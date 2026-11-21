@@ -583,13 +583,14 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
                 artifact = _maven_resolve(_maven_text(dep, "artifactId"), section_properties)
                 version = _maven_resolve(_maven_text(dep, "version"), section_properties)
                 version = version or managed.get((group, artifact))
-                if not group or not artifact or not version:
+                scope = _maven_text(dep, "scope") or "compile"
+                if not group or not artifact or not version or (not include_dev and scope in {"test", "provided", "system"}):
                     continue
                 line_match = re.search(rf"<(?:[\w.-]+:)?groupId>\s*{re.escape(group)}\s*</(?:[\w.-]+:)?groupId>\s*<(?:[\w.-]+:)?artifactId>\s*{re.escape(artifact)}\s*</", source)
                 line = source.count("\n", 0, line_match.start()) + 1 if line_match else 1
                 for advisory in advisories.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative, line)
+                        finding = _make_finding(group, artifact, version, advisory, relative, line, ecosystem="Maven")
                         findings.setdefault(finding["fingerprint"], finding)
         if on_progress:
             try:
@@ -604,9 +605,12 @@ def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on
         for line_no, line in enumerate(source.splitlines(), 1):
             for match in MAVEN_TREE_COORDINATE.finditer(line):
                 group, artifact, version = match.group("group", "artifact", "version")
+                scope = match.group("scope")
+                if not include_dev and scope in {"test", "provided", "system"}:
+                    continue
                 for advisory in advisories.get((group, artifact), []):
                     if _affected(version, advisory.get("ranges", [])):
-                        finding = _make_finding(group, artifact, version, advisory, relative, line_no)
+                        finding = _make_finding(group, artifact, version, advisory, relative, line_no, ecosystem="Maven")
                         findings.setdefault(finding["fingerprint"], finding)
         if on_progress:
             try:
