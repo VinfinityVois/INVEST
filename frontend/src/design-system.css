@@ -3092,12 +3092,11 @@
 .shell .validate,
 .shell .run,
 .shell .icon-button,
-.shell .theme-toggle,
-.shell .add-node {
+.shell .theme-toggle {
   min-height:36px;
 }
 .shell .icon-button,
-.shell .add-node {
+.shell .theme-toggle {
   width:36px;
   min-width:36px;
   height:36px;
