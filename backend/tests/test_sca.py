@@ -742,9 +742,10 @@ def test_gradle_sca_can_disable_lockfile_resolution(tmp_path):
     project.mkdir()
     (project / "build.gradle.kts").write_text("dependencies { }\n", encoding="utf-8")
     (project / "gradle.lockfile").write_text(
-        "org.apache.commons:commons-text:1.9=runtimeClasspath\n",
+        "org.apache.commons:commons-text:1.9=testRuntimeClasspath\n",
         encoding="utf-8",
     )
 
     assert scan_gradle_project(project)
+    assert scan_gradle_project(project, include_dev=False) == []
     assert scan_gradle_project(project, use_lockfile=False) == []
