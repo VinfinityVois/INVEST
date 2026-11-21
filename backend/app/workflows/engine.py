@@ -78,7 +78,8 @@ def _scan_sca_project(root: Path, config: dict, on_progress=None) -> list[dict]:
     selected = config.get("rule_packs") or ["sca-spring-boot"]
     packs = rule_packs.resolve(selected, analyzer="sca")
     databases = {pack.get("advisory_db") for pack in packs}
-    if databases != {"maven-advisories"}:
+    configured_database = config.get("advisory_db", "maven-advisories")
+    if databases != {"maven-advisories"} or configured_database != "maven-advisories":
         raise WorkflowExecutionError("Selected SCA packs do not share a supported advisory database")
     ecosystems = sorted({ecosystem for pack in packs for ecosystem in pack.get("ecosystems", [])})
     include_dev = config.get("include_dev")
