@@ -17,6 +17,7 @@ from app.scanners.presentation import enrich_finding
 from app.scanners.sca import scan_project
 from app.scanners.sast import scan_kotlin_project
 from app.sources.git import GitSourceError, clone_allowed_repository
+from app.sources.project_root import detect_project_root
 from .registry import NodeRegistry
 from .schemas import WorkflowGraph
 from .validator import validate_graph
@@ -630,9 +631,16 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 output = {"status": "configuration_required", "message": "Выберите источник проекта: загрузите ZIP-архив или настройте Git-репозиторий."}
             else:
                 try:
-                    source_root = _workspace_source(relative_path)
+                    artifact_root = _workspace_source(relative_path)
+                    source_root = detect_project_root(artifact_root)
                     artifacts[node_id] = source_root
-                    output = {"status": "ready", "source": "workspace-upload", "path": relative_path}
+                    project_subdirectory = source_root.relative_to(artifact_root).as_posix()
+                    output = {
+                        "status": "ready",
+                        "source": "workspace-upload",
+                        "path": relative_path,
+                        **({"project_subdirectory": project_subdirectory} if project_subdirectory != "." else {}),
+                    }
                 except (OSError, WorkflowExecutionError) as exc:
                     output = {"status": "failed", "message": str(exc)}
         elif node.type == "source.git":
