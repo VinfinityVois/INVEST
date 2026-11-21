@@ -385,7 +385,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
 
     logger.info(
         "AI explanations completed: analyzed=%d explained=%d skipped=%d model=%s",
-        len(selected), len(normalized), len(findings) - len(selected), settings.llm_model,
+        len(eligible), len(normalized), len(findings) - len(selected) + insufficient_evidence_count, settings.llm_model,
     )
     return {
         "status": "completed",
@@ -406,6 +406,11 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "provider_error_code": None,
         "message": (
             None if len(normalized) == len(selected)
-            else f"Модель дала проверенные объяснения для {len(normalized)} из {len(selected)} находок; без достаточного безопасного контекста: {insufficient_evidence_count}. Остальные оставлены без AI-вывода."
+            else (
+                f"Проверенный контекст доступен для {len(eligible)} из {len(selected)} находок; "
+                f"для {insufficient_evidence_count} он не передавался модели. "
+                f"Модель подготовила {len(normalized)} объяснений; остальные требуют проверки."
+            ) if insufficient_evidence_count
+            else f"Модель дала проверенные объяснения для {len(normalized)} из {len(eligible)} проанализированных находок. Остальные оставлены без AI-вывода."
         ),
     }
