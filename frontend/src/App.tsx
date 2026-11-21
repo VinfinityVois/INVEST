@@ -174,7 +174,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
 const nodeTypes = { workflow: memo(WorkflowNode) };
 
 export default function App() {
-  const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "dark" ? "dark" : "light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => window.localStorage.getItem("invest.theme") === "light" ? "light" : "dark");
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => { window.localStorage.setItem("invest.theme", theme); document.documentElement.dataset.theme = theme; }, [theme]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(seedNodes);
