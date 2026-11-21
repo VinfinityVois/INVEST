@@ -319,3 +319,18 @@ def test_gateway_returns_machine_readable_provider_failure(monkeypatch):
     assert result["provider_http_status"] == 429
     assert result["provider_attempts"] == 1
     assert "never-expose-this" not in json.dumps(result)
+
+def test_gateway_accepts_docker_host_gateway_over_http(monkeypatch):
+    base_url = "http://host.docker.internal:11434/v1"
+    monkeypatch.setattr(settings, "llm_base_url", base_url)
+    monkeypatch.setattr(settings, "llm_model", "qwen2.5:3b")
+    monkeypatch.setattr(settings, "llm_api_key", "local-placeholder")
+
+    status = explanations.provider_configuration()
+
+    assert status["configured"] is True
+    assert status["endpoint_valid"] is True
+    assert explanations._endpoint(base_url) == (
+        "http://host.docker.internal:11434/v1/chat/completions"
+    )
+
