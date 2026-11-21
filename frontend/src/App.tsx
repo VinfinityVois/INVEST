@@ -345,6 +345,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
   const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [userManagementTab, setUserManagementTab] = useState<"profile" | "users">("profile");
   useEffect(() => {
     window.localStorage.setItem("invest.theme", theme);
     document.documentElement.dataset.theme = theme;
@@ -2235,7 +2236,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         </div>
       </section>
     </div>}
-    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onProfileUpdated={onUserUpdated} onClose={() => setUserManagementOpen(false)} />}
+    {userManagementOpen && user && <UserManagement key={userManagementTab} initialTab={userManagementTab} isAdmin={user.is_admin} currentUserId={user.id} currentEmail={user.email} onProfileUpdated={onUserUpdated} onClose={() => setUserManagementOpen(false)} />}
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
       <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
         <header className="template-library-header">
