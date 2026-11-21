@@ -274,20 +274,47 @@ def database_health():
 
 
 @app.post("/api/sources/upload", status_code=201)
-def upload_source(file: UploadFile = File(...)):
+def upload_source(request: Request, file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=415, detail="Загрузите ZIP-архив проекта.")
+    project_id = uuid4()
+    workspace_path = f"projects/project-{project_id}"
     try:
-        result = extract_project_archive(file.file, settings.workspace_root)
-        return {
-            **result,
-            "source": "workspace-upload",
-            "message": "Архив безопасно распакован. Команды проекта не запускались.",
-        }
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+        result = extract_project_archive(file.file, settings.workspace_root, workspace_path)
+        with SessionLocal() as session:
+            workspace, _ = require_active_workspace(session, request, allowed_roles={"admin", "editor"})
+            project = Project(
+                id=project_id,
+                workspace_id=workspace.id,
+                name=_safe_project_name(file.filename),
+                workspace_path=workspace_path,
+                original_filename=Path(file.filename).name[:255],
+                file_count=result["files"],
+                expanded_bytes=result["expanded_bytes"],
+            )
+            session.add(project)
+            session.add(AuditLog(
+                action="project.created",
+                entity="project",
+                entity_id=str(project_id),
+                details={"file_count": result["files"], "expanded_bytes": result["expanded_bytes"], "source": "source-upload"},
+            ))
+            session.commit()
+            return {
+                **result,
+                "project_id": str(project.id),
+                "source": "workspace-upload",
+                "message": "Архив добавлен в активную рабочую область. Команды проекта не исполнялись.",
+            }
     except ArchiveValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
+        shutil.rmtree(Path(settings.workspace_root) / workspace_path, ignore_errors=True)
         raise HTTPException(status_code=500, detail="Не удалось сохранить архив в рабочую директорию.") from exc
+    finally:
+        file.file.close()
 
 
 
