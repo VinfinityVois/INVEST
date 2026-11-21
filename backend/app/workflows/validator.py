@@ -42,7 +42,7 @@ def _validate_config_value(value, schema, path):
     if expected == "object":
         properties = schema.get("properties", {})
         for key in schema.get("required", []):
-            if key not in value or value[key] is None or value[key] == "": issues.append(f"{path}.{key}: обязательное поле не заполнено.")
+            if key not in value or value[key] is None: issues.append(f"{path}.{key}: обязательное поле отсутствует.")
         for key, item in value.items():
             if key in properties: issues.extend(_validate_config_value(item, properties[key], f"{path}.{key}"))
     return issues
