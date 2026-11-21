@@ -25,6 +25,7 @@ def upgrade():
         "finding_states",
         ["assigned_to_user_id"],
     )
+    op.execute("UPDATE finding_states SET state = 'resolved' WHERE state = 'fixed'")
     op.create_table(
         "finding_comments",
         sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
