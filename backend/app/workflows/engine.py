@@ -34,7 +34,7 @@ CACHE_TTL_SECONDS = 24 * 60 * 60
 
 def _filter_scanner_findings(findings: list[dict], config: dict, scanner: str) -> list[dict]:
     """Apply only presentation-independent scanner options declared in the node schema."""
-    minimum = config.get("min_confidence", 0.0)
+    minimum = config.get("min_confidence", 0.4)
     try:
         minimum = float(minimum)
     except (TypeError, ValueError):
