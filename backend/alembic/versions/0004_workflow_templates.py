@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 UUID_TYPE = sa.Uuid(as_uuid=True)
-JSON_TYPE = sa.JSON().with_variant(JSON_TYPE, "postgresql")
+JSON_TYPE = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 revision = "0004_workflow_templates"
 down_revision = "0003_workflow_schedules"
