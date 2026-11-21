@@ -700,7 +700,7 @@ def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, o
             # Version-catalog accessors: default/custom catalogs and add("configuration", libs.alias).
             alias_pattern = re.compile(
                 r"\b[A-Za-z_]\w*\s*\(\s*(?P<catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
-                r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
+                r"|\badd\s*\(\s*['\"](?P<add_configuration>[^'\"]+)['\"]\s*,\s*(?P<add_catalog>[A-Za-z_]\w*)((?:\.[A-Za-z_]\w*)+)\s*\)"
             )
             for alias_match in alias_pattern.finditer(block):
                 configuration_match = re.search(r"([A-Za-z_]\w*)\s*\(\s*$", block[:alias_match.start()])
