@@ -650,6 +650,8 @@ def list_project_files(project_id: UUID, request: Request):
 class ProjectFileUpdate(BaseModel):
     content: str = Field(max_length=1_000_000)
     expected_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    ai_fix_run_id: UUID | None = None
+    ai_fix_fingerprint: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 @app.get("/api/projects/{project_id}/file")
@@ -898,6 +900,45 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
             raise HTTPException(status_code=404, detail="Project not found")
         if _project_has_active_run(session, project):
             raise HTTPException(status_code=409, detail="Проект используется активным workflow; редактирование временно заблокировано.")
+        ai_fix_metadata = None
+        if payload.ai_fix_run_id is not None or payload.ai_fix_fingerprint is not None:
+            if payload.ai_fix_run_id is None or payload.ai_fix_fingerprint is None:
+                raise HTTPException(status_code=422, detail="AI Fix audit metadata must include both run ID and finding fingerprint.")
+            ai_run = _run_in_active_workspace(session, request, payload.ai_fix_run_id)
+            ai_finding = session.scalar(
+                select(Finding).where(
+                    Finding.run_id == payload.ai_fix_run_id,
+                    Finding.fingerprint == payload.ai_fix_fingerprint,
+                ).limit(1)
+            )
+            if ai_run is None or ai_finding is None:
+                raise HTTPException(status_code=404, detail="AI Fix source finding is unavailable.")
+            ai_payload = ai_finding.payload if isinstance(ai_finding.payload, dict) else {}
+            if str(ai_payload.get("category", "")).upper() not in {"SAST", "SCA"}:
+                raise HTTPException(status_code=403, detail="AI Fix audit metadata is not valid for this finding.")
+            ai_result = ai_run.result if isinstance(ai_run.result, dict) else {}
+            ai_outputs = ai_result.get("outputs", {}) if isinstance(ai_result.get("outputs"), dict) else {}
+            ai_graph = ai_run.graph_snapshot if isinstance(ai_run.graph_snapshot, dict) else {}
+            matching_source = None
+            for node in ai_graph.get("nodes", []):
+                if not isinstance(node, dict) or node.get("type") != "source.upload":
+                    continue
+                output = ai_outputs.get(node.get("id"), {})
+                if isinstance(output, dict) and output.get("status") == "ready" and output.get("path") == project.workspace_path:
+                    matching_source = output
+                    break
+            if matching_source is None:
+                raise HTTPException(status_code=403, detail="AI Fix finding does not belong to this project.")
+            canonical = PurePosixPath(_canonical_finding_path(ai_run, ai_finding.path))
+            prefix = matching_source.get("project_subdirectory")
+            expected_relative = (PurePosixPath(prefix) / canonical) if isinstance(prefix, str) and prefix else canonical
+            if expected_relative.as_posix() != relative.as_posix():
+                raise HTTPException(status_code=403, detail="AI Fix finding path does not match the edited file.")
+            ai_fix_metadata = {
+                "run_id": str(payload.ai_fix_run_id),
+                "fingerprint": payload.ai_fix_fingerprint,
+            }
+
         root = _project_root(project)
         try:
             # The OS-backed lock serializes writers across API/worker processes sharing this workspace.
@@ -940,6 +981,11 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
                     "bytes": len(payload.content.encode("utf-8")),
                     "previous_sha256": current_sha256,
                     "new_sha256": sha256_text(payload.content),
+                    "change_source": "ai_fix" if ai_fix_metadata else "manual",
+                    **({
+                        "ai_fix_run_id": ai_fix_metadata["run_id"],
+                        "ai_fix_fingerprint": ai_fix_metadata["fingerprint"],
+                    } if ai_fix_metadata else {}),
                 }))
                 session.commit()
         except FileLockTimeout as exc:
