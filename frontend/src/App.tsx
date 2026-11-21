@@ -684,7 +684,8 @@ export default function App() {
         ].filter(Boolean).join(" · ");
         return <div className="schema-config-field" key={key}>
           <label className="field-label" htmlFor={id}>{label}{requiredField && <span className="schema-required"> *</span>}</label>
-          {field.enum ? <select id={id} value={optionIndex(field.enum, value)} onChange={event => {
+          {key === "policy_pack" && rulePacks.some(pack => pack.analyzer === "policy") ? <select id={id} value={String(value)} onChange={event => setField(key, event.target.value)}>{rulePacks.filter(pack => pack.analyzer === "policy").map(pack => <option key={pack.id} value={pack.id}>{pack.title}</option>)}</select>
+          : field.enum ? <select id={id} value={optionIndex(field.enum, value)} onChange={event => {
             if (event.target.value === "") { clearField(key); return; }
             const option = field.enum?.[Number(event.target.value)];
             if (option !== undefined) setField(key, option);
