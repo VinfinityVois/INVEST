@@ -6,6 +6,7 @@ import hmac
 import json
 import re
 import tomllib
+from functools import lru_cache
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from app.scanners.secrets import MAX_FILE_BYTES, MAX_FILES, SKIP_DIRS
 
 DATA_FILE = Path(__file__).resolve().parents[3] / "data" / "maven-advisories.json"
 SPRING_BOOT_BOM_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-managed-versions.json"
+SPRING_BOOT_STARTERS_FILE = Path(__file__).resolve().parents[3] / "data" / "spring-boot-starters.json"
 DEPENDENCY_CALL = re.compile(
     r"(?P<call>\b[A-Za-z_]\w*\s*\(\s*(?P<quote>['\"])(?P<coordinate>[^'\"\r\n]+)(?P=quote)\s*\)"
     r"|\badd\s*\(\s*['\"][^'\"]+['\"]\s*,\s*['\"](?P<add_coordinate>[^'\"\r\n]+)['\"]\s*,?\s*\))",
@@ -341,7 +343,7 @@ def _spring_boot_bom_versions(build_text: str, constants: dict[str, str], snapsh
     return {coordinate: next(iter(values)) for coordinate, values in versions.items() if len(values) == 1}
 
 
-def _make_finding(group: str, artifact: str, version: str, advisory: dict, path: str, line: int) -> dict:
+def _make_finding(group: str, artifact: str, version: str, advisory: dict, path: str, line: int, ecosystem: str = 'Maven') -> dict:
     rule_id = f"sca.maven.{group}.{artifact}.{advisory['id']}"
     identity = f"{rule_id}:{path}:{line}:{version}"
     fingerprint = hmac.new(settings.app_secret_key.encode(), identity.encode(), hashlib.sha256).hexdigest()
@@ -352,6 +354,7 @@ def _make_finding(group: str, artifact: str, version: str, advisory: dict, path:
         "rule_id": rule_id,
         "class": "dependency-vulnerability",
         "category": "SCA",
+        "ecosystem": ecosystem,
         "path": path,
         "line": line,
         "severity": advisory.get("severity", "MEDIUM"),
@@ -541,7 +544,7 @@ def _maven_parent_context(pom_path, project, snapshots, visited=None, depth=0):
     parent_managed.update(_maven_managed(parent_path, parent_pom, parent_properties, snapshots, project))
     return parent_properties, parent_managed
 
-def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+def scan_maven_project(root: str | Path, advisories_path: Path | None = None, on_progress=None, include_dev: bool = True) -> list[dict]:
     project = Path(root).resolve()
     advisories = _load_advisories(advisories_path)
     bom_snapshots = _load_spring_boot_boms()
@@ -609,7 +612,7 @@ def scan_project(root: str | Path, advisories_path: Path | None = None, on_progr
     return sorted({x["fingerprint"]: x for x in combined}.values(), key=lambda x: (x["path"], x["line"], x["rule_id"]))
 
 
-def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None) -> list[dict]:
+def scan_gradle_project(root: str | Path, advisories_path: Path | None = None, on_progress=None, include_dev: bool = True, use_lockfile: bool = True) -> list[dict]:
     project = Path(root).resolve()
     advisory_index = _load_advisories(advisories_path)
     bom_snapshots = _load_spring_boot_boms()
