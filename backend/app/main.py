@@ -1009,6 +1009,161 @@ def update_project_file(project_id: UUID, request: Request, payload: ProjectFile
     return {"saved": True, "path": relative.as_posix(), "bytes": len(payload.content.encode("utf-8"))}
 
 
+@app.get("/api/projects/{project_id}/file-versions")
+def list_project_file_versions(project_id: UUID, request: Request, path: str = Query(min_length=1, max_length=1000)):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=403, detail="История файлов с потенциальными секретами недоступна.")
+    with SessionLocal() as session:
+        project = _project_in_active_workspace(session, request, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        root = _project_root(project)
+        candidate = root.joinpath(*relative.parts)
+        current = candidate
+        while current != root:
+            if current.is_symlink():
+                raise HTTPException(status_code=404, detail="Project file is unavailable")
+            current = current.parent
+        try:
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                raise OSError("File is unavailable or too large")
+            content = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="Файл недоступен для просмотра истории.") from exc
+        if not _project_content_is_safe(content):
+            raise HTTPException(status_code=403, detail="История файла с потенциальными секретами недоступна.")
+        current_sha = sha256_text(content)
+        rows = session.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.entity == "project",
+                AuditLog.entity_id == str(project_id),
+                AuditLog.action.in_(["project.file_updated", "project.file_rolled_back"]),
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .limit(200)
+        ).all()
+        versions = [{"sha256": current_sha, "current": True, "available": True, "created_at": None, "source": "current"}]
+        seen = {current_sha}
+        for row in rows:
+            details = row.details if isinstance(row.details, dict) else {}
+            digest = details.get("previous_sha256")
+            if details.get("path") != relative.as_posix() or not isinstance(digest, str) or len(digest) != 64 or digest in seen:
+                continue
+            seen.add(digest)
+            try:
+                load_project_file_version(settings.workspace_root, project_id, relative, digest)
+                available = True
+            except (OSError, UnicodeDecodeError, ValueError):
+                available = False
+            versions.append({
+                "sha256": digest,
+                "current": False,
+                "available": available,
+                "created_at": row.created_at,
+                "source": "rollback" if row.action == "project.file_rolled_back" else "edit",
+            })
+        return {"path": relative.as_posix(), "current_sha256": current_sha, "versions": versions}
+
+
+@app.post("/api/projects/{project_id}/file-rollback")
+def rollback_project_file(
+    project_id: UUID,
+    request: Request,
+    payload: ProjectFileRollback,
+    path: str = Query(min_length=1, max_length=1000),
+):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or "\\" in path or "\x00" in path or any(part in {"", ".", ".."} for part in relative.parts):
+        raise HTTPException(status_code=400, detail="Invalid project file path")
+    if relative.suffix.lower() not in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".toml", ".ini", ".md", ".txt", ".xml", ".gradle", ".kts", ".properties", ".sql", ".sh", ".ps1"}:
+        raise HTTPException(status_code=415, detail="Этот тип файла нельзя восстановить через браузер.")
+    if _project_path_is_sensitive(relative):
+        raise HTTPException(status_code=403, detail="Файлы с потенциальными секретами нельзя восстанавливать через браузер.")
+    with SessionLocal() as session:
+        project = _project_in_active_workspace(session, request, project_id, write=True)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if _project_has_active_run(session, project):
+            raise HTTPException(status_code=409, detail="Проект используется активным workflow; восстановление временно заблокировано.")
+        root = _project_root(project)
+        try:
+            with project_file_lock(settings.workspace_root, project_id, relative):
+                candidate = root.joinpath(*relative.parts)
+                current = candidate
+                while current != root:
+                    if current.is_symlink():
+                        raise HTTPException(status_code=404, detail="Project file is unavailable")
+                    current = current.parent
+                resolved = candidate.resolve(strict=True)
+                if not resolved.is_relative_to(root) or not resolved.is_file() or resolved.stat().st_size > 1_000_000:
+                    raise OSError("File is unavailable or too large")
+                current_content = resolved.read_text(encoding="utf-8")
+                if not _project_content_is_safe(current_content):
+                    raise HTTPException(status_code=403, detail="Текущий файл содержит потенциальные секреты; восстановление запрещено.")
+                current_sha = sha256_text(current_content)
+                if not version_matches(current_content, payload.expected_sha256):
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PROJECT_FILE_VERSION_CONFLICT",
+                            "message": "Файл изменился после просмотра истории. Обнови историю перед восстановлением.",
+                            "current_sha256": current_sha,
+                        },
+                    )
+                if payload.target_sha256 == current_sha:
+                    raise HTTPException(status_code=400, detail="Выбранная версия уже является текущей.")
+                try:
+                    target_content = load_project_file_version(settings.workspace_root, project_id, relative, payload.target_sha256)
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail="Сохранённая версия не найдена. Восстановление невозможно.") from exc
+                if not _project_content_is_safe(target_content):
+                    raise HTTPException(status_code=403, detail="Сохранённая версия содержит потенциальные секреты.")
+                save_project_file_version(settings.workspace_root, project_id, relative, current_content)
+                temp_name = None
+                try:
+                    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=resolved.parent, prefix=".invest-rollback-", delete=False) as temporary:
+                        temp_name = temporary.name
+                        temporary.write(target_content)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.replace(temp_name, resolved)
+                    temp_name = None
+                finally:
+                    if temp_name and os.path.exists(temp_name):
+                        os.unlink(temp_name)
+                target_sha = sha256_text(target_content)
+                session.add(AuditLog(
+                    action="project.file_rolled_back",
+                    entity="project",
+                    entity_id=str(project_id),
+                    details={
+                        "path": relative.as_posix(),
+                        "previous_sha256": current_sha,
+                        "new_sha256": target_sha,
+                        "rollback_target_sha256": payload.target_sha256,
+                    },
+                ))
+                session.commit()
+        except FileLockTimeout as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_FILE_UPDATE_IN_PROGRESS",
+                    "message": "Этот файл уже изменяется другим запросом. Повтори попытку через несколько секунд.",
+                },
+            ) from exc
+        except HTTPException:
+            raise
+        except (OSError, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="Не удалось восстановить сохранённую версию файла.") from exc
+    return {"restored": True, "path": relative.as_posix(), "sha256": target_sha}
+
+
 @app.get("/api/projects/{project_id}/search")
 def search_project_contents(project_id: UUID, request: Request, q: str = Query(min_length=2, max_length=100)):
     needle = q.casefold()
