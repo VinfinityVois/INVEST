@@ -102,17 +102,17 @@ def generate_fix_proposal(
     path: str,
 ) -> dict[str, Any]:
     """Generate and validate a non-applied, reviewable remediation proposal."""
+    category = str(finding.get("category", "")).upper()
+    if category not in {"SAST", "SCA"}:
+        raise AIFixError("AI Fix доступен только для находок SAST и SCA. Секреты автоматически не исправляются.")
+    if len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
+        raise AIFixError("AI Fix поддерживает исходные файлы размером до 32 KiB.")
     provider = provider_configuration()
     if not provider.get("configured") or not provider.get("endpoint_valid"):
         raise AIFixError(
             provider.get("endpoint_error")
             or "AI-провайдер не настроен. Укажи LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
         )
-    if len(source.encode("utf-8")) > MAX_SOURCE_BYTES:
-        raise AIFixError("AI Fix поддерживает исходные файлы размером до 32 KiB.")
-    category = str(finding.get("category", "")).upper()
-    if category not in {"SAST", "SCA"}:
-        raise AIFixError("AI Fix доступен только для находок SAST и SCA. Секреты автоматически не исправляются.")
 
     safe_finding = {
         key: finding[key]
