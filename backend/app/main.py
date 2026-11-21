@@ -134,7 +134,7 @@ app.add_middleware(
 
 from app.security.api import router as auth_router, SESSION_COOKIE
 from app.security.users_api import router as users_router
-from app.security.sessions import get_user_for_session
+from app.security.sessions import get_session_context
 
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -168,13 +168,16 @@ async def authentication_middleware(request: Request, call_next):
     token = request.cookies.get(SESSION_COOKIE)
     try:
         with SessionLocal() as db:
-            user = get_user_for_session(db, token)
-            if user is None:
+            session_context = get_session_context(db, token)
+            if session_context is None:
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Authentication required"},
                 )
+            user, user_session = session_context
             request.state.user = user
+            request.state.user_session_id = user_session.id
+            request.state.current_workspace_id = user_session.current_workspace_id
             db.commit()
     except SQLAlchemyError:
         return JSONResponse(
