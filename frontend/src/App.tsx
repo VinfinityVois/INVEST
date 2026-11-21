@@ -240,7 +240,8 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checking, setChecking] = useState(true);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => window.localStorage.getItem("invest.rememberedEmail") || "");
+  const [rememberLogin, setRememberLogin] = useState(() => window.localStorage.getItem("invest.rememberLogin") === "true");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -309,6 +310,13 @@ export default function App() {
         return;
       }
 
+      if (rememberLogin) {
+        window.localStorage.setItem("invest.rememberedEmail", email.trim());
+        window.localStorage.setItem("invest.rememberLogin", "true");
+      } else {
+        window.localStorage.removeItem("invest.rememberedEmail");
+        window.localStorage.removeItem("invest.rememberLogin");
+      }
       setUser(data as AuthUser);
       setPassword("");
       setError("");
@@ -411,6 +419,24 @@ export default function App() {
                 {showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
               </button>
             </div>
+            <label className="auth-remember-login">
+              <input
+                type="checkbox"
+                checked={rememberLogin}
+                onChange={event => {
+                  const checked = event.target.checked;
+                  setRememberLogin(checked);
+                  if (!checked) {
+                    window.localStorage.removeItem("invest.rememberedEmail");
+                    window.localStorage.removeItem("invest.rememberLogin");
+                  } else {
+                    window.localStorage.setItem("invest.rememberLogin", "true");
+                    if (email.trim()) window.localStorage.setItem("invest.rememberedEmail", email.trim());
+                  }
+                }}
+              />
+              <span>Запомнить логин на этом устройстве</span>
+            </label>
             {error && <div className="auth-error" role="alert"><AlertTriangle size={16}/><span>{error}</span></div>}
             <button className="auth-submit" type="submit" disabled={submitting}>
               <span>{submitting ? "Проверка учётных данных…" : "Войти в систему"}</span>
@@ -2040,6 +2066,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         {workspaceSwitching && <i className="workspace-spinner" />}
       </div>
       <button className="ghost account-profile-trigger" type="button" onClick={() => { setUserManagementTab("profile"); setUserManagementOpen(true); }} title="Личный профиль, пароль и сессии"><Shield size={13}/> Мой профиль</button>
+      <button className="ghost account-logout-trigger" type="button" onClick={onLogout} title="Завершить текущую сессию"><LockKeyhole size={13}/> Выйти</button>
       {user?.is_admin && <button className="ghost account-users-trigger" type="button" onClick={() => { setUserManagementTab("users"); setUserManagementOpen(true); }} title="Управление пользователями"><Users size={13}/> Пользователи</button>}
       <button className="ghost dashboard-open-trigger" type="button" onClick={() => setDashboardOpen(true)} title="Аналитика активного Workspace"><BarChart3 size={13}/> Обзор</button>
       <button className="ghost workspace-manage-trigger" type="button" onClick={() => setWorkspaceManagerOpen(true)} title="Управление организациями и участниками"><Building2 size={13}/> Workspace</button>
@@ -2271,7 +2298,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
               <div><span>АНАЛИЗ ФАЙЛОВ</span><b>{telemetry.scanner_progress.files_scanned} / {telemetry.scanner_progress.total_files}</b></div>
               <div className="scanner-file-track"><i style={{ width: telemetry.scanner_progress.total_files ? Math.min(100, telemetry.scanner_progress.files_scanned / telemetry.scanner_progress.total_files * 100) + "%" : "0%" }} /></div>
               <small>Сейчас: {telemetry.scanner_progress.current_file}</small>
-              <button role="menuitem" onClick={() => { setAppMenuOpen(false); onLogout(); }}><LockKeyhole size={15}/><span><b>Выйти</b><small>Завершить текущую сессию</small></span></button>            </div>}
+            </div>}
             {telemetry.trace && telemetry.trace.length > 0 && <div className="execution-timeline">
               <div className="execution-timeline-title">ХОД ВЫПОЛНЕНИЯ <span>{telemetry.trace.length} / {telemetry.total_nodes || telemetry.trace.length}</span></div>{telemetry.cache && telemetry.cache.scanner_blocks > 0 && <div className="cache-telemetry-strip"><span><b>{telemetry.cache.cache_hits}</b> из {telemetry.cache.scanner_blocks} сканеров взято из кэша</span><span>{Math.round(telemetry.cache.hit_rate * 100)}% повторного использования</span><small>Срок актуальности: {Math.round(telemetry.cache.ttl_seconds / 3600)} ч</small></div>}
               {telemetry.trace.map((step, index) => <div className={"execution-step step-" + step.status} key={step.node_id}>
