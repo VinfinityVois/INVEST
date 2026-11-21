@@ -220,7 +220,7 @@ def update_finding_assignee(workflow_id: UUID, fingerprint: str, payload: Findin
 def bulk_update_finding_states(workflow_id: UUID, payload: FindingBulkUpdate, request: Request):
     actor = _actor(request)
     with SessionLocal() as db:
-        _workflow, _ = _workflow_and_finding(
+        _workspace, _workflow, _finding = _workflow_and_finding(
             db, request, workflow_id, payload.fingerprints[0], roles={"admin", "editor", "analyst"}
         )
         existing = set(db.scalars(
