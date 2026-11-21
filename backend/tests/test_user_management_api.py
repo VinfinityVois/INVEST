@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import User, UserSession
+from app.models import OrganizationMembership, User, UserSession, WorkspaceMembership
 from app.security.passwords import hash_password, verify_password
 from app.security.sessions import create_session
 import app.main as main
@@ -93,6 +93,16 @@ def test_admin_can_create_search_and_paginate_users(user_client):
         user = db.scalar(select(User).where(User.email == "analyst@example.test"))
         assert user is not None
         assert verify_password("AnalystPassword123!", user.password_hash)
+        organization_membership = db.scalar(
+            select(OrganizationMembership).where(OrganizationMembership.user_id == user.id)
+        )
+        workspace_membership = db.scalar(
+            select(WorkspaceMembership).where(WorkspaceMembership.user_id == user.id)
+        )
+        assert organization_membership is not None
+        assert organization_membership.role == "owner"
+        assert workspace_membership is not None
+        assert workspace_membership.role == "admin"
 
 
 def test_user_management_requires_admin_permission(user_client):
