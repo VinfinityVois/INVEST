@@ -28,6 +28,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
   const [workspaceMembers, setWorkspaceMembers] = useState<Member[]>([]);
   const [apiTokens, setApiTokens] = useState<ApiToken[]>([]);
   const [tokenName, setTokenName] = useState("");
+  const [tokenExpiry, setTokenExpiry] = useState("");
   const [tokenScopes, setTokenScopes] = useState<string[]>(["workflow:run", "run:read"]);
   const [issuedToken, setIssuedToken] = useState("");
   const [newOrganization, setNewOrganization] = useState("");
@@ -125,10 +126,11 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
     try {
       const data = await api("/api/workspaces/" + workspaceId + "/tokens", {
         method: "POST",
-        body: JSON.stringify({ name: tokenName, scopes: tokenScopes }),
+        body: JSON.stringify({ name: tokenName, scopes: tokenScopes, expires_at: tokenExpiry ? new Date(tokenExpiry + "T23:59:59Z").toISOString() : null }),
       });
       setIssuedToken(data.token);
       setTokenName("");
+      setTokenExpiry("");
       const listed = await api("/api/workspaces/" + workspaceId + "/tokens");
       setApiTokens(listed.items || []);
       setNotice("API token создан. Скопируйте его сейчас: повторно показать секрет нельзя.");
@@ -237,6 +239,7 @@ export default function WorkspaceManager({ open, onClose, onChanged }: { open: b
             {canManageWorkspace && <>
               <form className="workspace-manager-add-member" onSubmit={event => { event.preventDefault(); void createToken(); }}>
                 <input value={tokenName} onChange={event => setTokenName(event.target.value)} placeholder="Название токена" maxLength={120} required/>
+                <label className="workspace-token-expiry">Срок действия (по умолчанию 90 дней)<input type="date" value={tokenExpiry} onChange={event => setTokenExpiry(event.target.value)}/></label>
                 <div className="workspace-token-scopes">
                   {[
                     ["workflow:run", "Запуск workflow"],
