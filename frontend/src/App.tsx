@@ -5,6 +5,7 @@ import {
   type Connection, type Edge, type Node, type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import UserManagement from "./UserManagement";
 import {
   Activity, AlertTriangle, Bot, Check, ChevronDown, CircleHelp, CirclePlay,
   Code2, GitBranch, Layers3, LockKeyhole, Plus, Search, Shield, Trash2,
@@ -194,6 +195,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [userManagementOpen, setUserManagementOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1664,6 +1666,9 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
              <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны</b><small>Готовые security-сценарии</small></span></button>
              <button role="menuitem" onClick={() => { setAppMenuOpen(false); const ai = nodes.find(node => node.data.nodeType === "ai.explain"); if (ai) { setSelectedNodeId(ai.id); setSelectedEdgeId(null); setRightCollapsed(false); setInspectorTab("properties"); } else setAiGraphOpen(true); }}><Activity size={15}/><span><b>AI profile</b><small>Провайдер и параметры объяснений</small></span></button>
              <div className="app-menu-divider"/>
+             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><LockKeyhole size={15}/><span><b>Безопасность аккаунта</b><small>Пароль и активные сессии</small></span></button>
+             {user?.is_admin && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementOpen(true); }}><Users size={15}/><span><b>Пользователи и доступы</b><small>Создание, роли и блокировка</small></span></button>}
+             <div className="app-menu-divider"/>
              <a role="menuitem" href="/api/v1/docs" target="_blank" rel="noreferrer" onClick={() => setAppMenuOpen(false)}><BookOpen size={15}/><span><b>Документация API</b><small>OpenAPI reference</small></span></a>
              <button role="menuitem" onClick={() => { setTheme(value => value === "light" ? "dark" : "light"); setAppMenuOpen(false); }}>{theme === "light" ? <Moon size={15}/> : <Sun size={15}/>}<span><b>Оформление</b><small>{theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}</small></span></button>
            </div>}
@@ -2175,6 +2180,7 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
         </div>
       </section>
     </div>}
+    {userManagementOpen && user && <UserManagement isAdmin={user.is_admin} currentUserId={user.id} onClose={() => setUserManagementOpen(false)} />}
     {templateLibraryOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTemplateLibraryOpen(false); }}>
       <section className="template-library-dialog" role="dialog" aria-modal="true" aria-labelledby="template-library-title">
         <header className="template-library-header">
