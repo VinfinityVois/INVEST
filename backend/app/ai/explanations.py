@@ -107,7 +107,7 @@ def _safe_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
 def _provider_error(exc: Exception) -> str:
     if isinstance(exc, httpx.TimeoutException):
-        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 90.0))
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
         return (
             f"AI-провайдер не ответил за {timeout_seconds:g} секунд. "
             "Проверьте доступность сервиса и повторите запуск."
@@ -194,17 +194,20 @@ def _parse_response(response: httpx.Response) -> list:
         )
         raise
     if not isinstance(body, dict):
-        raise ValueError("OpenAI response body must be an object")
+        logger.warning("AI provider response structure invalid (phase=http_body type=%s)", type(body).__name__)
+        raise ExplanationGatewayError("LLM вернул ответ не в формате JSON-объекта OpenAI chat/completions.")
     choices = body.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         # Keep the diagnostic useful without exposing provider response contents.
         keys = ", ".join(sorted(str(key) for key in body.keys())[:12])
+        logger.warning("AI provider response structure invalid (phase=choices keys=%s)", keys or "none")
         raise ExplanationGatewayError(
-            f"LLM вернул несовместимый ответ: отсутствует choices[]. Проверьте, что URL указывает на /v1/chat/completions (поля ответа: {keys or 'нет'})."
+            f"LLM вернул несовместимую структуру: отсутствует choices[]. Проверьте /v1/chat/completions (поля: {keys or 'нет'})."
         )
     message = choices[0].get("message")
     if not isinstance(message, dict):
-        raise ExplanationGatewayError("LLM вернул choices без message; требуется chat/completions API.")
+        logger.warning("AI provider response structure invalid (phase=message type=%s)", type(message).__name__)
+        raise ExplanationGatewayError("LLM вернул choices без объекта message; требуется chat/completions API.")
     content = message.get("content")
     if isinstance(content, list):
         parts = []
@@ -218,8 +221,12 @@ def _parse_response(response: httpx.Response) -> list:
         content = json.dumps(content, ensure_ascii=False)
     if not isinstance(content, str) or not content.strip():
         finish_reason = choices[0].get("finish_reason")
+        logger.warning(
+            "AI provider response structure invalid (phase=message_content content_type=%s finish_reason=%s)",
+            type(content).__name__, str(finish_reason or "unknown")[:32],
+        )
         raise ExplanationGatewayError(
-            f"LLM не вернул текст объяснений (finish_reason={finish_reason or 'unknown'}). Увеличьте LLM_MAX_TOKENS или проверьте ответ модели."
+            f"LLM не вернул текст объяснений (finish_reason={finish_reason or 'unknown'}). Проверьте совместимость модели и chat/completions API."
         )
     try:
         parsed = _extract_json_object(content)
@@ -241,7 +248,11 @@ def _parse_response(response: httpx.Response) -> list:
         raise
     raw_items = parsed.get("explanations")
     if not isinstance(raw_items, list):
-        raise ValueError("AI JSON must contain an explanations array")
+        logger.warning(
+            "AI provider response structure invalid (phase=explanations_array field_type=%s)",
+            type(raw_items).__name__,
+        )
+        raise ExplanationGatewayError("LLM вернул JSON без обязательного массива explanations.")
     return raw_items
 
 
@@ -409,7 +420,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
     except (TypeError, ValueError):
         timeout_seconds = 90.0
     try:
-        max_tokens = max(512, min(int(settings.llm_max_tokens), 16384))
+        max_tokens = max(512, min(int(settings.llm_max_tokens), 32768))
     except (TypeError, ValueError):
         max_tokens = 1400
 
