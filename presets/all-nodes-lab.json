@@ -38,7 +38,7 @@
     {"id":"e18","source":"compare","source_handle":"true","target":"gate"},
     {"id":"e19","source":"compare","source_handle":"false","target":"gate"},
     {"id":"e20","source":"ai","target":"webhook"},
-    {"id":"e21","source":"ai","target":"telegram"},
+    {"id":"e21","source":"ai","target":"telegram","target_handle":"report"},
     {"id":"e22","source":"merge","target":"telegram","target_handle":"findings"}
   ]
 }
