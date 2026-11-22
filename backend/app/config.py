@@ -22,13 +22,6 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_allowed_chat_ids: str = ""
     telegram_proxy: str | None = None
-    smtp_host: str | None = None
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_from: str | None = None
-    smtp_use_tls: bool = True
-    smtp_allowed_hosts: str = ""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
@@ -74,84 +67,40 @@ class Settings(BaseSettings):
                     "ALLOWED_ORIGINS contains an invalid port"
                 ) from exc
 
-            scheme = parsed.scheme.lower()
+            if port == 0:
+                raise ValueError("ALLOWED_ORIGINS contains an invalid port")
 
-            if (
-                self.app_env.strip().lower() == "production"
-                and scheme != "https"
-            ):
-                raise ValueError(
-                    "ALLOWED_ORIGINS must use HTTPS in production"
-                )
-
-            host = parsed.netloc.lower()
-
-            if (scheme == "http" and port == 80) or (
-                scheme == "https" and port == 443
-            ):
-                host = parsed.hostname.lower()
-
-            normalized = f"{scheme}://{host}"
+            normalized = f"{parsed.scheme.lower()}://{parsed.hostname.lower()}"
+            if port is not None:
+                normalized = f"{normalized}:{port}"
 
             if normalized not in seen:
                 origins.append(normalized)
                 seen.add(normalized)
 
         if not origins:
-            raise ValueError("ALLOWED_ORIGINS must not be empty")
+            raise ValueError("ALLOWED_ORIGINS is empty after parsing")
 
         return origins
 
-    @model_validator(mode="after")
-    def validate_production_settings(self):
-        origins = self.allowed_origin_list
-        if self.app_env.strip().lower() == "production" and not origins:
-            raise ValueError(
-                "ALLOWED_ORIGINS must be explicitly configured in production"
-            )
-        if self.app_env.strip().lower() != "production":
-            return self
-
-        secret = self.app_secret_key.strip()
-        lowered_secret = secret.lower()
-
-        if len(secret) < 32:
-            raise ValueError(
-                "APP_SECRET_KEY must contain at least 32 characters in production"
-            )
-
-        unsafe_prefixes = (
-            "development-only-change-me",
-            "replace-with-random-secret",
-            "change-me-local",
-        )
-        if lowered_secret.startswith(unsafe_prefixes):
-            raise ValueError(
-                "APP_SECRET_KEY must not contain a known placeholder in production"
-            )
-
-        database_scheme = urlsplit(self.database_url).scheme.lower()
-        if database_scheme != "postgresql+psycopg":
-            raise ValueError(
-                "DATABASE_URL must use PostgreSQL in production"
-            )
-
-        return self
+    @property
+    def allowed_target_list(self) -> list[str]:
+        return [
+            item.strip()
+            for item in (self.allowed_targets or "").split(",")
+            if item.strip()
+        ]
 
     @property
     def webhook_allowed_host_list(self) -> set[str]:
         raw = self.webhook_allowed_hosts
-        if raw is None:
+        if raw is None or not str(raw).strip():
             raw = self.notify_webhook_allowed_hosts
         return {
-            host.strip().lower().rstrip('.')
-            for host in raw.split(',')
+            host.strip().lower()
+            for host in str(raw or "").split(",")
             if host.strip()
         }
-
-    @property
-    def allowed_target_list(self) -> set[str]:
-        return {x.strip().rstrip("/") for x in self.allowed_targets.split(",") if x.strip()}
 
     @property
     def telegram_allowed_chat_id_set(self) -> set[str]:
@@ -159,14 +108,6 @@ class Settings(BaseSettings):
             item.strip()
             for item in (self.telegram_allowed_chat_ids or "").split(",")
             if item.strip()
-        }
-
-    @property
-    def smtp_allowed_host_set(self) -> set[str]:
-        return {
-            host.strip().lower().rstrip(".")
-            for host in (self.smtp_allowed_hosts or "").split(",")
-            if host.strip()
         }
 
 
