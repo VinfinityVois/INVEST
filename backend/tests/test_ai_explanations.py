@@ -522,6 +522,27 @@ def test_parser_accepts_content_as_structured_text_parts():
     assert explanations._parse_response(response) == []
 
 
+def test_parser_logs_safe_metadata_when_explanations_array_is_missing(caplog):
+    response = FakeResponse({
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({"result": [], "status": "ok"})},
+        }],
+        "usage": {"completion_tokens": 321, "prompt_tokens": 654},
+    })
+
+    with __import__("pytest").raises(explanations.ExplanationGatewayError):
+        explanations._parse_response(response)
+
+    diagnostic = caplog.text
+    assert "phase=explanations_array" in diagnostic
+    assert "json_keys=result, status" in diagnostic
+    assert "finish_reason=stop" in diagnostic
+    assert "completion_tokens=321" in diagnostic
+    assert "prompt_tokens=654" in diagnostic
+    assert '"result"' not in diagnostic
+
+
 def test_parser_logs_safe_metadata_for_invalid_model_json(caplog):
     response = FakeResponse({
         "choices": [{
