@@ -45,12 +45,12 @@ def _validate_chat_ids(chat_ids: list[str], allowed_chat_ids=None) -> list[str]:
     allowed = set(allowed_chat_ids) if allowed_chat_ids is not None else settings.telegram_allowed_chat_id_set
     if not allowed:
         raise TelegramDeliveryError(
-            "TELEGRAM_ALLOWED_CHAT_IDS is empty; configure allowlist in .env."
+            "TELEGRAM_ALLOWED_CHAT_IDS is empty; add recipients in platform integrations settings."
         )
     rejected = [item for item in chat_ids if item not in allowed]
     if rejected:
         raise TelegramDeliveryError(
-            "chat_id is not present in TELEGRAM_ALLOWED_CHAT_IDS."
+            "chat_id is not present in the workspace Telegram allowlist (TELEGRAM_ALLOWED_CHAT_IDS)."
         )
     if not chat_ids:
         raise TelegramDeliveryError("Specify at least one chat_id.")
@@ -70,7 +70,7 @@ def deliver_telegram(
     token = (token or settings.telegram_bot_token or "").strip()
     if not token:
         raise TelegramDeliveryError(
-            "TELEGRAM_BOT_TOKEN is not configured in server environment."
+            "Telegram bot token is not configured in platform integrations or server environment."
         )
     if any(ch in token for ch in " \n\r\t"):
         raise TelegramDeliveryError("TELEGRAM_BOT_TOKEN has invalid format.")
