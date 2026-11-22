@@ -702,6 +702,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   }, [workflowId]);
 
   useEffect(() => {
+    if (!workflowReady) return;
     if (!lastRunId) { setFindings([]); return; }
     let active = true;
     Promise.all([
@@ -713,7 +714,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       if (findingsResponse.ok) setFindings(await findingsResponse.json() as Finding[]);
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [lastRunId]);
+  }, [lastRunId, workflowReady]);
 
   const refreshWorkflowRuns = async (id: string) => {
     setRunHistoryLoading(true);
