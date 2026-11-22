@@ -1,0 +1,99 @@
+{
+  "name": "Аудит Kotlin / Spring",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger.manual",
+      "position": {
+        "x": 60,
+        "y": 260
+      },
+      "config": {}
+    },
+    {
+      "id": "source",
+      "type": "source.upload",
+      "position": {
+        "x": 300,
+        "y": 260
+      },
+      "config": {
+        "path": ""
+      }
+    },
+    {
+      "id": "sast",
+      "type": "scan.sast",
+      "position": {
+        "x": 570,
+        "y": 360
+      },
+      "config": {
+        "rule_packs": [
+          "sast-core"
+        ],
+        "include_tests": true,
+        "min_confidence": 0.4
+      }
+    },
+    {
+      "id": "merge",
+      "type": "findings.merge",
+      "position": {
+        "x": 850,
+        "y": 220
+      },
+      "config": {}
+    },
+    {
+      "id": "ai",
+      "type": "ai.explain",
+      "position": {
+        "x": 1110,
+        "y": 80
+      },
+      "config": {
+        "language": "ru",
+        "max_findings": 20
+      }
+    },
+    {
+      "id": "gate",
+      "type": "ci.gate",
+      "position": {
+        "x": 1110,
+        "y": 360
+      },
+      "config": {
+        "policy_pack": "bank-strict"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "trigger",
+      "target": "source"
+    },
+    {
+      "id": "e2",
+      "source": "source",
+      "target": "sast"
+    },
+    {
+      "id": "e3",
+      "source": "sast",
+      "target": "merge"
+    },
+    {
+      "id": "e4",
+      "source": "merge",
+      "target": "ai"
+    },
+    {
+      "id": "e5",
+      "source": "merge",
+      "target": "gate"
+    }
+  ]
+}
