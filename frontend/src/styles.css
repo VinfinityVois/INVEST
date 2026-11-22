@@ -874,6 +874,7 @@
 .template-category-filters{display:flex;flex-wrap:wrap;gap:6px}
 .template-category-filters button{padding:5px 9px;border:1px solid #2b4055;border-radius:5px;background:#101d2c;color:#8298ad;font-size:9px}
 .template-category-filters button.active{border-color:#477ca5;background:#19344c;color:#d0eaff}
+.template-library-section-title{padding:8px 2px 2px;color:#7f9bb4;font:700 9px "DM Mono",monospace;letter-spacing:.13em}
 .template-library-list{display:grid;gap:8px;min-height:160px;overflow:auto;padding:15px 24px 20px;scrollbar-width:thin;scrollbar-color:#34516b transparent}
 .template-library-card{display:flex;align-items:center;gap:13px;padding:13px;border:1px solid rgba(81,117,148,.27);border-radius:7px;background:rgba(12,25,39,.7);transition:border-color .15s,background .15s}
 .template-library-card:hover{border-color:#456b8b;background:rgba(22,43,63,.82)}
