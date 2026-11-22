@@ -623,8 +623,12 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         finding for finding in eligible
         if str(finding.get("fingerprint") or "") not in explained_fingerprints
     ]
+    # Bound extra work: at most six individual retries, each with a shorter timeout.
+    max_individual_retries = 6
+    retry_queue = retry_findings[:max_individual_retries]
     retry_succeeded = 0
-    for finding in retry_findings:
+    retry_timeout_seconds = min(timeout_seconds, 90.0)
+    for finding in retry_queue:
         single_payload = {
             "model": settings.llm_model,
             "temperature": 0.1,
@@ -640,7 +644,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         }
         try:
             single_items, attempts, single_status = _request_model_items(
-                endpoint, headers, single_payload, timeout_seconds,
+                endpoint, headers, single_payload, retry_timeout_seconds,
             )
             request_attempts += attempts
             http_status = single_status
@@ -662,8 +666,10 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
 
     if retry_findings:
         logger.info(
-            "AI explanation individual retries: attempted=%d recovered=%d remaining=%d",
-            len(retry_findings), retry_succeeded, len(retry_findings) - retry_succeeded,
+            "AI explanation individual retries: attempted=%d recovered=%d unresolved=%d deferred=%d",
+            len(retry_queue), retry_succeeded,
+            len(retry_queue) - retry_succeeded,
+            len(retry_findings) - len(retry_queue),
         )
 
     # Log only model object key names (never values) to diagnose schema drift safely.
