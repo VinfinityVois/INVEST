@@ -920,6 +920,10 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     }));
   }, [telemetry, setNodes, setEdges]);
 
+  const filteredPresetItems = presetItems.filter(item =>
+    (templateCategory === "Все" || item.category.toLowerCase() === templateCategory.toLowerCase())
+    && (!templateSearch.trim() || (item.name + " " + item.description).toLowerCase().includes(templateSearch.trim().toLowerCase()))
+  );
   const selectedNode = nodes.find(node => node.id === selectedNodeId) || null;
   const selectedEdge = edges.find(edge => edge.id === selectedEdgeId) || null;
   useEffect(() => {
@@ -2807,7 +2811,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         </header>
         <div className="template-library-tools">
           <label className="template-library-search"><Search size={14}/><input value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void loadTemplateLibrary(); }} placeholder="Поиск шаблона…"/><button onClick={() => void loadTemplateLibrary()}><SearchCheck size={13}/> Найти</button></label>
-          <div className="template-category-filters">{["Все","general","security","ci","kotlin","secrets"].map(item => <button key={item} className={templateCategory === item ? "active" : ""} onClick={() => setTemplateCategory(item)}>{item === "Все" ? "Все категории" : item}</button>)}</div>
+          <div className="template-category-filters">{["Все","general","security","ci","kotlin","secrets","sca","sast","ai","automation"].map(item => <button key={item} className={templateCategory === item ? "active" : ""} onClick={() => setTemplateCategory(item)}>{item === "Все" ? "Все категории" : item}</button>)}</div>
         </div>
         {templateError && <div className="template-library-error"><AlertTriangle size={14}/><span>{templateError}</span><button onClick={() => void loadTemplateLibrary()}>Повторить</button></div>}
         <div className="template-library-list">
@@ -2820,7 +2824,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
                 <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => { setTemplateBusyId("workflow:" + item.id); void openSavedWorkflow(item.id).catch(error => setTemplateError(String(error))).finally(() => setTemplateBusyId(null)); }}>{templateBusyId === "workflow:" + item.id ? "Открытие…" : "Открыть"}</button>
               </article>)}
             </>}
-            {presetItems.map(item => <article className="template-library-card" key={"preset:" + item.id}>
+            {filteredPresetItems.map(item => <article className="template-library-card" key={"preset:" + item.id}>
               <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>BUILT-IN · {item.category}</span></div><p>{item.description}</p><small>{item.node_count} блоков · требуется настроить: {item.setup_required.join(", ") || "ничего"}</small></div>
               <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void clonePresetIntoEditor(item.id)}>{templateBusyId === "preset:" + item.id ? "Создание…" : "Создать workflow"}</button>
             </article>)}
@@ -2828,7 +2832,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
               <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>{item.category}</span></div><p>{item.description || "Описание не добавлено."}</p><small>{item.node_count} блоков · опубликован {formatDate(item.created_at)}</small></div>
               <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void cloneTemplateIntoEditor(item.id)}>{templateBusyId === item.id ? "Копирование…" : "Клонировать"}</button>
             </article>)}
-            {!presetItems.length && !templateItems.length && <div className="template-library-empty"><Library size={25}/><b>Ничего не найдено</b><span>Попробуй изменить поиск или категорию.</span></div>}
+            {!filteredPresetItems.length && !templateItems.length && <div className="template-library-empty"><Library size={25}/><b>Ничего не найдено</b><span>Попробуй изменить поиск или категорию.</span></div>}
           </>}
         </div>
         <footer className="template-library-footer"><span>SAFE CLONE · NO AUTO EXECUTION</span><button onClick={() => setTemplateLibraryOpen(false)}>Закрыть</button></footer>
