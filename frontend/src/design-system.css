@@ -4096,7 +4096,7 @@
   stroke:#278b52;
 }
 
-/* Keep workflow nodes' existing fills, borders and colored category accents unchanged. */
+/* Preserve neutral node surfaces while making category accents vivid in light mode. */
 .shell[data-theme="light"] .workflow-node {
   background:color-mix(in srgb,#fff 94%,#f4f6f8);
   border-top-color:#d4dae0;
@@ -4104,21 +4104,31 @@
   border-bottom-color:#d4dae0;
   color:#14181f;
 }
-.shell[data-theme="light"] .workflow-node.tone-green { border-left-color:#157a44; }
-.shell[data-theme="light"] .workflow-node.tone-violet { border-left-color:#3a424c; }
-.shell[data-theme="light"] .workflow-node.tone-cyan { border-left-color:#6b7682; }
-.shell[data-theme="light"] .workflow-node .node-symbol {
-  background:#f4f6f8;
-  border-color:#d4dae0;
-  color:#4f5863;
+.shell[data-theme="light"] .workflow-node.tone-green { border-left-color:#16A34A; }
+.shell[data-theme="light"] .workflow-node.tone-violet { border-left-color:#7C3AED; }
+.shell[data-theme="light"] .workflow-node.tone-cyan { border-left-color:#0891B2; }
+.shell[data-theme="light"] .workflow-node.tone-green .node-symbol {
+  color:#15803D;
+  background:#DCFCE7;
+  border-color:#86EFAC;
+}
+.shell[data-theme="light"] .workflow-node.tone-violet .node-symbol {
+  color:#6D28D9;
+  background:#EDE9FE;
+  border-color:#C4B5FD;
+}
+.shell[data-theme="light"] .workflow-node.tone-cyan .node-symbol {
+  color:#0E7490;
+  background:#CFFAFE;
+  border-color:#67E8F9;
 }
 .shell[data-theme="light"] .workflow-node .node-copy b { color:#14181f; }
 .shell[data-theme="light"] .workflow-node .node-copy small { color:#6b7682; }
 .shell[data-theme="light"] .workflow-node .node-footer { border-color:#d4dae0; color:#6b7682; }
 
 .shell[data-theme="light"] .workflow-node.is-selected {
-  border-color:#1B9A55;
-  box-shadow:0 0 0 2px rgba(27,154,85,.16),0 15px 34px rgba(0,0,0,.30);
+  border-color:#16A34A;
+  box-shadow:0 0 0 2px rgba(22,163,74,.24),0 15px 34px rgba(0,0,0,.30);
 }
 .shell[data-theme="light"] .workflow-port {
   border-color:#f4f6f8!important;
