@@ -119,8 +119,11 @@ def process_run(run_id: str, worker_id: str) -> None:
         workspace_id = workflow.workspace_id if workflow is not None else None
         integration_settings = {
             "git_repositories": [],
+            "git_configured": False,
             "telegram_chat_ids": [],
+            "telegram_configured": False,
             "webhook_hosts": [],
+            "webhook_configured": False,
             "telegram_bot_token": None,
         }
         if workspace_id is not None:
@@ -131,10 +134,13 @@ def process_run(run_id: str, worker_id: str) -> None:
                 config = integration.config if isinstance(integration.config, dict) else {}
                 if integration.provider == "git":
                     integration_settings["git_repositories"] = config.get("repositories", [])
+                    integration_settings["git_configured"] = True
                 elif integration.provider == "telegram":
                     integration_settings["telegram_chat_ids"] = config.get("chat_ids", [])
+                    integration_settings["telegram_configured"] = True
                 elif integration.provider == "webhook":
                     integration_settings["webhook_hosts"] = config.get("hosts", [])
+                    integration_settings["webhook_configured"] = True
             bot_credential = session.scalar(
                 select(Credential).where(
                     Credential.workspace_id == workspace_id,
