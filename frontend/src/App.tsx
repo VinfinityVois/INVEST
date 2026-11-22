@@ -956,7 +956,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   }, [setEdges, isValidConnection]);
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes);
-    if (changes.some(change => change.type !== "select")) setWorkflowDirty(true);
+    // React Flow emits dimensions changes during initial layout; those are not user edits.
+    if (changes.some(change => ["position", "remove", "add", "replace"].includes(change.type))) setWorkflowDirty(true);
   }, [onNodesChange]);
   const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
     onEdgesChange(changes);
