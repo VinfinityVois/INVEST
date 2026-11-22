@@ -3804,3 +3804,153 @@
     grid-template-columns:32px minmax(0,1fr) 32px;
   }
 }
+/* Dense node properties matrix */
+.shell .schema-config-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  align-items: start;
+  gap: 9px;
+  padding: 4px 2px 12px;
+  overflow: visible;
+}
+
+.shell .schema-config-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  min-width: 0;
+  min-height: 104px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--gray-50);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.shell[data-theme="dark"] .schema-config-field {
+  background: var(--gray-900);
+  border-color: rgba(148, 163, 184, .19);
+}
+
+.shell .schema-config-field:hover,
+.shell .schema-config-field:focus-within {
+  border-color: var(--accent-500);
+  background: var(--soft-accent);
+  z-index: 5;
+}
+
+.shell .schema-config-field > .field-label,
+.shell .schema-config-field > label:first-child {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.shell .schema-config-field input:not([type="checkbox"]),
+.shell .schema-config-field select,
+.shell .schema-config-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, var(--background));
+  color: var(--text);
+  font-size: 11px;
+}
+
+.shell .schema-config-field textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.shell .schema-config-field .schema-checkbox,
+.shell .schema-config-field .schema-array-options {
+  min-width: 0;
+  font-size: 11px;
+}
+
+.shell .schema-config-field .schema-array-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.shell .schema-config-field .schema-array-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, var(--background));
+  overflow-wrap: anywhere;
+}
+
+.shell .schema-config-field .schema-field-help {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: calc(100% + 5px);
+  z-index: 20;
+  display: block;
+  max-height: 0;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 0 solid var(--border);
+  border-radius: 7px;
+  background: var(--surface, var(--background));
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+  opacity: 0;
+  visibility: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  transition: opacity .14s ease, visibility .14s ease, max-height .14s ease, padding .14s ease;
+}
+
+.shell .schema-config-field:hover .schema-field-help,
+.shell .schema-config-field:focus-within .schema-field-help {
+  max-height: 130px;
+  padding: 8px 9px;
+  border-width: 1px;
+  opacity: 1;
+  visibility: visible;
+}
+
+.shell .schema-config-field .schema-field-constraints,
+.shell .schema-config-field .schema-field-error {
+  display: block;
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.shell .schema-config-field .schema-required {
+  color: var(--danger);
+}
+
+@media (max-width: 680px) {
+  .shell .schema-config-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+}
+
+@media (max-width: 420px) {
+  .shell .schema-config-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
