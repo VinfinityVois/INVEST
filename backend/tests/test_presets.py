@@ -36,6 +36,19 @@ def test_every_builtin_preset_graph_is_valid():
         assert len(graph.nodes) == metadata["node_count"]
 
 
+def test_all_nodes_lab_covers_every_registered_node_type():
+    preset = load_preset("all-nodes-lab")
+    graph = WorkflowGraph.model_validate(preset["graph"])
+    node_types = {node.type for node in graph.nodes}
+    registered_types = {manifest.type for manifest in registry.all()}
+    validation = validate_graph(graph, registry)
+
+    assert validation.valid, validation.model_dump()
+    assert len(graph.nodes) == len(registered_types) == 15
+    assert node_types == registered_types
+    assert len({node.id for node in graph.nodes}) == len(graph.nodes)
+
+
 def test_builtin_pr_gate_clone_gets_fresh_graph_ids():
     preset = load_preset("pr-gate")
     source = sanitize_graph(preset["graph"])
