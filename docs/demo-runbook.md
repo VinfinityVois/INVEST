@@ -25,7 +25,7 @@
 2. Убедиться, что Git source использует закреплённый commit \`fe1fcbe212669783480666b9b60147c8a8c6eef4\` и путь \`training-project\`.
 3. Указать уникальный webhook URL в настройках Webhook и запустить workflow.
 4. Показать live execution trace: каждый из трёх сканеров должен завершиться \`completed\`; AI — \`completed\`; Webhook — \`delivered\`.
-5. Открыть Findings, объяснение AI, решение Security Gate и JSON на webhook.site. Gate \`BLOCK\` — валидный результат строгой политики, а не ошибка сканера; backend помечает такой run как \`failed\`, потому что gate остановил pipeline.
+5. Открыть Findings, объяснение AI, решение Security Gate и JSON на webhook.site. Для короткой демонстрации отдельной логики добавь после Merge ноду `Regex match` (`logic.regex`), выбери поле `message` и шаблон `(?i)sql\\s+injection`; выход `true` подключи к отдельной ветке обработки, а `false` — к обычному продолжению. Regex фильтрует подтверждённые findings и не запускает код проекта. Gate \`BLOCK\` — валидный результат строгой политики, а не ошибка сканера; backend помечает такой run как \`failed\`, потому что gate остановил pipeline.
 
 ## Автоматический прогон из PowerShell
 
