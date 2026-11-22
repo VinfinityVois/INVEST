@@ -4275,3 +4275,36 @@
   .shell .finding-detail > .finding-ai-explanation .ai-source-evidence,
   .shell .finding-detail > .finding-ai-explanation > small { grid-column:1; }
 }
+
+/* Workspace-scoped integrations settings. */
+.integrations-backdrop { z-index: 120; }
+.integrations-dialog { width: min(760px, calc(100vw - 28px)); max-height: min(88vh, 920px); overflow: auto; }
+.integrations-form { display: grid; gap: 14px; padding: 18px 22px 22px; }
+.integration-setting { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.integration-setting-heading { display: flex; align-items: flex-start; gap: 10px; color: var(--accent-text); }
+.integration-setting-heading > svg { flex: none; margin-top: 2px; }
+.integration-setting-heading > div { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.integration-setting-heading b { color: var(--text-primary); font-size: 12px; }
+.integration-setting-heading small { color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+.integration-status { flex: none; color: var(--muted); font: 700 8px "JetBrains Mono",monospace; letter-spacing: .06em; }
+.integration-status.is-ready { color: #34b879; }
+.integrations-form textarea,
+.integrations-form input[type="password"] { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--elevated); color: var(--text-primary); padding: 10px 11px; font: 11px/1.55 "JetBrains Mono",monospace; resize: vertical; outline: none; }
+.integrations-form textarea:focus,
+.integrations-form input[type="password"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb,var(--accent) 16%,transparent); }
+.integration-field-label { color: var(--text-secondary); font: 700 9px "JetBrains Mono",monospace; letter-spacing: .07em; }
+.integration-remove-token { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 10px; }
+.integration-remove-token input { accent-color: var(--danger); }
+.integrations-security-note { display: flex; align-items: flex-start; gap: 9px; padding: 11px 13px; border: 1px solid color-mix(in srgb,#34b879 30%,var(--border)); border-radius: 8px; background: color-mix(in srgb,#34b879 6%,var(--surface)); color: var(--text-secondary); font-size: 10px; line-height: 1.55; }
+.integrations-security-note svg { flex: none; color: #34b879; }
+.integrations-message { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 7px; font-size: 11px; line-height: 1.5; }
+.integrations-message svg { flex: none; margin-top: 1px; }
+.integrations-message.is-error { border: 1px solid rgba(220,90,90,.35); background: rgba(220,90,90,.08); color: #e58d8d; }
+.integrations-message.is-success { border: 1px solid rgba(52,184,121,.3); background: rgba(52,184,121,.08); color: #48c98a; }
+.integrations-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 4px; }
+.integrations-loading { padding: 28px; color: var(--text-secondary); text-align: center; font-size: 12px; }
+@media(max-width:640px) {
+  .integrations-form { padding: 13px; }
+  .integration-setting-heading { flex-wrap: wrap; }
+  .integration-status { margin-left: 26px; }
+}
