@@ -23,6 +23,12 @@ services:
     ports: ["8000:8000"]
     depends_on:
       db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     volumes: [appdata:/data, workspaces:/workspace, integration_secrets:/run/invest-secrets]
   worker:
     build:
@@ -34,6 +40,7 @@ services:
       WORKSPACE_ROOT: /workspace
     depends_on:
       db: {condition: service_healthy}
+      api: {condition: service_healthy}
     volumes: [appdata:/data, workspaces:/workspace, integration_secrets:/run/invest-secrets]
   frontend:
     image: node:22-alpine
