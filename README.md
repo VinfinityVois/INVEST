@@ -216,6 +216,18 @@ API:
 - PUT /api/workflows/{id}/schedule с JSON {"enabled": true} — включить по конфигурации Schedule trigger;
 - PUT /api/workflows/{id}/schedule с JSON {"enabled": false} — отключить.
 
+### Интеграции платформы
+
+Откройте **Главное меню → Интеграции платформы** в интерфейсе INVEST. Настройки сохраняются в активной рабочей области:
+
+- **Git** — список HTTPS-репозиториев, которым разрешено запускаться в Git source.
+- **Telegram** — токен бота и chat IDs по умолчанию. Токен шифруется AES-256-GCM и никогда не возвращается браузеру.
+- **Webhook** — список разрешённых DNS-hostname. Нода по-прежнему задаёт конкретный HTTPS URL, а сервер проверяет hostname, DNS и публичность IP.
+- Доступ к изменению настроек имеют только администраторы Workspace; каждое изменение попадает в audit log.
+- Если мастер-ключ не задан вручную, Docker создаёт его автоматически в отдельном persistent volume, общем для API и worker. Не удаляйте этот volume: без него сохранённые секреты нельзя расшифровать.
+
+Legacy-переменные `ALLOWED_TARGETS`, `TELEGRAM_ALLOWED_CHAT_IDS`, `TELEGRAM_BOT_TOKEN` и `NOTIFY_WEBHOOK_ALLOWED_HOSTS` поддерживаются как fallback для старых конфигураций. Для новых настроек используйте интерфейс.
+
 ### Настройка Webhook
 
 - Разрешённые DNS-hostname настраиваются в **Главное меню → Интеграции платформы** и сохраняются отдельно для каждого Workspace. `NOTIFY_WEBHOOK_ALLOWED_HOSTS` остаётся legacy-резервом, если в Workspace ещё нет настроек.
