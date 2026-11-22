@@ -163,10 +163,7 @@ def update_integrations(payload: IntegrationSettingsUpdate, request: Request):
         webhook.config = {"hosts": payload.webhook_hosts}
 
         credential = _bot_credential(db, workspace.id)
-        if payload.remove_telegram_bot_token:
-            if credential is not None:
-                db.delete(credential)
-        elif payload.telegram_bot_token:
+        if payload.telegram_bot_token:
             if credential is None:
                 credential_id = uuid4()
                 try:
@@ -194,6 +191,8 @@ def update_integrations(payload: IntegrationSettingsUpdate, request: Request):
                 credential.ciphertext = ciphertext
                 credential.nonce = nonce
                 credential.key_id = key_id
+        elif payload.remove_telegram_bot_token and credential is not None:
+            db.delete(credential)
 
         db.add(AuditLog(
             action="integrations.updated",
