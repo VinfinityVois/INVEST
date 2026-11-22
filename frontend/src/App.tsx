@@ -735,8 +735,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   };
 
   useEffect(() => {
+    if (!workflowReady) return;
     if (!workflowId) {
-      if (!workflowReady) return;
       setWorkflowRuns([]);
       setLastRunId(null);
       window.localStorage.removeItem("invest.lastRunId");
