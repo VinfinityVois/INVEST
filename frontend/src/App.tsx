@@ -84,7 +84,7 @@ type Telemetry = {
   error?: string | null;
   node_results?: Record<string, { status?: string; message?: string; findings?: number; severity?: Record<string, number>; explained_count?: number; analyzed_count?: number; skipped_count?: number; unexplained_count?: number; insufficient_evidence_count?: number; evidence_coverage?: number; coverage?: number; provider?: string | null; model?: string | null; provider_request_ms?: number | null; provider_attempts?: number | null; provider_http_status?: number | null; provider_error_code?: string | null; total_findings?: number; explanations?: Array<{ root_cause?: string; impact?: string; recommendation?: string }> }>;
 };
-type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
+type NodeData = { label: string; nodeType: string; category: string; description: string; config: Record<string, unknown>; inputPorts?: PortManifest[]; outputPorts?: PortManifest[]; onOutputPortClick?: (portName: string, dataType: string) => void; executionStatus?: "idle" | "queued" | "running" | "completed" | "failed" | "blocked" | "configuration_required"; executionDetail?: string; executionNotes?: string[]; executionSeverity?: Record<string, number>; executionDuration?: number | null; executionCount?: number; executionCoverage?: number; executionProgress?: number; executionProgressLabel?: string };
 type FlowNode = Node<NodeData>;
 
 const getSchemaDefaults = (manifest?: Manifest): Record<string, unknown> => Object.fromEntries(
@@ -208,7 +208,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
       {(data.outputPorts || []).map(port => <span key={"output-" + port.name}><b>OUT</b>{port.name}<i>{port.data_type}</i></span>)}
     </div>}
     <div className="node-footer"><span>ВХОД / ВЫХОД</span><span className="node-port-label">OUTPUT</span></div>
-    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} className="workflow-port workflow-port-output" title={`Выход: ${port.name} · ${port.data_type}`} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)" }} />)}
+    {(data.outputPorts !== undefined ? data.outputPorts : [{ name: "output", data_type: "unknown" }]).map((port, index, ports) => <Handle key={"out-" + port.name} id={ports.length > 1 ? port.name : undefined} type="source" position={Position.Right} className="workflow-port workflow-port-output" title={`Выход: ${port.name} · ${port.data_type} — нажми, чтобы выбрать блок-получатель`} onClick={(event) => { event.stopPropagation(); data.onOutputPortClick?.(port.name, port.data_type); }} style={{ top: ((index + 1) / (ports.length + 1)) * 100 + "%", background: "var(--accent-600)", cursor: "pointer" }} />)}
   </div>;
 }
 function CategoryEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, style }: import("@xyflow/react").EdgeProps<Edge<{ sourceColor?: string; targetColor?: string }>>) {
@@ -600,6 +600,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("source");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
+  const [nodeActionMenu, setNodeActionMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [connectionPicker, setConnectionPicker] = useState<{ sourceId: string; sourceHandle: string; dataType: string } | null>(null);
   const [traceFilter, setTraceFilter] = useState("all");
   const [showResult, setShowResult] = useState(true);
   const [configText, setConfigText] = useState("{}");
@@ -991,6 +993,17 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     setEdges(current => reconnectEdge(oldEdge, newConnection, current, { shouldReplaceId: false }));
     setWorkflowDirty(true);
   }, [setEdges, isValidConnection]);
+  const connectFromPicker = (targetId: string, targetPort: PortManifest, sourcePortCount: number, targetPortCount: number) => {
+    if (!connectionPicker) return;
+    const connection: Connection = {
+      source: connectionPicker.sourceId,
+      sourceHandle: sourcePortCount > 1 ? connectionPicker.sourceHandle : null,
+      target: targetId,
+      targetHandle: targetPortCount > 1 ? targetPort.name : null,
+    };
+    if (isValidConnection(connection)) onConnect(connection);
+    setConnectionPicker(null);
+  };
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes);
     // React Flow emits dimensions changes during initial layout; those are not user edits.
@@ -2352,16 +2365,42 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       <section className="editor">
         <div className="editor-head"><div className="editor-title-group"><span className="eyebrow">WORKFLOW EDITOR</span><div className="editor-title-row"><input className="workflow-title-input" aria-label="Название workflow" maxLength={120} value={workflowDraftName} placeholder="Security pipeline" onChange={event => { setWorkflowDraftName(event.target.value); setWorkflowDirty(true); }} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}/><span className={"workflow-save-state" + (workflowDirty ? " is-draft" : "")}><i/>{workflowAutoSave === "saving" ? "Автосохранение…" : workflowAutoSave === "error" ? "Черновик в браузере" : workflowDirty ? "Ожидает автосохранения" : "Сохранено"}</span></div><p>Перетаскивай блоки, соединяй порты, выбирай элемент для редактирования</p></div>
           <div className="counts"><span><Layers3 size={13} />{nodes.length} блоков</span><span><GitBranch size={13} />{edges.length} связей</span></div></div>
-        <div className="flow"><ReactFlow nodes={nodes} edges={edges.map(edge => ({ ...edge, type: "category", interactionWidth: 32, data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <div className="flow"><ReactFlow nodes={nodes.map(node => ({ ...node, data: { ...node.data, onOutputPortClick: (portName: string, dataType: string) => { setConnectionPicker({ sourceId: node.id, sourceHandle: portName, dataType }); setNodeActionMenu(null); setSelectedNodeId(node.id); setSelectedEdgeId(null); } } }))} edges={edges.map(edge => ({ ...edge, type: "category", interactionWidth: 32, data: { ...edge.data, sourceColor: categoryColor(nodes.find(node => node.id === edge.source)?.data.category), targetColor: categoryColor(nodes.find(node => node.id === edge.target)?.data.category) } }))} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
-          onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
+          onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); setNodeActionMenu(null); }}
+          onNodeDoubleClick={(event, node) => { event.preventDefault(); setSelectedNodeId(node.id); setSelectedEdgeId(null); setNodeActionMenu({ x: event.clientX, y: event.clientY, nodeId: node.id }); setConnectionPicker(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
-          onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setRadialMenu(null); }} onPaneContextMenu={(event) => { event.preventDefault(); setRadialMenu({ x: event.clientX, y: event.clientY }); setSelectedNodeId(null); setSelectedEdgeId(null); }}
+          onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setRadialMenu(null); setNodeActionMenu(null); setConnectionPicker(null); }} onPaneContextMenu={(event) => { event.preventDefault(); setRadialMenu({ x: event.clientX, y: event.clientY }); setSelectedNodeId(null); setSelectedEdgeId(null); }}
           edgesReconnectable connectionRadius={36} deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.22 }}>
           <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
           {leftCollapsed && rightCollapsed && !radialMenu && <div className="radial-access-tip">ПКМ на холсте — быстрые блоки</div>}
           {radialMenu && <RadialMenu x={radialMenu.x} y={radialMenu.y} items={manifests.map(m => ({ type: m.type, title: m.title, category: m.category, description: m.description }))} onClose={() => setRadialMenu(null)} onPick={(type) => { setRadialMenu(null); const m = manifests.find(item => item.type === type); if (m) addNode(m); }} />}
-        </ReactFlow></div>
+        </ReactFlow>
+        {nodeActionMenu && <div className="node-action-menu" style={{ left: nodeActionMenu.x, top: nodeActionMenu.y }} onMouseDown={event => event.stopPropagation()}>
+          <div className="node-action-menu-title">ДЕЙСТВИЯ С БЛОКОМ</div>
+          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setRightCollapsed(false); setInspectorTab("properties"); setNodeActionMenu(null); }}>Редактировать</button>
+          <button type="button" onClick={() => { const id = nodeActionMenu.nodeId; setNodes(current => current.filter(node => node.id !== id)); setEdges(current => current.filter(edge => edge.source !== id && edge.target !== id)); setWorkflowDirty(true); setSelectedNodeId(null); setNodeActionMenu(null); }}>Удалить</button>
+          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setRightCollapsed(false); setInspectorTab("properties"); setNodeActionMenu(null); }}>Заменить</button>
+        </div>}
+        {connectionPicker && <div className="connection-picker" onMouseDown={event => event.stopPropagation()}>
+          <div className="connection-picker-head"><div><b>Выбрать блок-получатель</b><small>Выход: {connectionPicker.dataType} · совместимость проверяется по типу данных</small></div><button type="button" onClick={() => setConnectionPicker(null)} aria-label="Закрыть">×</button></div>
+          <div className="connection-picker-grid">
+            {nodes.filter(node => node.id !== connectionPicker.sourceId).map(node => {
+              const manifest = manifests.find(item => item.type === node.data.nodeType);
+              const inputs = manifest?.inputs || [];
+              return <section className={"connection-picker-card" + (inputs.some(port => port.data_type === connectionPicker.dataType) ? " is-compatible" : " is-incompatible")} key={node.id}>
+                <b>{node.data.label}</b><small>{node.data.nodeType}</small>
+                {inputs.length ? inputs.map(port => {
+                  const allowed = port.data_type === connectionPicker.dataType;
+                  return <button type="button" key={port.name} disabled={!allowed} title={allowed ? `Подключить вход ${port.name} · ${port.data_type}` : `Несовместимый тип: ${port.data_type}`} onClick={() => connectFromPicker(node.id, port, (manifests.find(item => item.type === nodes.find(source => source.id === connectionPicker.sourceId)?.data.nodeType)?.outputs || []).length, inputs.length)}>
+                    <span>{port.name}</span><small>{port.data_type}</small><em>{allowed ? "Подходит" : "Не подходит"}</em>
+                  </button>;
+                }) : <p>У блока нет входных портов</p>}
+              </section>;
+            })}
+          </div>
+        </div>}
+      </div>
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
           <div className="workflow-bottom-drawer-head">
             <div><span className="section-caption">EXECUTION LOG</span><b>Последние запуски</b><small>{workflowRuns.length} записей в истории</small></div>
