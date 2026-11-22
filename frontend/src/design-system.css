@@ -132,7 +132,21 @@
 .shell[data-theme="dark"] .selected-symbol,.shell[data-theme="dark"] .runtime>div { background:var(--gray-800); }
 .shell .library-copy b { color:var(--text);font-size:12px;font-weight:600; }
 .shell .library-copy small { color:var(--muted);font-size:10px; }
-.shell .tone-blue,.shell .tone-cyan,.shell .tone-violet,.shell .tone-amber,.shell .tone-pink,.shell .tone-green,.shell .tone-slate { color:var(--text-secondary); }
+/* Keep category accents vivid in the light theme without tinting node surfaces. */
+.shell .tone-blue { color:#2563EB; }
+.shell .tone-cyan { color:#0891B2; }
+.shell .tone-violet { color:#7C3AED; }
+.shell .tone-amber { color:#B45309; }
+.shell .tone-pink { color:#DB2777; }
+.shell .tone-green { color:#15803D; }
+.shell .tone-slate { color:#475569; }
+.shell[data-theme="dark"] .tone-blue { color:#60A5FA; }
+.shell[data-theme="dark"] .tone-cyan { color:#22D3EE; }
+.shell[data-theme="dark"] .tone-violet { color:#A78BFA; }
+.shell[data-theme="dark"] .tone-amber { color:#FBBF24; }
+.shell[data-theme="dark"] .tone-pink { color:#F472B6; }
+.shell[data-theme="dark"] .tone-green { color:#4ADE80; }
+.shell[data-theme="dark"] .tone-slate { color:#CBD5E1; }
 .shell .add-node,.shell .icon-button { border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--icon); }
 .shell .add-node:hover,.shell .icon-button:hover { border-color:var(--accent-400);background:var(--soft-accent);color:var(--accent-text); }
 .shell .archive-upload,.shell .git-source-button,.shell .save-config {
@@ -168,9 +182,9 @@
 .shell .workflow-node.tone-green,.shell .workflow-node.tone-violet,.shell .workflow-node.tone-cyan {
   background:var(--surface);border-top-color:var(--border);border-right-color:var(--border);border-bottom-color:var(--border);
 }
-.shell .workflow-node.tone-green { border-left-color:var(--accent-600); }
-.shell .workflow-node.tone-violet { border-left-color:var(--gray-700); }
-.shell .workflow-node.tone-cyan { border-left-color:var(--gray-500); }
+.shell .workflow-node.tone-green { border-left-color:#15803D; }
+.shell .workflow-node.tone-violet { border-left-color:#7C3AED; }
+.shell .workflow-node.tone-cyan { border-left-color:#0891B2; }
 .shell .workflow-node.is-selected { border-color:var(--accent-500);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-500) 16%,transparent); }
 .shell .node-topline { color:var(--muted)!important;font-size:9px;letter-spacing:.04em; }
 .shell .node-main { margin:8px 0 6px; }
