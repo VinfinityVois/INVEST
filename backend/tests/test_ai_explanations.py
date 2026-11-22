@@ -20,6 +20,21 @@ class FakeResponse:
         return self.payload
 
 
+def test_gateway_reports_empty_input_without_calling_provider(monkeypatch):
+    def unexpected_post(*args, **kwargs):
+        raise AssertionError("AI provider must not be called when there are no findings")
+
+    monkeypatch.setattr(explanations.httpx, "post", unexpected_post)
+    result = explanations.explain_findings([])
+
+    assert result["status"] == "completed"
+    assert result["findings"] == []
+    assert result["explanations"] == []
+    assert result["explained_count"] == 0
+    assert result["provider_attempts"] == 0
+    assert "не передали находок" in result["message"]
+
+
 def test_gateway_requires_provider_configuration(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", None)
     monkeypatch.setattr(settings, "llm_model", None)
