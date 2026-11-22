@@ -1,0 +1,291 @@
+/* Workspace UX: wider palette, telemetry, properties matrix, radial menu */
+
+@media (min-width: 1281px) {
+  .shell .layout {
+    grid-template-columns: 300px minmax(0, 1fr) 360px !important;
+  }
+  .shell .layout.left-collapsed {
+    grid-template-columns: 56px minmax(0, 1fr) 360px !important;
+  }
+  .shell .layout.right-collapsed {
+    grid-template-columns: 300px minmax(0, 1fr) 56px !important;
+  }
+}
+@media (min-width: 1440px) {
+  .shell .layout {
+    grid-template-columns: 320px minmax(0, 1fr) 380px !important;
+  }
+  .shell .layout.left-collapsed {
+    grid-template-columns: 56px minmax(0, 1fr) 380px !important;
+  }
+  .shell .layout.right-collapsed {
+    grid-template-columns: 320px minmax(0, 1fr) 56px !important;
+  }
+}
+
+.shell .panel.palette { border-radius: 12px !important; }
+.shell .panel.palette .panel-heading h3 { font-size: 15px !important; }
+.shell .panel.palette .searchbox {
+  border-radius: 10px !important;
+  min-height: 40px !important;
+}
+
+.shell .runtime {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 14px !important;
+  margin-bottom: 12px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(15, 23, 42, 0.4)) !important;
+}
+.shell .runtime b {
+  display: block !important;
+  font-size: 14px !important;
+  color: #e2e8f0 !important;
+}
+.shell .runtime small { color: #94a3b8 !important; font-size: 12px !important; }
+.shell .runtime label {
+  margin-left: auto !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  font: 700 10px/1 "JetBrains Mono", monospace !important;
+  letter-spacing: 0.06em !important;
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+.shell .runtime label.running {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #7dd3fc !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+.shell .telemetry-card {
+  padding: 14px !important;
+  margin-bottom: 12px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+.shell .telemetry-heading {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  margin-bottom: 12px !important;
+}
+.shell .telemetry-heading .section-caption {
+  color: #34d399 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.1em !important;
+  margin-bottom: 4px !important;
+}
+.shell .telemetry-heading b { font-size: 14px !important; color: #f1f5f9 !important; }
+.shell .telemetry-status {
+  flex-shrink: 0 !important;
+  padding: 5px 10px !important;
+  border-radius: 8px !important;
+  font: 700 10px/1 "JetBrains Mono", monospace !important;
+}
+.shell .telemetry-metrics {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 12px 0 !important;
+}
+.shell .telemetry-metrics > div {
+  padding: 10px !important;
+  border-radius: 10px !important;
+  background: rgba(0, 0, 0, 0.22) !important;
+  border: 1px solid rgba(148, 163, 184, 0.1) !important;
+  text-align: center !important;
+}
+.shell .telemetry-metrics strong {
+  display: block !important;
+  font-size: 16px !important;
+  color: #e2e8f0 !important;
+}
+.shell .telemetry-metrics small {
+  color: #64748b !important;
+  font-size: 9px !important;
+  letter-spacing: 0.06em !important;
+}
+
+.shell .type-matrix {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 10px 0 14px !important;
+}
+.shell .type-matrix-card {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  align-items: flex-start !important;
+  min-height: 72px !important;
+  padding: 10px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: #cbd5e1 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s !important;
+}
+.shell .type-matrix-card:hover {
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  transform: translateY(-1px);
+}
+.shell .type-matrix-card.is-active {
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2) !important;
+}
+.shell .type-matrix-card b {
+  font-size: 12px !important;
+  color: #f1f5f9 !important;
+  line-height: 1.3 !important;
+}
+.shell .type-matrix-card small {
+  font: 10px "JetBrains Mono", monospace !important;
+  color: #64748b !important;
+}
+.shell .type-matrix-card .type-tip {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #0b1220;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 12px 28px rgba(0,0,0,.4);
+  pointer-events: none;
+}
+.shell .type-matrix-card:hover .type-tip { display: block; }
+
+.shell .policy-matrix {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+}
+.shell .policy-matrix-card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  color: #cbd5e1 !important;
+}
+.shell .policy-matrix-card.is-active {
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  background: rgba(16, 185, 129, 0.1) !important;
+}
+.shell .policy-matrix-card b { font-size: 12px !important; color: #f1f5f9 !important; }
+.shell .policy-matrix-card small { font-size: 11px !important; color: #64748b !important; }
+
+.radial-menu-root {
+  position: fixed;
+  z-index: 1000;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.radial-menu-center,
+.radial-menu-item {
+  pointer-events: auto;
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(10, 16, 26, 0.94);
+  color: #e2e8f0;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+.radial-menu-center {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.08), 0 12px 40px rgba(0,0,0,.45);
+  font: 700 10px/1.1 "JetBrains Mono", monospace;
+  letter-spacing: 0.06em;
+}
+.radial-menu-center small {
+  font-size: 8px;
+  color: #64748b;
+  font-weight: 500;
+}
+.radial-menu-item {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px;
+  transition: transform 0.12s ease, background 0.12s ease;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.radial-menu-item:hover {
+  background: rgba(16, 24, 40, 0.98);
+  filter: brightness(1.1);
+}
+.radial-menu-item b {
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+}
+.radial-menu-item small {
+  font: 8px "JetBrains Mono", monospace;
+  color: #94a3b8;
+}
+.radial-menu-hint {
+  position: absolute;
+  left: 0;
+  top: 148px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(8, 12, 20, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  font-size: 11px;
+  pointer-events: none;
+}
+.shell .radial-access-tip {
+  position: absolute;
+  z-index: 15;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(8, 16, 24, 0.92);
+  color: #a7f3d0;
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  pointer-events: none;
+}
