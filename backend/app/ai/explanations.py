@@ -576,12 +576,20 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         })
         seen.add(fingerprint)
 
+    # Log only model object key names (never values) to diagnose schema drift safely.
+    model_item_keys = sorted({
+        str(key)
+        for item in raw_items[:10]
+        if isinstance(item, dict)
+        for key in item.keys()
+    })
     logger.info(
         "AI explanation normalization: raw_items=%d accepted=%d "
         "rejected_non_object=%d rejected_missing_fingerprint=%d "
         "rejected_unknown_fingerprint=%d rejected_duplicate_fingerprint=%d "
         "rejected_missing_root_cause=%d rejected_missing_impact=%d "
-        "rejected_missing_recommendation=%d impact_fallback_from_scanner=%d",
+        "rejected_missing_recommendation=%d impact_fallback_from_scanner=%d "
+        "model_item_keys=%s",
         len(raw_items), len(normalized),
         rejection_counts["non_object"],
         rejection_counts["missing_fingerprint"],
@@ -591,6 +599,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         rejection_counts["missing_impact"],
         rejection_counts["missing_recommendation"],
         rejection_counts["impact_fallback_from_scanner"],
+        ",".join(model_item_keys[:24]) or "none",
     )
     logger.info(
         "AI explanations completed: analyzed=%d explained=%d skipped=%d model=%s",
