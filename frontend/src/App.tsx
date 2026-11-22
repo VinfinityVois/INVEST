@@ -6,6 +6,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import UserManagement from "./UserManagement";
+import IntegrationsSettings from "./IntegrationsSettings";
 import RadialMenu from "./RadialMenu";
 import WorkspaceManager from "./WorkspaceManager";
 import DashboardPanel from "./DashboardPanel";
@@ -465,6 +466,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState("");
   const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
@@ -2312,6 +2314,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
             <button role="menuitem" disabled={busy || aiGraphBusy} onClick={() => { setAppMenuOpen(false); setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={15}/><span><b>Создать граф с AI</b><small>Сгенерировать черновик схемы</small></span></button>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setDashboardOpen(true); }}><BarChart3 size={15}/><span><b>Аналитика</b><small>Сводка активной рабочей области</small></span></button>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setWorkspaceManagerOpen(true); }}><Building2 size={15}/><span><b>Рабочие области</b><small>Организации и участники</small></span></button>
+            {workspaces.find(item => item.id === activeWorkspaceId)?.role === "admin" && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setIntegrationsOpen(true); }}><Webhook size={15}/><span><b>Интеграции платформы</b><small>Git, Telegram, Webhook и секреты</small></span></button>}
             <div className="app-menu-divider"/>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementTab("profile"); setUserManagementOpen(true); }}><Shield size={15}/><span><b>Профиль и безопасность</b><small>Пароль и активные сессии</small></span></button>
             {user?.is_admin && <button role="menuitem" onClick={() => { setAppMenuOpen(false); setUserManagementTab("users"); setUserManagementOpen(true); }}><Users size={15}/><span><b>Пользователи</b><small>Роли и доступы</small></span></button>}
@@ -2341,6 +2344,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     </header>
     <div className="desktop-recommendation"><Activity size={14}/><span>Для полноценной работы с графом рекомендуется экран от 1280 px. На узких экранах панели доступны в адаптированном режиме.</span></div>
     <WorkspaceManager open={workspaceManagerOpen} onClose={() => setWorkspaceManagerOpen(false)} onChanged={() => window.location.reload()} />
+    {integrationsOpen && <IntegrationsSettings onClose={() => setIntegrationsOpen(false)} />}
     <DashboardPanel open={dashboardOpen} onClose={() => setDashboardOpen(false)} />
     <div className={"layout" + (leftCollapsed ? " left-collapsed" : "") + (rightCollapsed ? " right-collapsed" : "")}>
       <aside className={"panel palette" + (leftCollapsed ? " is-collapsed" : "")}>
