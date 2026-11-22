@@ -149,6 +149,9 @@ def test_gateway_explicitly_enforces_requested_russian_language(monkeypatch):
     assert result["status"] == "completed"
     assert "exclusively in Russian" in captured["system_prompt"]
     assert "Do not use Chinese" in captured["system_prompt"]
+    assert "TRANSFORM each scanner finding" in captured["system_prompt"]
+    assert "do not echo or copy the input finding object" in captured["system_prompt"]
+    assert "Never output category, cve, fixed_versions" in captured["system_prompt"]
 
 
 def test_gateway_rejects_non_https_remote_endpoint(monkeypatch):
