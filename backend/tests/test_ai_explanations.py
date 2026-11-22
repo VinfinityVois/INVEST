@@ -50,6 +50,7 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
     monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    monkeypatch.setattr(settings, "llm_max_tokens", 8192)
     captured = {}
 
     def fake_post(url, **kwargs):
@@ -90,7 +91,7 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
 
     assert captured["url"] == "https://llm.example/v1/chat/completions"
     assert captured["timeout"].read == 180.0
-    assert captured["payload"]["max_tokens"] == 1400
+    assert captured["payload"]["max_tokens"] == 8192
     prompt = captured["payload"]["messages"][1]["content"]
     assert "must-not-be-sent" not in prompt
     assert "masked_value" not in prompt
