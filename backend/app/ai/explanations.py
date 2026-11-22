@@ -141,8 +141,12 @@ def _provider_error(exc: Exception) -> str:
 def _extract_json_object(content: str) -> dict:
     """Parse a JSON object from common local-model response variants."""
     text = content.strip().lstrip("\\ufeff")
-    text = re.sub(r"^\\s*```(?:json)?\\s*", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"\\s*```\\s*$", "", text)
+    if text.startswith("```"):
+        first_newline = text.find("\\n")
+        if first_newline >= 0:
+            text = text[first_newline + 1:]
+    if text.endswith("```"):
+        text = text[:-3].strip()
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError:
@@ -162,9 +166,9 @@ def _extract_json_object(content: str) -> dict:
                     escaped = False
                 elif char == "\\\\":
                     escaped = True
-                elif char == '"':
+                elif char == '"' :
                     in_string = False
-            elif char == '"':
+            elif char == '"' :
                 in_string = True
             elif char == "{":
                 depth += 1
@@ -179,7 +183,6 @@ def _extract_json_object(content: str) -> dict:
     if not isinstance(parsed, dict):
         raise ValueError("AI response JSON must be an object")
     return parsed
-
 
 def _parse_response(response: httpx.Response) -> list:
     body = response.json()
