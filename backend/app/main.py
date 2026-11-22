@@ -2287,7 +2287,7 @@ def _summarize_report_findings(findings: list[dict]) -> dict:
 def _build_run_report(session, run: WorkflowRun) -> dict:
     telemetry = _safe_report_value(_run_telemetry(session, run))
     rows = session.scalars(
-        select(Finding).where(Finding.run_id == run.id).order_by(Finding.severity, Finding.path, Finding.line).limit(5000)
+        select(Finding).where(Finding.run_id == run.id).order_by(Finding.severity, Finding.path, Finding.line)
     ).all()
     findings = [
         _safe_report_value({
@@ -2365,7 +2365,11 @@ def export_run_report_json(run_id: UUID, request: Request):
         run = _run_in_active_workspace(session, request, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
-        return _build_run_report(session, run)
+        report = _build_run_report(session, run)
+        return JSONResponse(
+            content=report,
+            headers={"Content-Disposition": f'attachment; filename="invest-run-{run_id}-report.json"'},
+        )
 
 
 @app.get("/api/runs/{run_id}/report.zip")
