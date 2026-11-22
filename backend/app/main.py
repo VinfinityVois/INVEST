@@ -2401,9 +2401,12 @@ def export_run_report_zip(run_id: UUID, request: Request):
             json.dumps({"findings": findings}, ensure_ascii=False, indent=2, default=str),
         )
 
-        severities = sorted({str(item.get("severity") or "UNKNOWN").upper() for item in findings})
-        for severity in severities:
-            selected = [item for item in findings if str(item.get("severity") or "UNKNOWN").upper() == severity]
+        severity_groups: dict[str, list[dict]] = {}
+        for item in findings:
+            severity = str(item.get("severity") or "UNKNOWN").upper()
+            safe_severity = re.sub(r"[^A-Z0-9_.-]+", "_", severity)[:40] or "UNKNOWN"
+            severity_groups.setdefault(safe_severity, []).append(item)
+        for severity, selected in sorted(severity_groups.items()):
             archive.writestr(
                 f"findings/by-severity/{severity}.json",
                 json.dumps({"severity": severity, "count": len(selected), "findings": selected}, ensure_ascii=False, indent=2, default=str),
