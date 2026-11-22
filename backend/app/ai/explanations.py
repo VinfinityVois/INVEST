@@ -183,7 +183,16 @@ def _extract_json_object(content: str) -> dict:
     return parsed
 
 def _parse_response(response: httpx.Response) -> list:
-    body = response.json()
+    try:
+        body = response.json()
+    except json.JSONDecodeError:
+        # Log metadata only: never include provider response bodies or prompts.
+        body_bytes = len(getattr(response, "content", b"") or b"")
+        logger.warning(
+            "AI provider response parsing failed (phase=http_body_json status=%s body_bytes=%d)",
+            response.status_code, body_bytes,
+        )
+        raise
     if not isinstance(body, dict):
         raise ValueError("OpenAI response body must be an object")
     choices = body.get("choices")
@@ -212,7 +221,24 @@ def _parse_response(response: httpx.Response) -> list:
         raise ExplanationGatewayError(
             f"LLM не вернул текст объяснений (finish_reason={finish_reason or 'unknown'}). Увеличьте LLM_MAX_TOKENS или проверьте ответ модели."
         )
-    parsed = _extract_json_object(content)
+    try:
+        parsed = _extract_json_object(content)
+    except json.JSONDecodeError:
+        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+        completion_tokens = usage.get("completion_tokens")
+        finish_reason = choices[0].get("finish_reason")
+        logger.warning(
+            "AI provider response parsing failed "
+            "(phase=model_content_json status=%s finish_reason=%s content_chars=%d "
+            "completion_tokens=%s open_braces=%d close_braces=%d)",
+            response.status_code,
+            str(finish_reason or "unknown")[:32],
+            len(content),
+            completion_tokens if isinstance(completion_tokens, (int, float)) else "unknown",
+            content.count("{"),
+            content.count("}"),
+        )
+        raise
     raw_items = parsed.get("explanations")
     if not isinstance(raw_items, list):
         raise ValueError("AI JSON must contain an explanations array")
