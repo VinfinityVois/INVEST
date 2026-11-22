@@ -26,6 +26,16 @@ def test_builtin_pr_gate_graph_is_valid_and_uses_registered_packs():
     assert rule_packs.resolve(["sca-spring-boot"], analyzer="sca")
 
 
+def test_every_builtin_preset_graph_is_valid():
+    for metadata in list_presets():
+        preset = load_preset(metadata["id"])
+        graph = WorkflowGraph.model_validate(preset["graph"])
+        validation = validate_graph(graph, registry)
+
+        assert validation.valid, f"{metadata['id']}: {validation.model_dump()}"
+        assert len(graph.nodes) == metadata["node_count"]
+
+
 def test_builtin_pr_gate_clone_gets_fresh_graph_ids():
     preset = load_preset("pr-gate")
     source = sanitize_graph(preset["graph"])
