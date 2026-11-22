@@ -210,6 +210,23 @@ def _provider_error_code(exc: Exception) -> str:
 
 
 def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
+    # Empty input is a normal, explicit no-op, not a silent AI success or provider failure.
+    if not findings:
+        return {
+            "status": "completed",
+            "message": "Предыдущие блоки не передали находок. AI-анализ не запускался; проверьте связи и результаты сканеров.",
+            "findings": [],
+            "explanations": [],
+            "analyzed_count": 0,
+            "skipped_count": 0,
+            "explained_count": 0,
+            "unexplained_count": 0,
+            "insufficient_evidence_count": 0,
+            "evidence_coverage": 0.0,
+            "coverage": 0.0,
+            "provider_attempts": 0,
+        }
+
     provider = provider_configuration()
     if not provider["configured"]:
         return {
