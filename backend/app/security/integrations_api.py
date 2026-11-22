@@ -35,6 +35,8 @@ class IntegrationSettingsUpdate(BaseModel):
     def validate_git_repositories(cls, values: list[str]) -> list[str]:
         normalized = []
         for value in values:
+            if len(value) > 2048:
+                raise ValueError("Git repository URL is too long.")
             parsed = urlsplit(value.strip())
             if (
                 parsed.scheme.lower() != "https"
