@@ -242,7 +242,7 @@ def test_gateway_retries_unexplained_findings_individually_and_keeps_partial_suc
     assert result["unexplained_count"] == 1
     assert result["explanations"][0]["fingerprint"] == "finding-a"
     assert result["provider_attempts"] == 3
-    assert "individual retries: attempted=2 recovered=1 remaining=1" in caplog.text
+    assert "individual retries: attempted=2 recovered=1 unresolved=1 deferred=0" in caplog.text
 
 
 def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch):
