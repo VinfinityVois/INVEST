@@ -615,3 +615,56 @@ def test_gateway_logs_safe_counts_for_rejected_model_explanations(monkeypatch, c
     assert "rejected_missing_recommendation=1" in diagnostic
     assert "invented-secret-fingerprint" not in diagnostic
     assert "private text" not in diagnostic
+
+
+
+def test_gateway_uses_scanner_why_it_matters_when_model_omits_impact(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="secworkflow.ai")
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    def fake_post(url, **kwargs):
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "finding-impact",
+                "root_cause": "Cause",
+                "recommendation": "Fix",
+                "confidence": 0.8,
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{
+        "fingerprint": "finding-impact",
+        "why_it_matters": "An attacker could access protected account data.",
+    }])
+
+    assert result["explained_count"] == 1
+    assert result["explanations"][0]["impact"] == (
+        "An attacker could access protected account data."
+    )
+    assert "impact_fallback_from_scanner=1" in caplog.text
+
+
+def test_gateway_does_not_fabricate_impact_when_scanner_has_no_context(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+
+    def fake_post(url, **kwargs):
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "finding-impact",
+                "root_cause": "Cause",
+                "recommendation": "Fix",
+                "confidence": 0.8,
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "finding-impact"}])
+
+    assert result["explained_count"] == 0
+    assert result["unexplained_count"] == 1
+    assert result["explanations"] == []
