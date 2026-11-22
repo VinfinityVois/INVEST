@@ -518,6 +518,9 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [rulePacks, setRulePacks] = useState<RulePack[]>([]);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const [workflowReady, setWorkflowReady] = useState(false);
+  const [workflowCatalog, setWorkflowCatalog] = useState<Array<{ id: string; name: string; description?: string; updated_at?: string }>>([]);
+  const [workflowAutoSave, setWorkflowAutoSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [notice, setNotice] = useState("Подключение к API…");
   const [aiProvider, setAiProvider] = useState<{ configured: boolean; base_url_set: boolean; model_set: boolean; api_key_set: boolean; endpoint_valid: boolean | null; endpoint_error?: string | null; model?: string | null } | null>(null);
   const [result, setResult] = useState("Граф готов к проверке.");
@@ -888,9 +891,9 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       let notes: string[] = [];
       if (node.data.nodeType === "ai.explain" && output) {
         notes = (output.explanations || []).map(item => [item.root_cause, item.recommendation].filter(Boolean).join(" · ")).filter(Boolean);
-        detail = output.status === "configuration_required" ? "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY."
+        detail = output.status === "configuration_required" ? (output.message || "Нужен LLM-провайдер: заполните LLM_BASE_URL, LLM_MODEL и LLM_API_KEY.")
           : output.status === "failed" ? (output.message || "AI-провайдер не вернул корректный ответ. Проверьте доступность и настройки.")
-          : output.status === "completed" ? `Объяснено: ${output.explained_count ?? 0} из ${output.analyzed_count ?? output.total_findings ?? 0} · покрытие ${Math.round((output.coverage ?? 0) * 100)}% · пропущено лимитом: ${output.skipped_count ?? 0}.` : detail;
+          : output.status === "completed" ? (output.message || (output.analyzed_count === 0 ? "AI не получил находок для анализа. Проверьте связи и результаты предыдущих блоков." : `Объяснено: ${output.explained_count ?? 0} из ${output.analyzed_count ?? output.total_findings ?? 0} · покрытие ${Math.round((output.coverage ?? 0) * 100)}% · пропущено лимитом: ${output.skipped_count ?? 0}.`)) : detail;
       } else if (node.data.nodeType === "source.git" && output?.status === "ready") {
         detail = "Репозиторий клонирован в изолированную рабочую область.";
       } else if (node.data.nodeType === "source.upload" && output?.status === "ready") {
@@ -1094,8 +1097,110 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     name: workflowDraftName || activeProject?.name || "Security pipeline",
     nodes: nodes.map(node => ({ id: node.id, type: node.data.nodeType, position: node.position, config: node.data.config || {} })),
     edges: edges.map(edge => ({ id: edge.id, source: edge.source, target: edge.target, source_handle: edge.sourceHandle, target_handle: edge.targetHandle })),
-  }), [nodes, edges, activeProject?.name]);
+  }), [nodes, edges, workflowDraftName, activeProject?.name]);
+  const workflowDraftStorageKey = "invest.workflowDraft." + user.id + "." + activeWorkspaceId;
+  const latestGraphRef = useRef(graph);
+  latestGraphRef.current = graph;
 
+  const applyGraphToEditor = (graphData: { name?: string; nodes?: Array<{ id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }>; edges?: Array<{ id: string; source: string; target: string; source_handle?: string | null; target_handle?: string | null }> }) => {
+    const graphNodes = (graphData.nodes || []).map(node => {
+      const manifest = manifests.find(item => item.type === node.type);
+      return {
+        id: node.id, type: "workflow", position: node.position || { x: 80, y: 80 },
+        data: {
+          label: manifest?.title || node.type, nodeType: node.type,
+          category: manifest?.category || "Logic", description: manifest?.description || "",
+          config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
+        },
+      } as FlowNode;
+    });
+    setNodes(graphNodes);
+    setEdges((graphData.edges || []).map(edge => ({
+      id: edge.id, source: edge.source, target: edge.target,
+      sourceHandle: edge.source_handle || undefined, targetHandle: edge.target_handle || undefined,
+      type: "smoothstep",
+    })));
+    setSelectedNodeId(graphNodes[0]?.id || null);
+    setSelectedEdgeId(null);
+  };
+  const hydrateWorkflow = (saved: { id: string; name?: string; graph?: { name?: string; nodes?: Array<{ id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }>; edges?: Array<{ id: string; source: string; target: string; source_handle?: string | null; target_handle?: string | null }> } }) => {
+    if (!saved.graph) throw new Error("У workflow отсутствует сохранённая версия графа.");
+    applyGraphToEditor(saved.graph);
+    setWorkflowId(saved.id);
+    setWorkflowDraftName(saved.graph.name || saved.name || "Security pipeline");
+    setWorkflowDirty(false);
+    window.localStorage.setItem("invest.lastWorkflowId", saved.id);
+    window.localStorage.removeItem(workflowDraftStorageKey);
+  };
+  const refreshWorkflowCatalog = async () => {
+    const response = await apiFetch("/api/workflows");
+    if (!response.ok) throw new Error("Не удалось загрузить каталог workflow.");
+    const rows = await response.json() as Array<{ id: string; name: string; description?: string; updated_at?: string }>;
+    setWorkflowCatalog(rows);
+    return rows;
+  };
+  const openSavedWorkflow = async (id: string) => {
+    const response = await apiFetch("/api/workflows/" + id);
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось открыть workflow.");
+    hydrateWorkflow(data);
+    setTemplateLibraryOpen(false);
+    setResult("Открыт workflow · " + (data.name || data.graph?.name || id));
+    setShowResult(true);
+  };
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    let active = true;
+    setWorkflowReady(false);
+    const restore = async () => {
+      try {
+        const rows = await refreshWorkflowCatalog();
+        if (!active) return;
+        const rememberedId = window.localStorage.getItem("invest.lastWorkflowId");
+        const selected = rows.find(item => item.id === rememberedId) || rows[0];
+        let saved: { id: string; name?: string; graph?: { name?: string; nodes?: Array<{ id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }>; edges?: Array<{ id: string; source: string; target: string; source_handle?: string | null; target_handle?: string | null }> } } | null = null;
+        if (selected) {
+          const response = await apiFetch("/api/workflows/" + selected.id);
+          const data = await response.json();
+          if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось восстановить последний workflow.");
+          saved = data;
+        }
+        let draft: { workflowId: string | null; graph: { name?: string; nodes?: Array<{ id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }>; edges?: Array<{ id: string; source: string; target: string; source_handle?: string | null; target_handle?: string | null }> }; updatedAt: number } | null = null;
+        try { const raw = window.localStorage.getItem(workflowDraftStorageKey); if (raw) draft = JSON.parse(raw); } catch { draft = null; }
+        const savedTime = selected?.updated_at ? new Date(selected.updated_at).getTime() : 0;
+        const draftIsRecent = !!draft && Number.isFinite(draft.updatedAt) && Date.now() - draft.updatedAt < 7 * 24 * 60 * 60 * 1000
+          && (draft.workflowId === null || draft.workflowId === selected?.id)
+          && (!selected || draft.updatedAt > savedTime);
+        if (active && draftIsRecent && draft) {
+          applyGraphToEditor(draft.graph);
+          setWorkflowId(draft.workflowId);
+          setWorkflowDraftName(draft.graph.name || "Восстановленный черновик");
+          setWorkflowDirty(true);
+          setResult("Восстановлен локальный черновик workflow. Изменения будут автоматически сохранены.");
+        } else if (active && saved) {
+          hydrateWorkflow(saved);
+          setResult("Восстановлен последний workflow · " + (saved.name || saved.graph?.name || ""));
+        } else if (active) {
+          setWorkflowId(null);
+          setWorkflowDraftName("");
+          setWorkflowDirty(false);
+          window.localStorage.removeItem("invest.lastWorkflowId");
+        }
+      } catch (error) {
+        if (active) { setWorkflowDirty(false); setResult("Не удалось восстановить workflow: " + String(error)); }
+      } finally {
+        if (active) setWorkflowReady(true);
+      }
+    };
+    void restore();
+    return () => { active = false; };
+  }, [user.id, activeWorkspaceId]);
+  useEffect(() => {
+    if (!workflowReady || !workflowDirty || !activeWorkspaceId) return;
+    try {
+      window.localStorage.setItem(workflowDraftStorageKey, JSON.stringify({ workflowId, graph, updatedAt: Date.now() }));
+    } catch { /* Keep the in-memory graph if browser storage is unavailable. */ }
+  }, [workflowReady, workflowDirty, workflowDraftStorageKey, workflowId, graph]);
 
   const refreshProjects = async () => {
     const response = await apiFetch("/api/projects");
@@ -1536,8 +1641,28 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     });
     const data = await response.json();
     if (!response.ok) throw new Error(JSON.stringify(data));
-    setWorkflowId(data.id); setWorkflowDirty(false); return data.id as string;
+    setWorkflowId(data.id);
+    window.localStorage.setItem("invest.lastWorkflowId", data.id);
+    return data.id as string;
   };
+  useEffect(() => {
+    if (!workflowReady || !workflowDirty || !nodes.length) return;
+    const timer = window.setTimeout(() => {
+      setWorkflowAutoSave("saving");
+      void persistWorkflow().then(() => {
+        if (latestGraphRef.current === graph) {
+          setWorkflowDirty(false);
+          setWorkflowAutoSave("saved");
+          window.localStorage.removeItem(workflowDraftStorageKey);
+        }
+        void refreshWorkflowCatalog().catch(() => undefined);
+      }).catch(error => {
+        setWorkflowAutoSave("error");
+        setResult("Автосохранение не удалось: " + String(error) + ". Черновик сохранён в этом браузере; нажми «Сохранить» для повтора.");
+      });
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [workflowReady, workflowDirty, graph, workflowId, nodes.length]);
   const loadTemplateLibrary = async () => {
     setTemplateLoading(true);
     setTemplateError("");
@@ -1545,15 +1670,18 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       const params = new URLSearchParams();
       if (templateCategory !== "Все") params.set("category", templateCategory.toLowerCase());
       if (templateSearch.trim()) params.set("q", templateSearch.trim());
-      const [response, presetResponse] = await Promise.all([
+      const [response, presetResponse, workflowsResponse] = await Promise.all([
         apiFetch("/api/templates" + (params.toString() ? "?" + params.toString() : "")),
         apiFetch("/api/presets"),
+        apiFetch("/api/workflows"),
       ]);
-      const [data, presets] = await Promise.all([response.json(), presetResponse.json()]);
+      const [data, presets, workflows] = await Promise.all([response.json(), presetResponse.json(), workflowsResponse.json()]);
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Не удалось загрузить библиотеку");
       if (!presetResponse.ok) throw new Error(typeof presets.detail === "string" ? presets.detail : "Не удалось загрузить встроенные presets");
+      if (!workflowsResponse.ok) throw new Error(typeof workflows.detail === "string" ? workflows.detail : "Не удалось загрузить сохранённые workflow");
       setTemplateItems(Array.isArray(data) ? data : []);
       setPresetItems(Array.isArray(presets) ? presets : []);
+      setWorkflowCatalog(Array.isArray(workflows) ? workflows : []);
     } catch (error) {
       setTemplateError(String(error));
       setTemplateItems([]);
@@ -1592,6 +1720,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       const workflow = await loaded.json();
       if (!loaded.ok || !workflow.graph) throw new Error("Шаблон скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
+      window.localStorage.setItem("invest.lastWorkflowId", workflow.id);
+      setWorkflowDirty(false);
       setWorkflowDraftName(workflow.name || "");
       setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
         const manifest = manifests.find(item => item.type === node.type);
@@ -1627,6 +1757,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       const workflow = await loaded.json();
       if (!loaded.ok || !workflow.graph) throw new Error("Preset скопирован, но граф не удалось загрузить");
       setWorkflowId(workflow.id);
+      window.localStorage.setItem("invest.lastWorkflowId", workflow.id);
+      setWorkflowDirty(false);
       setWorkflowDraftName(workflow.name || "");
       setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
         const manifest = manifests.find(item => item.type === node.type);
@@ -1685,7 +1817,9 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setNodes(generatedNodes);
       setEdges(generatedEdges);
       setWorkflowId(null);
+      window.localStorage.removeItem("invest.lastWorkflowId");
       setWorkflowDraftName(data.graph.name || "AI workflow draft");
+      setWorkflowDirty(true);
       setSelectedNodeId(generatedNodes[0].id);
       setSelectedEdgeId(null);
       setAiGraphOpen(false);
@@ -1697,7 +1831,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   };
   const saveWorkflow = async () => {
     setBusy(true);
-    try { const id = await persistWorkflow(); setResult("Сохранено · workflow " + id); }
+    try { const id = await persistWorkflow(); setWorkflowDirty(false); setWorkflowAutoSave("saved"); window.localStorage.removeItem(workflowDraftStorageKey); void refreshWorkflowCatalog().catch(() => undefined); setResult("Сохранено · workflow " + id); }
     catch (error) { setResult("Не удалось сохранить workflow: " + String(error)); }
     finally { setBusy(false); }
   };
@@ -1732,6 +1866,8 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     setBusy(true); setFindings([]);
     try {
       const id = await persistWorkflow();
+      setWorkflowDirty(false);
+      window.localStorage.removeItem(workflowDraftStorageKey);
       const endpoint = selectedNodeIds?.length ? "/api/workflows/" + id + "/runs/selected" : "/api/workflows/" + id + "/runs";
       const response = await apiFetch(forceFullScan && !selectedNodeIds?.length ? endpoint + "?force_full_scan=true" : endpoint, { method: "POST", ...(selectedNodeIds?.length ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ node_ids: selectedNodeIds, force_full_scan: forceFullScan, force_node_ids: forceNodeIds }) } : {}) });
       const queued = await response.json();
@@ -2677,6 +2813,14 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         {templateError && <div className="template-library-error"><AlertTriangle size={14}/><span>{templateError}</span><button onClick={() => void loadTemplateLibrary()}>Повторить</button></div>}
         <div className="template-library-list">
           {templateLoading ? <div className="template-library-empty">Загружаем каталог…</div> : <>
+            {workflowCatalog.length > 0 && <>
+              <div className="template-library-section-title">МОИ СОХРАНЁННЫЕ WORKFLOW</div>
+              {workflowCatalog.map(item => <article className="template-library-card" key={"workflow:" + item.id}>
+                <div className="template-card-icon"><Workflow size={17}/></div>
+                <div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>МОЙ WORKFLOW</span></div><p>{item.description || "Сохранённая конструкция workflow."}</p><small>{item.updated_at ? "Изменён " + formatDate(item.updated_at) : "Сохранён в рабочей области"}</small></div>
+                <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => { setTemplateBusyId("workflow:" + item.id); void openSavedWorkflow(item.id).catch(error => setTemplateError(String(error))).finally(() => setTemplateBusyId(null)); }}>{templateBusyId === "workflow:" + item.id ? "Открытие…" : "Открыть"}</button>
+              </article>)}
+            </>}
             {presetItems.map(item => <article className="template-library-card" key={"preset:" + item.id}>
               <div className="template-card-icon"><Workflow size={17}/></div><div className="template-card-copy"><div className="template-card-title"><b>{item.name}</b><span>BUILT-IN · {item.category}</span></div><p>{item.description}</p><small>{item.node_count} блоков · требуется настроить: {item.setup_required.join(", ") || "ничего"}</small></div>
               <button className="template-card-clone" disabled={templateBusyId !== null} onClick={() => void clonePresetIntoEditor(item.id)}>{templateBusyId === "preset:" + item.id ? "Создание…" : "Создать workflow"}</button>
