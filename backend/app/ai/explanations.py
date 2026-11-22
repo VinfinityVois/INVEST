@@ -346,24 +346,31 @@ def _request_model_items(
 ) -> tuple[list, int, int]:
     """Call chat/completions, retrying without response_format when unsupported."""
     attempts = 1
-    response = httpx.post(
-        endpoint, headers=headers, json=request_payload,
-        timeout=httpx.Timeout(timeout_seconds, connect=5.0),
-    )
-    status = response.status_code
-    if status in {400, 422} and "response_format" in request_payload:
-        fallback_payload = {
-            key: value for key, value in request_payload.items()
-            if key != "response_format"
-        }
-        attempts += 1
+    status = None
+    try:
         response = httpx.post(
-            endpoint, headers=headers, json=fallback_payload,
+            endpoint, headers=headers, json=request_payload,
             timeout=httpx.Timeout(timeout_seconds, connect=5.0),
         )
         status = response.status_code
-    response.raise_for_status()
-    return _parse_response(response), attempts, status
+        if status in {400, 422} and "response_format" in request_payload:
+            fallback_payload = {
+                key: value for key, value in request_payload.items()
+                if key != "response_format"
+            }
+            attempts += 1
+            response = httpx.post(
+                endpoint, headers=headers, json=fallback_payload,
+                timeout=httpx.Timeout(timeout_seconds, connect=5.0),
+            )
+            status = response.status_code
+        response.raise_for_status()
+        return _parse_response(response), attempts, status
+    except Exception as exc:
+        # Preserve attempt metadata even when the provider raises before returning.
+        setattr(exc, "provider_attempts", attempts)
+        setattr(exc, "provider_http_status", status)
+        raise
 
 
 def _normalize_explanations(
@@ -593,6 +600,10 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         )
         request_attempts += attempts
     except Exception as exc:
+        request_attempts += int(getattr(exc, "provider_attempts", 0) or 0)
+        http_status = getattr(exc, "provider_http_status", None) or http_status
+        if http_status is None and isinstance(exc, httpx.HTTPStatusError):
+            http_status = exc.response.status_code
         logger.warning("AI provider request failed (%s)", type(exc).__name__)
         return {
             "status": "failed",
@@ -651,13 +662,14 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             single_normalized, single_counts, single_keys = _normalize_explanations(
                 single_items, [finding],
             )
-            _merge_rejection_counts(rejection_counts, single_counts)
-            model_item_keys = sorted(set(model_item_keys) | set(single_keys))
-            raw_items.extend(single_items)
+            # Keep the primary batch normalization diagnostics separate from
+            # retry diagnostics; retry payloads must not inflate batch counters.
             if single_normalized:
                 normalized.extend(single_normalized)
                 retry_succeeded += 1
         except Exception as exc:
+            request_attempts += int(getattr(exc, "provider_attempts", 0) or 0)
+            http_status = getattr(exc, "provider_http_status", None) or http_status
             # Keep partial batch successes; do not expose provider response or exception text.
             logger.warning(
                 "AI explanation single-finding retry failed (error_type=%s)",
