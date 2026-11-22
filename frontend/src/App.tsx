@@ -1722,21 +1722,10 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setWorkflowId(workflow.id);
       window.localStorage.setItem("invest.lastWorkflowId", workflow.id);
       setWorkflowDirty(false);
+      window.localStorage.removeItem(workflowDraftStorageKey);
+      void refreshWorkflowCatalog().catch(() => undefined);
       setWorkflowDraftName(workflow.name || "");
-      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
-        const manifest = manifests.find(item => item.type === node.type);
-        return {
-          id: node.id, type: "workflow", position: node.position,
-          data: {
-            label: manifest?.title || node.type, nodeType: node.type,
-            category: manifest?.category || "Logic", description: manifest?.description || "",
-            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
-          },
-        } as FlowNode;
-      }));
-      setEdges(workflow.graph.edges || []);
-      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
-      setSelectedEdgeId(null);
+      applyGraphToEditor(workflow.graph);
       setTemplateLibraryOpen(false);
       setResult("Шаблон скопирован в новый workflow · " + workflow.name + ". Перед запуском проверь конфигурацию источника и webhook.");
       setShowResult(true);
@@ -1759,21 +1748,10 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setWorkflowId(workflow.id);
       window.localStorage.setItem("invest.lastWorkflowId", workflow.id);
       setWorkflowDirty(false);
+      window.localStorage.removeItem(workflowDraftStorageKey);
+      void refreshWorkflowCatalog().catch(() => undefined);
       setWorkflowDraftName(workflow.name || "");
-      setNodes((workflow.graph.nodes || []).map((node: { id: string; type: string; position: { x: number; y: number }; config?: Record<string, unknown> }) => {
-        const manifest = manifests.find(item => item.type === node.type);
-        return {
-          id: node.id, type: "workflow", position: node.position,
-          data: {
-            label: manifest?.title || node.type, nodeType: node.type,
-            category: manifest?.category || "Logic", description: manifest?.description || "",
-            config: node.config || {}, inputPorts: manifest?.inputs || [], outputPorts: manifest?.outputs || [],
-          },
-        } as FlowNode;
-      }));
-      setEdges(workflow.graph.edges || []);
-      setSelectedNodeId(workflow.graph.nodes?.[0]?.id || null);
-      setSelectedEdgeId(null);
+      applyGraphToEditor(workflow.graph);
       setTemplateLibraryOpen(false);
       setResult("Создан workflow из preset «" + workflow.name + "». Укажи разрешённый Git URL в блоке Git repository, затем сохрани и запускай вручную или через CI Gate.");
       setShowResult(true);
