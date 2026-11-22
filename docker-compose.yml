@@ -23,7 +23,7 @@ services:
     ports: ["8000:8000"]
     depends_on:
       db: {condition: service_healthy}
-    volumes: [appdata:/data, workspaces:/workspace]
+    volumes: [appdata:/data, workspaces:/workspace, integration_secrets:/run/invest-secrets]
   worker:
     build:
       context: .
@@ -34,7 +34,7 @@ services:
       WORKSPACE_ROOT: /workspace
     depends_on:
       db: {condition: service_healthy}
-    volumes: [appdata:/data, workspaces:/workspace]
+    volumes: [appdata:/data, workspaces:/workspace, integration_secrets:/run/invest-secrets]
   frontend:
     image: node:22-alpine
     working_dir: /workspace
@@ -46,3 +46,4 @@ volumes:
   pgdata:
   appdata:
   workspaces:
+  integration_secrets:
