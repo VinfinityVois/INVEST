@@ -467,7 +467,7 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None, integration_settings=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -650,7 +650,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     url=node.config.get("url", ""),
                     ref=node.config.get("ref"),
                     workspace_root=settings.workspace_root,
-                    allowed_targets=settings.allowed_target_list,
+                    allowed_targets=(integration_settings or {}).get("git_repositories") or settings.allowed_target_list,
                 )
                 source_path = source["path"]
                 subdirectory = node.config.get("subdirectory")
@@ -934,17 +934,23 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             reports = [parent for parent in parents if isinstance(parent, dict)]
             report = next((item for item in reversed(reports) if isinstance(item.get("findings"), list)), {})
             findings = report.get("findings", []) if isinstance(report, dict) else []
-            if not node.config.get("chat_ids"):
-                output = {"status": "configuration_required", "message": "Укажите chat_ids в настройках Telegram.", "delivered": False}
+            runtime = integration_settings or {}
+            default_chat_ids = runtime.get("telegram_chat_ids") or sorted(settings.telegram_allowed_chat_id_set)
+            chat_ids = node.config.get("chat_ids") or default_chat_ids
+            allowed_chat_ids = runtime.get("telegram_chat_ids") or settings.telegram_allowed_chat_id_set
+            if not chat_ids:
+                output = {"status": "configuration_required", "message": "Добавьте получателей Telegram в Настройки платформы.", "delivered": False}
             elif not report:
                 output = {"status": "blocked", "message": "Нет отчёта от предыдущего блока.", "delivered": False}
             else:
                 try:
                     delivery = deliver_telegram(
-                        node.config,
+                        {**node.config, "chat_ids": chat_ids},
                         report=report,
                         findings=findings,
                         workflow_name=getattr(graph, "name", "") or "",
+                        token=runtime.get("telegram_bot_token"),
+                        allowed_chat_ids=allowed_chat_ids,
                     )
                     output = {
                         "status": "completed",
@@ -968,7 +974,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             else:
                 payload = build_notification_payload(report)
                 try:
-                    delivery = deliver_webhook(endpoint, payload)
+                    delivery = deliver_webhook(endpoint, payload, allowed_hosts=(integration_settings or {}).get("webhook_hosts") or settings.webhook_allowed_host_list)
                     output = {
                         "status": "completed",
                         "message": "Уведомление доставлено.",
