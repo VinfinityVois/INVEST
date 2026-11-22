@@ -1,4 +1,4 @@
-/* INVEST UI hotfixes v6 — force Findings + palette internal scroll */
+/* INVEST UI hotfixes v7 — Findings scroll via explicit viewport height */
 
 html, body, #root {
   height: 100% !important;
@@ -31,7 +31,6 @@ html, body, #root {
   display: grid !important;
   grid-template-rows: minmax(0, 1fr) !important;
   align-items: stretch !important;
-  box-sizing: border-box !important;
 }
 
 .shell .layout > * {
@@ -41,19 +40,16 @@ html, body, #root {
   overflow: hidden !important;
 }
 
-/* LEFT palette scrolls */
 .shell aside.panel.palette:not(.is-collapsed),
 .shell .panel.palette:not(.is-collapsed) {
   display: block !important;
   overflow-x: hidden !important;
   overflow-y: scroll !important;
   overscroll-behavior: contain !important;
-  -webkit-overflow-scrolling: touch;
   padding: 14px !important;
   box-sizing: border-box !important;
 }
 
-/* RIGHT inspector: ONLY tab-panel scrolls */
 .shell aside.panel.inspector:not(.is-collapsed),
 .shell .panel.inspector:not(.is-collapsed) {
   display: flex !important;
@@ -67,48 +63,57 @@ html, body, #root {
 .shell .panel.inspector > .inspector-tabs,
 .shell .panel.inspector > .result-section {
   flex: 0 0 auto !important;
-  flex-shrink: 0 !important;
 }
 
-.shell .panel.inspector > .inspector-tab-panel {
-  flex: 1 1 0% !important;
-  flex-grow: 1 !important;
-  flex-shrink: 1 !important;
-  flex-basis: 0 !important;
+.shell aside.panel.inspector > .inspector-tab-panel,
+.shell .panel.inspector > .inspector-tab-panel,
+.shell .panel.inspector div.inspector-tab-panel {
+  flex: 1 1 auto !important;
   min-height: 0 !important;
-  height: 0 !important;
-  max-height: none !important;
+  height: calc(100vh - 220px) !important;
+  max-height: calc(100vh - 220px) !important;
   overflow-x: hidden !important;
   overflow-y: scroll !important;
   overscroll-behavior: contain !important;
-  -webkit-overflow-scrolling: touch;
+  -webkit-overflow-scrolling: touch !important;
   padding: 12px 13px !important;
   box-sizing: border-box !important;
   touch-action: pan-y !important;
+  scrollbar-gutter: stable !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #3d5a78 transparent !important;
 }
 
-.shell .panel.inspector > .inspector-tab-panel[hidden] {
+.shell aside.panel.inspector > .inspector-tab-panel[hidden],
+.shell .panel.inspector > .inspector-tab-panel[hidden],
+.shell .panel.inspector div.inspector-tab-panel[hidden] {
   display: none !important;
-  flex: 0 0 0 !important;
   height: 0 !important;
+  max-height: 0 !important;
   min-height: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
+  flex: 0 0 0 !important;
   border: 0 !important;
+}
+
+.shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar {
+  width: 10px !important;
+}
+.shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar-thumb {
+  background: #3d5a78 !important;
+  border-radius: 8px !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+}
+.shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar-track {
+  background: rgba(0,0,0,.25) !important;
 }
 
 .shell .panel.inspector .result-section {
   max-height: 110px !important;
   overflow: auto !important;
   flex-shrink: 0 !important;
-}
-
-.shell .panel.inspector .findings-head,
-.shell .panel.inspector .finding-browser,
-.shell .panel.inspector .finding-file-group {
-  max-width: 100% !important;
-  min-width: 0 !important;
-  box-sizing: border-box !important;
 }
 
 .shell .finding-detail {
@@ -118,10 +123,9 @@ html, body, #root {
   gap: 10px !important;
   width: 100% !important;
   min-width: 0 !important;
-  max-height: min(48vh, 440px) !important;
+  max-height: min(45vh, 400px) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-  overscroll-behavior: contain !important;
 }
 
 .shell .finding-detail > * {
@@ -190,20 +194,4 @@ html, body, #root {
   z-index: 400 !important;
   max-height: min(72vh, 560px) !important;
   overflow-y: auto !important;
-}
-
-@media (max-width: 1200px), (max-width: 1120px), (max-width: 900px), (max-width: 700px) {
-  html, body, #root, .shell {
-    height: 100vh !important;
-    max-height: 100vh !important;
-    overflow: hidden !important;
-  }
-  .shell .layout { overflow: hidden !important; min-height: 0 !important; }
-  .shell .panel.palette:not(.is-collapsed) { overflow-y: scroll !important; }
-  .shell .panel.inspector:not(.is-collapsed) { overflow: hidden !important; }
-  .shell .panel.inspector > .inspector-tab-panel {
-    overflow-y: scroll !important;
-    height: 0 !important;
-    flex: 1 1 0% !important;
-  }
 }
