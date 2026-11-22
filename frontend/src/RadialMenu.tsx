@@ -30,7 +30,7 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
   const ring = useMemo(() => {
     const list = items.slice(0, 12);
     const n = list.length || 1;
-    const radius = Math.min(118, 64 + n * 4);
+    const radius = Math.min(132, 82 + n * 3);
     return list.map((item, index) => {
       const angle = (Math.PI * 2 * index) / n - Math.PI / 2;
       return {
@@ -52,10 +52,6 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
 
   return (
     <div className="radial-menu-root" style={{ left: x, top: y }} role="menu" aria-label="Быстрые действия">
-      <button type="button" className="radial-menu-center" onClick={onClose} title="Закрыть">
-        <span>ПКМ</span>
-        <small>закрыть</small>
-      </button>
       {ring.map(item => (
         <button
           key={item.type}
@@ -73,7 +69,7 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
           <small>{item.type.split(".").pop()}</small>
         </button>
       ))}
-      <div className="radial-menu-hint">Добавить блок · Esc закрыть</div>
+      <div className="radial-menu-hint">Выбери блок · Esc закрыть</div>
     </div>
   );
 }
