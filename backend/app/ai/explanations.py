@@ -470,11 +470,29 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
     allowed_fingerprints = {str(item.get("fingerprint")) for item in eligible if item.get("fingerprint")}
     normalized = []
     seen = set()
+    rejection_counts = {
+        "non_object": 0,
+        "missing_fingerprint": 0,
+        "unknown_fingerprint": 0,
+        "duplicate_fingerprint": 0,
+        "missing_root_cause": 0,
+        "missing_impact": 0,
+        "missing_recommendation": 0,
+    }
     for item in raw_items:
         if not isinstance(item, dict):
+            rejection_counts["non_object"] += 1
             continue
-        fingerprint = str(item.get("fingerprint", ""))
-        if fingerprint not in allowed_fingerprints or fingerprint in seen:
+        fingerprint_value = item.get("fingerprint")
+        fingerprint = fingerprint_value.strip() if isinstance(fingerprint_value, str) else ""
+        if not fingerprint:
+            rejection_counts["missing_fingerprint"] += 1
+            continue
+        if fingerprint not in allowed_fingerprints:
+            rejection_counts["unknown_fingerprint"] += 1
+            continue
+        if fingerprint in seen:
+            rejection_counts["duplicate_fingerprint"] += 1
             continue
         try:
             confidence = max(0.0, min(1.0, float(item.get("confidence", 0.0))))
@@ -484,22 +502,48 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             (finding for finding in eligible if str(finding.get("fingerprint")) == fingerprint),
             {},
         )
-        root_cause = str(item.get("root_cause", "")).strip()[:3000]
-        impact = str(item.get("impact", "")).strip()[:2000]
-        recommendation = str(item.get("recommendation", "")).strip()[:3000]
-        if not root_cause or not impact or not recommendation:
+        text_fields = {
+            "root_cause": (3000, "missing_root_cause"),
+            "impact": (2000, "missing_impact"),
+            "recommendation": (3000, "missing_recommendation"),
+        }
+        normalized_fields = {}
+        missing_required_field = False
+        for field, (limit, counter) in text_fields.items():
+            value = item.get(field)
+            normalized_value = value.strip()[:limit] if isinstance(value, str) else ""
+            if not normalized_value:
+                rejection_counts[counter] += 1
+                missing_required_field = True
+            normalized_fields[field] = normalized_value
+        if missing_required_field:
             continue
+        evidence_limits_value = item.get("evidence_limits")
+        evidence_limits = evidence_limits_value.strip()[:2000] if isinstance(evidence_limits_value, str) else ""
         normalized.append({
             "fingerprint": fingerprint,
-            "root_cause": root_cause,
-            "impact": impact,
-            "recommendation": recommendation,
+            **normalized_fields,
             "confidence": confidence,
-            "evidence_limits": str(item.get("evidence_limits", "")).strip()[:2000],
+            "evidence_limits": evidence_limits,
             "source_evidence": _source_evidence(source_finding),
         })
         seen.add(fingerprint)
 
+    logger.info(
+        "AI explanation normalization: raw_items=%d accepted=%d "
+        "rejected_non_object=%d rejected_missing_fingerprint=%d "
+        "rejected_unknown_fingerprint=%d rejected_duplicate_fingerprint=%d "
+        "rejected_missing_root_cause=%d rejected_missing_impact=%d "
+        "rejected_missing_recommendation=%d",
+        len(raw_items), len(normalized),
+        rejection_counts["non_object"],
+        rejection_counts["missing_fingerprint"],
+        rejection_counts["unknown_fingerprint"],
+        rejection_counts["duplicate_fingerprint"],
+        rejection_counts["missing_root_cause"],
+        rejection_counts["missing_impact"],
+        rejection_counts["missing_recommendation"],
+    )
     logger.info(
         "AI explanations completed: analyzed=%d explained=%d skipped=%d model=%s",
         len(eligible), len(normalized), len(findings) - len(selected) + insufficient_evidence_count, settings.llm_model,
