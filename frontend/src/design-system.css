@@ -3970,16 +3970,16 @@
   --dots:#c8d4cb;
   --soft-accent:#e4f1e8;
   --accent-text:#17643b;
-  --accent-50:#eaf4ed;
-  --accent-100:#d6eadc;
-  --accent-200:#b6d9c2;
-  --accent-300:#8fc6a2;
-  --accent-400:#56a977;
-  --accent-500:#278b52;
-  --accent-600:#1d7544;
-  --accent-700:#175d38;
-  --accent-800:#12482d;
-  --accent-900:#0c3521;
+  --accent-50:#E8F5EE;
+  --accent-100:#CDEFD9;
+  --accent-200:#9DDEB8;
+  --accent-300:#6CCB94;
+  --accent-400:#3BB56F;
+  --accent-500:#1B9A55;
+  --accent-600:#157A44;
+  --accent-700:#0F5C34;
+  --accent-800:#0A3F24;
+  --accent-900:#062816;
   --shadow:0 1px 2px rgba(24,45,31,.045),0 5px 18px rgba(24,45,31,.055);
   color-scheme:light;
 }
@@ -4101,3 +4101,11 @@
 .shell[data-theme="light"] .workflow-node .node-copy b { color:#14181f; }
 .shell[data-theme="light"] .workflow-node .node-copy small { color:#6b7682; }
 .shell[data-theme="light"] .workflow-node .node-footer { border-color:#d4dae0; color:#6b7682; }
+
+.shell[data-theme="light"] .workflow-node.is-selected {
+  border-color:#1B9A55;
+  box-shadow:0 0 0 2px rgba(27,154,85,.16),0 15px 34px rgba(0,0,0,.30);
+}
+.shell[data-theme="light"] .workflow-port {
+  border-color:#f4f6f8!important;
+}
