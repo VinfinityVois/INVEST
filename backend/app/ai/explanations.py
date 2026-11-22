@@ -107,7 +107,7 @@ def _safe_finding(finding: dict[str, Any]) -> dict[str, Any]:
 
 def _provider_error(exc: Exception) -> str:
     if isinstance(exc, httpx.TimeoutException):
-        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 90.0))
         return (
             f"AI-провайдер не ответил за {timeout_seconds:g} секунд. "
             "Проверьте доступность сервиса и повторите запуск."
@@ -283,7 +283,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         separators=(",", ":"),
     )
     try:
-        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 90.0))
     except (TypeError, ValueError):
         timeout_seconds = 90.0
     try:
