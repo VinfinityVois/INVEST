@@ -15,7 +15,7 @@ class WebhookDeliveryError(RuntimeError):
     pass
 
 
-def _validate_webhook_url(raw_url: str) -> str:
+def _validate_webhook_url(raw_url: str, allowed_hosts=None) -> str:
     value = raw_url.strip()
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname:
@@ -28,10 +28,11 @@ def _validate_webhook_url(raw_url: str) -> str:
         raise WebhookDeliveryError("Webhook URL содержит некорректный порт.") from exc
     if port not in (None, 443):
         raise WebhookDeliveryError("Для webhook разрешён только HTTPS-порт 443.")
+    raw_allowed = allowed_hosts if allowed_hosts is not None else settings.webhook_allowed_host_list
     allowed = {
-        host.strip().lower().rstrip(".")
-        for host in settings.notify_webhook_allowed_hosts.split(",")
-        if host.strip()
+        str(host).strip().lower().rstrip(".")
+        for host in raw_allowed
+        if str(host).strip()
     }
     host = parsed.hostname.lower().rstrip(".")
     if host not in allowed:
@@ -113,8 +114,8 @@ def build_notification_payload(report: dict, findings: list[dict] | None = None)
     return payload
 
 
-def deliver_webhook(url: str, payload: dict) -> dict:
-    endpoint = _validate_webhook_url(url)
+def deliver_webhook(url: str, payload: dict, allowed_hosts=None) -> dict:
+    endpoint = _validate_webhook_url(url, allowed_hosts=allowed_hosts)
     try:
         with httpx.Client(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False, trust_env=False) as client:
             response = client.post(
