@@ -473,3 +473,39 @@ def test_parser_accepts_content_as_structured_text_parts():
         }]
     })
     assert explanations._parse_response(response) == []
+
+
+def test_parser_logs_safe_metadata_for_invalid_model_json(caplog):
+    response = FakeResponse({
+        "choices": [{
+            "finish_reason": "length",
+            "message": {"content": '{"explanations":[{"fingerprint":"secret-fingerprint"'}
+        }],
+        "usage": {"completion_tokens": 1400},
+    })
+
+    with __import__("pytest").raises(json.JSONDecodeError):
+        explanations._parse_response(response)
+
+    diagnostic = caplog.text
+    assert "phase=model_content_json" in diagnostic
+    assert "finish_reason=length" in diagnostic
+    assert "completion_tokens=1400" in diagnostic
+    assert "secret-fingerprint" not in diagnostic
+
+
+def test_parser_logs_safe_metadata_for_invalid_http_json(caplog):
+    class InvalidJsonResponse(FakeResponse):
+        content = b'{"private":"do-not-log"}'
+
+        def json(self):
+            raise json.JSONDecodeError("invalid", self.content.decode(), 0)
+
+    with __import__("pytest").raises(json.JSONDecodeError):
+        explanations._parse_response(InvalidJsonResponse({}))
+
+    diagnostic = caplog.text
+    assert "phase=http_body_json" in diagnostic
+    assert "body_bytes=" in diagnostic
+    assert "do-not-log" not in diagnostic
+
