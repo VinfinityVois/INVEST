@@ -161,7 +161,7 @@ def generate_fix_proposal(
     except (TypeError, ValueError):
         timeout_seconds = 90.0
     try:
-        max_tokens = max(512, min(int(settings.llm_max_tokens), 4096))
+        max_tokens = max(512, min(int(settings.llm_max_tokens), 16384))
     except (TypeError, ValueError):
         max_tokens = 1400
 
