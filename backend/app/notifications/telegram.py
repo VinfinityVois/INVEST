@@ -41,8 +41,8 @@ def _normalize_chat_ids(value) -> list[str]:
     return ordered
 
 
-def _validate_chat_ids(chat_ids: list[str]) -> list[str]:
-    allowed = settings.telegram_allowed_chat_id_set
+def _validate_chat_ids(chat_ids: list[str], allowed_chat_ids=None) -> list[str]:
+    allowed = set(allowed_chat_ids) if allowed_chat_ids is not None else settings.telegram_allowed_chat_id_set
     if not allowed:
         raise TelegramDeliveryError(
             "TELEGRAM_ALLOWED_CHAT_IDS is empty; configure allowlist in .env."
@@ -64,8 +64,10 @@ def deliver_telegram(
     findings: list | None = None,
     workflow_name: str = "",
     run_id: str = "",
+    token: str | None = None,
+    allowed_chat_ids=None,
 ) -> dict:
-    token = (settings.telegram_bot_token or "").strip()
+    token = (token or settings.telegram_bot_token or "").strip()
     if not token:
         raise TelegramDeliveryError(
             "TELEGRAM_BOT_TOKEN is not configured in server environment."
@@ -73,7 +75,7 @@ def deliver_telegram(
     if any(ch in token for ch in " \n\r\t"):
         raise TelegramDeliveryError("TELEGRAM_BOT_TOKEN has invalid format.")
 
-    chat_ids = _validate_chat_ids(_normalize_chat_ids(config.get("chat_ids")))
+    chat_ids = _validate_chat_ids(_normalize_chat_ids(config.get("chat_ids")), allowed_chat_ids)
     text, context = build_plain_message(
         report=report,
         findings=findings,
