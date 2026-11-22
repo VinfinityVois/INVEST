@@ -1,6 +1,6 @@
 # INVEST evaluation
 
-The benchmark runner compares INVEST's custom detector output with the training repository's published ground truth. It reads source files as data only and never executes Gradle, Maven, or repository scripts.
+The benchmark runner compares INVEST's custom detector output with the training repository's published ground truth. It reads source files as data only and never executes Gradle, Maven, or repository scripts. Matching accepts both each finding's primary location and its `alternateLocations`; each scanner detection can satisfy at most one expected finding (maximum one-to-one matching). The same location handling is applied to negative controls. SCA matches also retain exact group/artifact coordinate checks at alternate locations.
 
 ## Secrets benchmark
 
