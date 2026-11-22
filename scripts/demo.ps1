@@ -82,6 +82,15 @@ if ($run.result) {
             exit 1
         }
     }
+    $regexOutput = $result.outputs.regex
+    if (-not $regexOutput -or $regexOutput.status -ne "completed") {
+        Write-Error "Regex node did not complete. Check logic.regex configuration and execution trace. Run ID: $runId"
+        exit 1
+    }
+    if (-not $regexOutput.summary -or $regexOutput.summary.total -lt 0) {
+        Write-Error "Regex node returned no split summary. Run ID: $runId"
+        exit 1
+    }
     $aiOutput = $result.outputs.ai
     if (-not $aiOutput -or $aiOutput.status -ne "completed") {
         Write-Error "AI explanation did not complete. Check LLM_BASE_URL, LLM_MODEL and LLM_API_KEY. Run ID: $runId"
