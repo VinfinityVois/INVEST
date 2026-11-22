@@ -133,8 +133,6 @@ def _provider_error(exc: Exception) -> str:
         return "LLM вернул некорректную структуру ответа. Проверьте совместимость chat/completions API и ответ модели."
     if isinstance(exc, ExplanationGatewayError):
         return str(exc)
-    if isinstance(exc, ExplanationGatewayError):
-        return str(exc)
     return "Не удалось выполнить запрос к LLM-провайдеру. Проверьте настройки и логи worker."
 
 
