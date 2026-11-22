@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: str | None = None
     llm_timeout_seconds: float = 300.0
-    llm_max_tokens: int = 1400
+    llm_max_tokens: int = 8192
     notify_webhook_allowed_hosts: str = "webhook.site"
     webhook_allowed_hosts: str | None = None
     telegram_bot_token: str | None = None
