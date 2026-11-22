@@ -70,7 +70,7 @@ def deliver_telegram(
     token = (token or settings.telegram_bot_token or "").strip()
     if not token:
         raise TelegramDeliveryError(
-            "Telegram bot token is not configured in platform integrations or server environment."
+            "TELEGRAM_BOT_TOKEN is not configured in platform integrations or server environment."
         )
     if any(ch in token for ch in " \n\r\t"):
         raise TelegramDeliveryError("TELEGRAM_BOT_TOKEN has invalid format.")
