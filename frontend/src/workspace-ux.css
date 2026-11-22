@@ -467,3 +467,114 @@
     transform: translate(-50%, -50%) scale(1);
   }
 }
+
+/* Interaction polish: stable connection ports, balanced collapsed rails and theme-aware radial menu. */
+.shell .workflow-port:hover,
+.shell .workflow-port:focus-visible {
+  transform:scale(1.12)!important;
+  transform-origin:center center;
+  margin:0!important;
+}
+.shell .workflow-port {
+  transform-origin:center center;
+}
+.shell .layout .palette.is-collapsed,
+.shell .layout .inspector.is-collapsed {
+  align-items:center;
+  justify-content:center;
+}
+.shell .layout .palette.is-collapsed .collapsed-rail,
+.shell .layout .inspector.is-collapsed .collapsed-rail {
+  align-self:center;
+  margin-block:auto;
+}
+.shell .layout .palette.is-collapsed .collapsed-rail:hover,
+.shell .layout .inspector.is-collapsed .collapsed-rail:hover {
+  transform:none;
+}
+.shell .weapon-wheel-core {
+  width:auto;
+  min-height:0;
+  max-width:150px;
+  padding:7px 9px;
+  gap:5px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  pointer-events:none;
+}
+.shell .weapon-wheel-core-title {
+  max-width:140px;
+  color:#f1f5f9;
+  font-size:12px;
+}
+.shell .weapon-wheel-core-category {
+  color:#7dd3fc;
+}
+.shell .weapon-wheel-core button {
+  pointer-events:auto;
+}
+.shell[data-theme="light"] .weapon-wheel-backdrop {
+  background:radial-gradient(circle at var(--wheel-x, 50%) var(--wheel-y, 50%),rgba(51,65,85,.06),rgba(226,232,240,.22));
+}
+.shell[data-theme="light"] .weapon-wheel {
+  filter:drop-shadow(0 16px 34px rgba(31,51,67,.22));
+}
+.shell[data-theme="light"] .weapon-wheel-track {
+  fill:rgba(248,250,249,.96);
+  stroke:rgba(71,85,105,.34);
+}
+.shell[data-theme="light"] .weapon-wheel-sector-shape {
+  fill:rgba(241,245,242,.98);
+  stroke:rgba(71,85,105,.28);
+}
+.shell[data-theme="light"] .weapon-wheel-sector:hover .weapon-wheel-sector-shape,
+.shell[data-theme="light"] .weapon-wheel-sector:focus .weapon-wheel-sector-shape,
+.shell[data-theme="light"] .weapon-wheel-sector.is-active .weapon-wheel-sector-shape {
+  fill:color-mix(in srgb,var(--sector-color) 17%,#fff);
+  stroke:var(--sector-color);
+}
+.shell[data-theme="light"] .weapon-wheel-sector-label {
+  fill:#26352b;
+}
+.shell[data-theme="light"] .weapon-wheel-sector-index {
+  filter:none;
+}
+.shell[data-theme="light"] .weapon-wheel-core-title {
+  color:#202a23;
+}
+.shell[data-theme="light"] .weapon-wheel-core-category {
+  color:#17643b;
+}
+.shell[data-theme="light"] .weapon-wheel-core button {
+  border-color:#278b52;
+  background:#e4f1e8;
+  color:#17643b;
+}
+.shell[data-theme="light"] .weapon-wheel-core button:hover {
+  background:#cdebd7;
+  border-color:#157a44;
+}
+.shell[data-theme="light"] .app-menu {
+  background:#f8faf8!important;
+  border-color:#d5ded7!important;
+  color:#202a23!important;
+  box-shadow:0 16px 42px rgba(31,51,67,.16)!important;
+  backdrop-filter:blur(18px);
+}
+.shell[data-theme="light"] .app-menu button,
+.shell[data-theme="light"] .app-menu a,
+.shell[data-theme="light"] .app-menu button b,
+.shell[data-theme="light"] .app-menu a b {
+  color:#34443a!important;
+}
+.shell[data-theme="light"] .app-menu button small,
+.shell[data-theme="light"] .app-menu a small {
+  color:#718076!important;
+}
+.shell[data-theme="light"] .app-menu button:hover,
+.shell[data-theme="light"] .app-menu a:hover {
+  background:#e4f1e8!important;
+  color:#145c35!important;
+}
