@@ -1,43 +1,101 @@
-/* ui-polish: auth, settings, light theme, AI readability */
+/* INVEST UI Polish — readability, auth, settings, light theme */
 
-.shell .finding-ai-explanation,
-.shell .finding-detail > .finding-ai-explanation {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-  grid-template-columns: none !important;
-  padding: 12px !important;
-  border-radius: 10px !important;
-  min-width: 0 !important;
-  width: 100% !important;
+.shell {
+  font-feature-settings: "ss01" on, "kern" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-.shell .finding-ai-explanation > p,
-.shell .finding-ai-explanation > small {
+.shell .panel,
+.shell .inspector-tab-panel,
+.shell .palette {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.shell .eyebrow,
+.shell .section-caption {
+  font-size: 10px !important;
+  letter-spacing: 0.08em !important;
+  font-weight: 500 !important;
+}
+.shell .panel-heading h3,
+.shell .inspector-top h3 {
+  font-size: 15px !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.3 !important;
+}
+.shell .panel-intro {
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  color: var(--text-secondary, #94a3b8) !important;
+}
+
+/* Findings / AI readability */
+.shell .finding-table-message {
+  white-space: normal !important;
+  line-height: 1.45 !important;
+  font-size: 12px !important;
+  overflow-wrap: anywhere !important;
+}
+.shell .finding-explanation,
+.shell .finding-remediation,
+.shell .finding-ai-explanation {
+  padding: 12px 14px !important;
+  border-radius: 10px !important;
+  line-height: 1.55 !important;
+}
+.shell .finding-explanation > b,
+.shell .finding-remediation > b {
   display: block !important;
-  width: 100% !important;
+  margin-bottom: 6px !important;
+  font-size: 10px !important;
+  letter-spacing: 0.06em !important;
+}
+.shell .finding-explanation p,
+.shell .finding-remediation p,
+.shell .finding-ai-explanation p,
+.shell .finding-ai-explanation small {
   margin: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
   white-space: normal !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   writing-mode: horizontal-tb !important;
-  line-height: 1.55 !important;
-  font-size: 12px !important;
+  color: var(--text-secondary, #cbd5e1) !important;
+}
+.shell .finding-detail {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  grid-template-columns: none !important;
+}
+.shell .finding-detail > .finding-explanation,
+.shell .finding-detail > .finding-remediation {
+  display: block !important;
+  width: 100% !important;
+  grid-column: auto !important;
+}
+.shell .finding-detail > .finding-ai-explanation {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  width: 100% !important;
+  grid-template-columns: none !important;
 }
 .shell .ai-source-evidence {
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
-  min-width: 0 !important;
-  width: 100% !important;
-  padding: 10px !important;
-  border-radius: 8px !important;
-  background: rgba(0,0,0,.22) !important;
-  border: 1px solid rgba(255,255,255,.08) !important;
+  padding: 12px !important;
+  border-radius: 10px !important;
+  background: rgba(0, 0, 0, 0.28) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 .shell .ai-source-evidence > div {
   display: grid !important;
-  grid-template-columns: 40px minmax(0, 1fr) !important;
-  gap: 8px !important;
+  grid-template-columns: 44px minmax(0, 1fr) !important;
+  gap: 10px !important;
   align-items: start !important;
   min-width: 0 !important;
 }
@@ -47,175 +105,247 @@
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   writing-mode: horizontal-tb !important;
-  font: 11px/1.5 "JetBrains Mono", "DM Mono", monospace !important;
+  font: 12px/1.55 "JetBrains Mono", "DM Mono", ui-monospace, monospace !important;
   color: #e2e8f0 !important;
 }
 .shell .ai-source-evidence span {
-  color: #94a3b8 !important;
-  font: 10px "JetBrains Mono", monospace !important;
   text-align: right !important;
+  color: #64748b !important;
+  font: 11px "JetBrains Mono", monospace !important;
 }
-.shell[data-theme="light"] .ai-source-evidence {
-  background: #f1f5f9 !important;
-  border-color: #e2e8f0 !important;
-}
-.shell[data-theme="light"] .ai-source-evidence code { color: #0f172a !important; }
-
 .shell .node-ai-note {
   display: flex !important;
   flex-direction: column !important;
   gap: 4px !important;
-  padding: 8px 9px !important;
+  padding: 8px 10px !important;
   border-radius: 8px !important;
-  background: rgba(168, 85, 247, 0.08) !important;
-  border: 1px solid rgba(168, 85, 247, 0.2) !important;
+  background: rgba(168, 85, 247, 0.1) !important;
+  border: 1px solid rgba(168, 85, 247, 0.22) !important;
 }
 .shell .node-ai-note span {
   white-space: normal !important;
   overflow-wrap: anywhere !important;
-  line-height: 1.45 !important;
-  font-size: 10px !important;
+  line-height: 1.5 !important;
+  font-size: 11px !important;
 }
 
+/* Auth */
 .auth-screen {
   min-height: 100vh !important;
   display: grid !important;
   place-items: center !important;
-  padding: 28px 18px !important;
+  padding: 72px 20px 64px !important;
+  position: relative !important;
+  overflow: hidden !important;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.14), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(56, 189, 248, 0.08), transparent 50%),
-    #070b12 !important;
+    radial-gradient(ellipse 90% 55% at 50% -15%, rgba(16, 185, 129, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 100%, rgba(56, 189, 248, 0.08), transparent 45%),
+    #060a11 !important;
   color: #e2e8f0 !important;
 }
-.auth-card {
-  width: min(440px, 100%) !important;
-  padding: 36px 32px !important;
-  border: 1px solid rgba(148, 163, 184, 0.16) !important;
-  border-radius: 16px !important;
-  background: linear-gradient(160deg, rgba(22, 32, 48, 0.98), rgba(10, 16, 26, 0.98)) !important;
-  box-shadow: 0 30px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.03) inset !important;
+.auth-atmosphere {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+  opacity: 0.7;
 }
 .auth-topbar {
   position: fixed !important;
   top: 0; left: 0; right: 0;
+  z-index: 20;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  padding: 14px 22px !important;
-  border-bottom: 1px solid rgba(148,163,184,.1) !important;
-  background: rgba(7, 11, 18, 0.75) !important;
-  z-index: 5;
+  padding: 14px 24px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+  background: rgba(6, 10, 17, 0.8) !important;
+  backdrop-filter: blur(12px) saturate(1.2);
 }
-.auth-brand { display: flex !important; align-items: center !important; gap: 10px !important; }
+.auth-brand { display: flex !important; align-items: center !important; gap: 12px !important; }
 .auth-brand-icon {
-  width: 36px; height: 36px; display: grid; place-items: center;
-  border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.35);
-  background: rgba(16, 185, 129, 0.12); color: #34d399;
+  width: 38px !important; height: 38px !important;
+  display: grid !important; place-items: center !important;
+  border-radius: 11px !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.18), rgba(6, 78, 59, 0.25)) !important;
+  color: #34d399 !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+}
+.auth-brand b {
+  display: block !important; font-size: 13px !important; font-weight: 700 !important;
+  letter-spacing: 0.06em !important; color: #f8fafc !important;
+}
+.auth-brand small {
+  display: block !important; margin-top: 2px !important; font-size: 10px !important;
+  letter-spacing: 0.1em !important; color: #64748b !important;
+}
+.auth-top-status {
+  display: inline-flex !important; align-items: center !important; gap: 8px !important;
+  padding: 6px 12px !important; border-radius: 999px !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  background: rgba(16, 185, 129, 0.08) !important; color: #6ee7b7 !important;
+  font: 600 10px/1 "JetBrains Mono", monospace !important; letter-spacing: 0.08em !important;
+}
+.auth-top-status i {
+  width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981;
+}
+.auth-card {
+  width: min(440px, 100%) !important; margin: 0 auto;
+  padding: 28px 28px 24px !important; border-radius: 18px !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  background: linear-gradient(165deg, rgba(24, 36, 54, 0.98), rgba(10, 16, 26, 0.98)) !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
 }
 .auth-card h1 {
-  margin: 8px 0 6px !important; font-size: 22px !important; font-weight: 700 !important;
-  letter-spacing: -0.03em !important; color: #f8fafc !important;
+  margin: 0 0 8px !important; font-size: 24px !important; font-weight: 700 !important;
+  letter-spacing: -0.03em !important; color: #f8fafc !important; line-height: 1.25 !important;
 }
-.auth-card input {
-  height: 42px !important; padding: 0 12px !important; border-radius: 10px !important;
-  border: 1px solid rgba(148,163,184,.2) !important; background: rgba(7, 11, 18, 0.85) !important;
-  color: #f1f5f9 !important; font-size: 14px !important;
+.auth-description {
+  margin: 0 0 20px !important; font-size: 13.5px !important; line-height: 1.55 !important; color: #94a3b8 !important;
 }
-.auth-card input:focus {
-  outline: none !important; border-color: rgba(16, 185, 129, 0.55) !important;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+.auth-input-wrap {
+  display: flex !important; align-items: center !important; gap: 10px !important;
+  height: 46px !important; padding: 0 14px !important; margin-bottom: 14px !important;
+  border-radius: 12px !important; border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  background: rgba(5, 10, 18, 0.75) !important; transition: border-color 0.15s, box-shadow 0.15s;
 }
-.auth-card button[type="submit"] {
-  width: 100% !important; height: 44px !important; margin-top: 10px !important;
-  border: 0 !important; border-radius: 10px !important;
-  background: linear-gradient(120deg, #059669, #10b981) !important;
-  color: #ecfdf5 !important; font-weight: 700 !important; font-size: 14px !important;
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25) !important; cursor: pointer;
+.auth-input-wrap:focus-within {
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14) !important;
 }
+.auth-input-wrap input {
+  flex: 1 !important; height: 100% !important; border: 0 !important; background: transparent !important;
+  color: #f1f5f9 !important; font-size: 14px !important; outline: none !important;
+}
+.auth-form button[type="submit"] {
+  width: 100% !important; height: 46px !important; margin-top: 6px !important;
+  border: 0 !important; border-radius: 12px !important;
+  background: linear-gradient(120deg, #059669, #10b981 55%, #34d399) !important;
+  color: #042f2e !important; font-weight: 700 !important; font-size: 14px !important;
+  box-shadow: 0 10px 28px rgba(16, 185, 129, 0.28) !important; cursor: pointer !important;
+}
+.auth-form button[type="submit"]:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .auth-security-note {
-  display: flex !important; gap: 10px !important; margin-top: 18px !important;
-  padding: 12px !important; border-radius: 10px !important;
-  border: 1px solid rgba(16, 185, 129, 0.2) !important;
-  background: rgba(16, 185, 129, 0.06) !important; color: #a7f3d0 !important; font-size: 12px !important;
+  display: flex !important; gap: 12px !important; margin-top: 18px !important;
+  padding: 12px 14px !important; border-radius: 12px !important;
+  border: 1px solid rgba(16, 185, 129, 0.22) !important;
+  background: rgba(16, 185, 129, 0.07) !important; color: #a7f3d0 !important;
+  font-size: 12.5px !important; line-height: 1.5 !important;
 }
 .auth-footer {
-  position: fixed !important; bottom: 0; left: 0; right: 0;
+  position: fixed !important; bottom: 0; left: 0; right: 0; z-index: 20;
   display: flex !important; justify-content: space-between !important;
-  padding: 12px 22px !important; color: #475569 !important; font-size: 10px !important;
-  border-top: 1px solid rgba(148,163,184,.08) !important; background: rgba(7,11,18,.6) !important;
+  padding: 12px 24px !important; border-top: 1px solid rgba(148, 163, 184, 0.08) !important;
+  background: rgba(6, 10, 17, 0.75) !important; color: #475569 !important;
+  font: 600 10px/1 "JetBrains Mono", monospace !important; letter-spacing: 0.06em !important;
 }
 
-.shell[data-theme="light"] {
-  --text: #0f172a; --text-secondary: #334155; --muted: #64748b; --icon: #475569;
-  --border: #e2e8f0; --surface: #ffffff; --elevated: #f8fafc;
-  --soft-accent: rgba(16, 185, 129, 0.1); --accent-text: #047857;
-  background: #f1f5f9 !important;
-}
-.shell[data-theme="light"] .topbar {
-  background: rgba(255,255,255,.92) !important; border-bottom-color: #e2e8f0 !important;
-}
-.shell[data-theme="light"] .panel {
-  background: #ffffff !important; border-color: #e2e8f0 !important;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04) !important;
-}
-.shell[data-theme="light"] .flow { background-color: #f8fafc !important; }
-.shell[data-theme="light"] .workflow-node {
-  background: linear-gradient(155deg, #ffffff, #f8fafc) !important;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08) !important; border-color: #e2e8f0 !important;
-}
-.shell[data-theme="light"] .finding-table-item,
-.shell[data-theme="light"] .finding-file-group {
-  background: #ffffff !important; border-color: #e2e8f0 !important;
-}
-.shell[data-theme="light"] .app-menu {
-  background: #ffffff !important; border-color: #e2e8f0 !important;
-  box-shadow: 0 16px 40px rgba(15,23,42,.12) !important;
-}
-
+/* User management */
 .user-management-backdrop {
-  background: rgba(2, 6, 12, 0.72) !important; backdrop-filter: blur(10px) !important;
+  background: rgba(2, 6, 12, 0.72) !important; backdrop-filter: blur(12px) !important;
 }
 .user-management-dialog {
-  width: min(920px, 94vw) !important; max-height: min(88vh, 860px) !important;
-  border-radius: 16px !important; border: 1px solid rgba(148, 163, 184, 0.14) !important;
-  background: linear-gradient(165deg, #141c2a, #0a1018 70%) !important;
-  box-shadow: 0 32px 90px rgba(0,0,0,.55) !important; overflow: hidden !important;
+  width: min(960px, 94vw) !important; max-height: min(90vh, 880px) !important;
+  border-radius: 18px !important; border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  background: linear-gradient(165deg, #151d2c, #0a1018 75%) !important;
+  box-shadow: 0 36px 100px rgba(0, 0, 0, 0.55) !important; overflow: hidden !important;
   display: flex !important; flex-direction: column !important;
 }
 .user-access-header {
-  padding: 18px 20px !important; border-bottom: 1px solid rgba(148,163,184,.1) !important;
+  padding: 18px 22px !important; border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+}
+.user-access-header h2 {
+  margin: 4px 0 6px !important; font-size: 18px !important; font-weight: 700 !important; color: #f1f5f9 !important;
 }
 .user-access-tabs {
   display: flex !important; gap: 8px !important; padding: 12px 16px !important;
-  border-bottom: 1px solid rgba(148,163,184,.08) !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08) !important; background: rgba(0, 0, 0, 0.15) !important;
 }
 .user-access-tabs button.active {
   background: rgba(16, 185, 129, 0.12) !important;
-  border-color: rgba(16, 185, 129, 0.3) !important; color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.32) !important; color: #6ee7b7 !important;
 }
 .user-management-content {
-  flex: 1 1 auto !important; min-height: 0 !important; overflow: auto !important;
-  padding: 16px 18px 22px !important;
+  flex: 1 1 auto !important; min-height: 0 !important; overflow: auto !important; padding: 18px 20px 24px !important;
 }
 .user-management-section {
-  margin-bottom: 14px !important; padding: 14px !important; border-radius: 12px !important;
-  border: 1px solid rgba(148,163,184,.1) !important; background: rgba(255,255,255,.02) !important;
+  margin-bottom: 14px !important; padding: 16px !important; border-radius: 14px !important;
+  border: 1px solid rgba(148, 163, 184, 0.1) !important; background: rgba(255, 255, 255, 0.025) !important;
 }
 .user-profile-banner {
   display: flex !important; align-items: center !important; gap: 14px !important;
-  padding: 16px !important; margin-bottom: 14px !important; border-radius: 12px !important;
-  border: 1px solid rgba(16, 185, 129, 0.2) !important;
-  background: linear-gradient(120deg, rgba(16,185,129,.1), rgba(56,189,248,.05)) !important;
+  padding: 16px 18px !important; margin-bottom: 16px !important; border-radius: 14px !important;
+  border: 1px solid rgba(16, 185, 129, 0.22) !important;
+  background: linear-gradient(120deg, rgba(16, 185, 129, 0.12), rgba(56, 189, 248, 0.05)) !important;
 }
 .user-profile-avatar {
-  width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px;
-  background: rgba(16,185,129,.18); color: #6ee7b7; font-weight: 700;
+  width: 52px !important; height: 52px !important; display: grid !important; place-items: center !important;
+  border-radius: 14px !important; border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  background: rgba(16, 185, 129, 0.15) !important; color: #6ee7b7 !important; font-weight: 700 !important;
 }
 .user-management-section input,
 .user-password-form input,
 .user-email-edit input {
-  height: 38px !important; border-radius: 9px !important;
-  border: 1px solid rgba(148,163,184,.18) !important; background: rgba(7,11,18,.7) !important;
-  color: #e2e8f0 !important; padding: 0 11px !important;
+  height: 40px !important; border-radius: 10px !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important; background: rgba(7, 11, 18, 0.75) !important;
+  color: #e2e8f0 !important; padding: 0 12px !important; font-size: 13px !important;
 }
+.user-row {
+  border-radius: 12px !important; border: 1px solid rgba(148, 163, 184, 0.1) !important;
+  background: rgba(0, 0, 0, 0.2) !important; padding: 12px 14px !important; margin-top: 10px !important;
+}
+
+/* Light theme */
+.shell[data-theme="light"] {
+  --text: #0f172a; --text-secondary: #334155; --muted: #64748b; --icon: #475569;
+  --border: #e2e8f0; --surface: #ffffff; --elevated: #f8fafc;
+  --soft-accent: rgba(16, 185, 129, 0.12); --accent-text: #047857;
+  background: #f1f5f9 !important; color: #0f172a !important;
+}
+.shell[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.92) !important; border-bottom: 1px solid #e2e8f0 !important;
+}
+.shell[data-theme="light"] .panel {
+  background: #ffffff !important; border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px rgba(15, 23, 42, 0.05) !important;
+}
+.shell[data-theme="light"] .flow { background-color: #f8fafc !important; border-color: #e2e8f0 !important; }
+.shell[data-theme="light"] .workflow-node {
+  background: linear-gradient(155deg, #ffffff, #f8fafc) !important;
+  border-color: #e2e8f0 !important; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+}
+.shell[data-theme="light"] .inspector-tabs { background: #f8fafc !important; border-color: #e2e8f0 !important; }
+.shell[data-theme="light"] .finding-table-item,
+.shell[data-theme="light"] .finding-file-group,
+.shell[data-theme="light"] .finding-detail {
+  background: #ffffff !important; border-color: #e2e8f0 !important;
+}
+.shell[data-theme="light"] .finding-explanation p,
+.shell[data-theme="light"] .finding-remediation p,
+.shell[data-theme="light"] .finding-ai-explanation p { color: #334155 !important; }
+.shell[data-theme="light"] .ai-source-evidence { background: #f1f5f9 !important; border-color: #e2e8f0 !important; }
+.shell[data-theme="light"] .ai-source-evidence code { color: #0f172a !important; }
+.shell[data-theme="light"] .app-menu {
+  background: #ffffff !important; border-color: #e2e8f0 !important;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.14) !important;
+}
+.shell[data-theme="light"] .user-management-dialog { background: #ffffff !important; border-color: #e2e8f0 !important; }
+.shell[data-theme="light"] .user-access-header h2,
+.shell[data-theme="light"] .user-section-heading b { color: #0f172a !important; }
+.shell[data-theme="light"] .user-management-section,
+.shell[data-theme="light"] .user-row { background: #f8fafc !important; border-color: #e2e8f0 !important; }
+.shell[data-theme="light"] .user-management-section input,
+.shell[data-theme="light"] .user-password-form input {
+  background: #ffffff !important; color: #0f172a !important; border-color: #cbd5e1 !important;
+}
+
+.shell .icon-button,
+.shell .ghost { transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease; }
+.shell .icon-button:hover,
+.shell .ghost:hover { transform: translateY(-1px); }
+.shell .workflow-node:hover { transform: translateY(-1px); }
