@@ -135,10 +135,13 @@ def _settings_payload(db, workspace_id) -> dict:
             select(WorkspaceIntegration).where(WorkspaceIntegration.workspace_id == workspace_id)
         ).all()
     }
+    bot_credential = _bot_credential(db, workspace_id)
+    bot_configured = bot_credential is not None
     return {
         "git_repositories": rows.get("git", {}).get("repositories", settings.allowed_target_list),
         "telegram_chat_ids": rows.get("telegram", {}).get("chat_ids", sorted(settings.telegram_allowed_chat_id_set)),
-        "telegram_bot_configured": _bot_credential(db, workspace_id) is not None,
+        "telegram_bot_configured": bot_configured,
+        "telegram_bot_available": bot_configured or bool(settings.telegram_bot_token),
         "webhook_hosts": rows.get("webhook", {}).get("hosts", sorted(settings.webhook_allowed_host_list)),
     }
 
