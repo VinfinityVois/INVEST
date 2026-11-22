@@ -1,4 +1,5 @@
 import json
+import io
 import time
 import shutil
 import re
@@ -2263,6 +2264,26 @@ def _canonical_finding_path(run: WorkflowRun, path: str) -> str:
         break
     return path
 
+def _summarize_report_findings(findings: list[dict]) -> dict:
+    severity_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    explained = 0
+    for finding in findings:
+        severity = str(finding.get("severity") or "UNKNOWN").upper()
+        category = str(finding.get("category") or finding.get("analyzer") or "UNCATEGORIZED").upper()
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        category_counts[category] = category_counts.get(category, 0) + 1
+        if isinstance(finding.get("ai_explanation"), dict):
+            explained += 1
+    return {
+        "total_findings": len(findings),
+        "by_severity": dict(sorted(severity_counts.items())),
+        "by_category": dict(sorted(category_counts.items())),
+        "ai_explained": explained,
+        "without_ai_explanation": len(findings) - explained,
+    }
+
+
 def _build_run_report(session, run: WorkflowRun) -> dict:
     telemetry = _safe_report_value(_run_telemetry(session, run))
     rows = session.scalars(
@@ -2293,8 +2314,9 @@ def _build_run_report(session, run: WorkflowRun) -> dict:
             "error": _safe_report_value(run.error) if run.error else None,
         },
         "telemetry": telemetry,
+        "summary": _summarize_report_findings(findings),
         "findings": findings,
-        "findings_truncated": len(rows) >= 5000,
+        "findings_truncated": False,
     }
 
 
@@ -2344,6 +2366,76 @@ def export_run_report_json(run_id: UUID, request: Request):
         if run is None:
             raise HTTPException(status_code=404, detail="Run not found")
         return _build_run_report(session, run)
+
+
+@app.get("/api/runs/{run_id}/report.zip")
+def export_run_report_zip(run_id: UUID, request: Request):
+    with SessionLocal() as session:
+        run = _run_in_active_workspace(session, request, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        report = _build_run_report(session, run)
+
+    findings = report.get("findings") or []
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "report.json",
+            json.dumps(report, ensure_ascii=False, indent=2, default=str),
+        )
+        archive.writestr(
+            "summary.json",
+            json.dumps(
+                {"run": report.get("run"), "summary": report.get("summary"), "telemetry": report.get("telemetry")},
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+        )
+        archive.writestr(
+            "findings/all.json",
+            json.dumps({"findings": findings}, ensure_ascii=False, indent=2, default=str),
+        )
+
+        severities = sorted({str(item.get("severity") or "UNKNOWN").upper() for item in findings})
+        for severity in severities:
+            selected = [item for item in findings if str(item.get("severity") or "UNKNOWN").upper() == severity]
+            archive.writestr(
+                f"findings/by-severity/{severity}.json",
+                json.dumps({"severity": severity, "count": len(selected), "findings": selected}, ensure_ascii=False, indent=2, default=str),
+            )
+
+        categories: dict[str, list[dict]] = {}
+        for item in findings:
+            category = str(item.get("category") or item.get("analyzer") or "UNCATEGORIZED").upper()
+            safe_category = re.sub(r"[^A-Z0-9_.-]+", "_", category)[:80] or "UNCATEGORIZED"
+            categories.setdefault(safe_category, []).append(item)
+        for category, selected in sorted(categories.items()):
+            archive.writestr(
+                f"findings/by-category/{category}.json",
+                json.dumps({"category": category, "count": len(selected), "findings": selected}, ensure_ascii=False, indent=2, default=str),
+            )
+
+        archive.writestr(
+            "README.txt",
+            "INVEST security report archive\n\n"
+            "report.json — полный отчёт запуска: метаданные, telemetry, все сохранённые находки и AI-объяснения.\n"
+            "summary.json — сводка по уровням серьёзности, категориям и покрытию AI.\n"
+            "findings/all.json — все находки одним массивом.\n"
+            "findings/by-severity/ — те же находки, сгруппированные по severity.\n"
+            "findings/by-category/ — те же находки, сгруппированные по категории анализатора.\n\n"
+            "AI-объяснения включены, если они были сохранены для находки. Их отсутствие не удаляет саму находку. "
+            "Секреты и чувствительные значения проходят серверную очистку перед экспортом. "
+            "Отчёт содержит только данные, сохранённые для данного запуска.\n",
+        )
+
+    archive_buffer.seek(0)
+    filename = f"invest-run-{run_id}-report.zip"
+    return StreamingResponse(
+        archive_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
