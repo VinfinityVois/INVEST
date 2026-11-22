@@ -2746,7 +2746,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         </section>
         </div>
         <div className="inspector-tab-panel findings-tab-panel" hidden={inspectorTab !== "findings"} style={{ height: "calc(100vh - 220px)", maxHeight: "calc(100vh - 220px)", overflowY: "scroll", overscrollBehavior: "contain" }}>
-        <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
+        <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span>{lastRunId && <div className="findings-export-actions"><a href={"/api/runs/" + lastRunId + "/report.json"} title="Скачать полный JSON текущего запуска"><Download size={12}/> JSON</a><a href={"/api/runs/" + lastRunId + "/report.zip"} title="Скачать ZIP с общим JSON, сводкой и разбивкой находок"><Download size={12}/> ZIP</a></div>}</div>
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>
           <select aria-label="Фильтр серьёзности" value={findingSeverity} onChange={event => setFindingSeverity(event.target.value)}>{["Все","CRITICAL","HIGH","MEDIUM","LOW","INFO"].map(level => <option key={level}>{level}</option>)}</select>
