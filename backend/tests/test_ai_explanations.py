@@ -104,6 +104,29 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     ]
 
 
+def test_gateway_honors_llm_max_tokens_above_4096(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    monkeypatch.setattr(settings, "llm_max_tokens", 8192)
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["max_tokens"] = kwargs["json"]["max_tokens"]
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "abc", "root_cause": "Cause", "impact": "Impact",
+                "recommendation": "Fix", "confidence": 0.8, "evidence_limits": ""
+            }]
+        })}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}])
+
+    assert result["status"] == "completed"
+    assert captured["max_tokens"] == 8192
+
+
 def test_gateway_rejects_non_https_remote_endpoint(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", "http://remote.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
