@@ -6,6 +6,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import UserManagement from "./UserManagement";
+import RadialMenu from "./RadialMenu";
 import WorkspaceManager from "./WorkspaceManager";
 import DashboardPanel from "./DashboardPanel";
 import FindingCollaboration from "./FindingCollaboration";
@@ -598,6 +599,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [category, setCategory] = useState("Все");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>("source");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
   const [traceFilter, setTraceFilter] = useState("all");
   const [showResult, setShowResult] = useState(true);
   const [configText, setConfigText] = useState("{}");
@@ -2224,7 +2226,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   });
 
   return <main className="shell" data-theme={theme}>
-    <header className="topbar">
+    <header className={"topbar" + (appMenuOpen ? " menu-open" : "")}>
       <div className="topbar-leading">
         <div className="brand"><div className="mark"><Shield size={19} /></div><div><b>ЦЕНТР-ИНВЕСТ <span>／</span> AI SECURITY WORKFLOW</b><small>КОНТРОЛЬ БЕЗОПАСНОСТИ · CYBERGARDEN</small></div></div>
         <div className="app-menu-wrap app-menu-wrap-leading">
@@ -2354,9 +2356,11 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange} isValidConnection={isValidConnection} onConnect={onConnect} onReconnect={onReconnect}
           onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); }}
-          onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
+          onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setRadialMenu(null); }} onPaneContextMenu={(event) => { event.preventDefault(); setRadialMenu({ x: event.clientX, y: event.clientY }); setSelectedNodeId(null); setSelectedEdgeId(null); }}
           edgesReconnectable connectionRadius={36} deleteKeyCode={["Backspace", "Delete"]} fitView fitViewOptions={{ padding: 0.22 }}>
           <Background color={theme === "light" ? "#D4DAE0" : "#3A424C"} gap={22} size={1} /><MiniMap pannable zoomable nodeColor={node => categoryColor(node.data?.category as string)} maskColor={theme === "light" ? "rgba(225,232,238,.58)" : "rgba(3,8,15,.68)"} /><Controls />
+          {leftCollapsed && rightCollapsed && !radialMenu && <div className="radial-access-tip">ПКМ на холсте — быстрые блоки</div>}
+          {radialMenu && <RadialMenu x={radialMenu.x} y={radialMenu.y} items={manifests.map(m => ({ type: m.type, title: m.title, category: m.category, description: m.description }))} onClose={() => setRadialMenu(null)} onPick={(type) => { setRadialMenu(null); const m = manifests.find(item => item.type === type); if (m) addNode(m); }} />}
         </ReactFlow></div>
         {bottomDrawerOpen && <section className="workflow-bottom-drawer" aria-label="Журнал запусков">
           <div className="workflow-bottom-drawer-head">
@@ -2639,7 +2643,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           </div>)}</div> : <p className="run-history-empty">{versionsLoading ? "Загружаем версии…" : "Сохранённые версии появятся здесь."}</p>}
         </section>
         </div>
-        <div className="inspector-tab-panel" hidden={inspectorTab !== "findings"}>
+        <div className="inspector-tab-panel findings-tab-panel" hidden={inspectorTab !== "findings"} style={{ height: "calc(100vh - 220px)", maxHeight: "calc(100vh - 220px)", overflowY: "scroll", overscrollBehavior: "contain" }}>
         <div className="findings-head"><b>Результаты безопасности</b><span>{findings.length}</span></div>
         {findings.length > 0 && <div className="finding-browser">
           <label className="finding-search"><Search size={13}/><input value={findingQuery} onChange={event => setFindingQuery(event.target.value)} placeholder="Поиск по файлу, правилу или описанию"/></label>

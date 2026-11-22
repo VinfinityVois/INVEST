@@ -1261,7 +1261,6 @@ def get_workflow(workflow_id: UUID, request: Request):
         workflow = _workflow_in_active_workspace(session, request, workflow_id)
         if workflow is None:
             raise HTTPException(status_code=404, detail="Workflow not found")
-        require_workspace_api_token(session, x_ci_token, workflow.workspace_id, "workflow:run")
         version = session.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.workflow_id == workflow_id)
