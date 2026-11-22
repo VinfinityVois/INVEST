@@ -559,6 +559,7 @@ def test_parser_logs_safe_metadata_for_invalid_http_json(caplog):
 
 
 def test_gateway_logs_safe_counts_for_rejected_model_explanations(monkeypatch, caplog):
+    caplog.set_level("INFO", logger="secworkflow.ai")
     monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
     monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
