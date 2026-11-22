@@ -337,6 +337,122 @@ def _provider_error_code(exc: Exception) -> str:
     return "PROVIDER_REQUEST_FAILED"
 
 
+
+def _request_model_items(
+    endpoint: str,
+    headers: dict[str, str],
+    request_payload: dict[str, Any],
+    timeout_seconds: float,
+) -> tuple[list, int, int]:
+    """Call chat/completions, retrying without response_format when unsupported."""
+    attempts = 1
+    response = httpx.post(
+        endpoint, headers=headers, json=request_payload,
+        timeout=httpx.Timeout(timeout_seconds, connect=5.0),
+    )
+    status = response.status_code
+    if status in {400, 422} and "response_format" in request_payload:
+        fallback_payload = {
+            key: value for key, value in request_payload.items()
+            if key != "response_format"
+        }
+        attempts += 1
+        response = httpx.post(
+            endpoint, headers=headers, json=fallback_payload,
+            timeout=httpx.Timeout(timeout_seconds, connect=5.0),
+        )
+        status = response.status_code
+    response.raise_for_status()
+    return _parse_response(response), attempts, status
+
+
+def _normalize_explanations(
+    raw_items: list,
+    eligible: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
+    """Accept only complete explanations tied to an original scanner fingerprint."""
+    allowed = {
+        str(item.get("fingerprint")): item
+        for item in eligible if item.get("fingerprint")
+    }
+    normalized = []
+    seen = set()
+    counts = {
+        "non_object": 0,
+        "missing_fingerprint": 0,
+        "unknown_fingerprint": 0,
+        "duplicate_fingerprint": 0,
+        "missing_root_cause": 0,
+        "missing_impact": 0,
+        "missing_recommendation": 0,
+        "impact_fallback_from_scanner": 0,
+    }
+    for item in raw_items:
+        if not isinstance(item, dict):
+            counts["non_object"] += 1
+            continue
+        fingerprint_value = item.get("fingerprint")
+        fingerprint = fingerprint_value.strip() if isinstance(fingerprint_value, str) else ""
+        if not fingerprint:
+            counts["missing_fingerprint"] += 1
+            continue
+        if fingerprint not in allowed:
+            counts["unknown_fingerprint"] += 1
+            continue
+        if fingerprint in seen:
+            counts["duplicate_fingerprint"] += 1
+            continue
+        source_finding = allowed[fingerprint]
+        try:
+            confidence = max(0.0, min(1.0, float(item.get("confidence", 0.0))))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        text_fields = {
+            "root_cause": (3000, "missing_root_cause"),
+            "impact": (2000, "missing_impact"),
+            "recommendation": (3000, "missing_recommendation"),
+        }
+        fields = {}
+        missing = False
+        for field, (limit, counter) in text_fields.items():
+            value = item.get(field)
+            text_value = value.strip()[:limit] if isinstance(value, str) else ""
+            if field == "impact" and not text_value:
+                scanner_impact = source_finding.get("why_it_matters")
+                if isinstance(scanner_impact, str) and scanner_impact.strip():
+                    text_value = scanner_impact.strip()[:limit]
+                    counts["impact_fallback_from_scanner"] += 1
+            if not text_value:
+                counts[counter] += 1
+                missing = True
+            fields[field] = text_value
+        if missing:
+            continue
+        evidence_value = item.get("evidence_limits")
+        evidence_limits = evidence_value.strip()[:2000] if isinstance(evidence_value, str) else ""
+        normalized.append({
+            "fingerprint": fingerprint,
+            **fields,
+            "confidence": confidence,
+            "evidence_limits": evidence_limits,
+            "source_evidence": _source_evidence(source_finding),
+        })
+        seen.add(fingerprint)
+
+    item_keys = sorted({
+        str(key)
+        for item in raw_items[:10]
+        if isinstance(item, dict)
+        for key in item.keys()
+    })
+    return normalized, counts, item_keys
+
+
+def _merge_rejection_counts(target: dict[str, int], addition: dict[str, int]) -> None:
+    for key, value in addition.items():
+        target[key] = target.get(key, 0) + value
+
+
 def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
     # Empty input is a normal, explicit no-op, not a silent AI success or provider failure.
     if not findings:
@@ -412,7 +528,6 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "coverage": 0.0,
         }
 
-    payload = [_safe_finding(item) for item in eligible]
     language_instruction = {
         "ru": "Write every explanation field exclusively in Russian. Do not use Chinese or any other language unless it is an exact code identifier, file path, or technical standard name.",
         "en": "Write every explanation field exclusively in English.",
@@ -442,11 +557,6 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "Use this exact shape (values are examples, not facts): "
         '{"explanations":[{"fingerprint":"<exact input fingerprint>","root_cause":"<causal explanation>","impact":"<security consequence>","recommendation":"<specific remediation>","confidence":0.7,"evidence_limits":""}]}.'
     )
-    user_prompt = json.dumps(
-        {"language": language, "findings": payload},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
     try:
         timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
     except (TypeError, ValueError):
@@ -456,16 +566,6 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
     except (TypeError, ValueError):
         max_tokens = 1400
 
-    request_payload = {
-        "model": settings.llm_model,
-        "temperature": 0.1,
-        "max_tokens": max_tokens,
-        "response_format": {"type": "json_object"},
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    }
     request_started = perf_counter()
     request_attempts = 0
     http_status = None
@@ -475,25 +575,24 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "Authorization": f"Bearer {(settings.llm_api_key or '').strip()}",
             "Content-Type": "application/json",
         }
-        request_attempts += 1
-        response = httpx.post(
-            endpoint, headers=headers, json=request_payload,
-            timeout=httpx.Timeout(timeout_seconds, connect=5.0),
+        batch_payload = {
+            "model": settings.llm_model,
+            "temperature": 0.1,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(
+                    {"language": language, "findings": [_safe_finding(item) for item in eligible]},
+                    ensure_ascii=False, separators=(",", ":"),
+                )},
+            ],
+        }
+        raw_items, attempts, http_status = _request_model_items(
+            endpoint, headers, batch_payload, timeout_seconds,
         )
-        # Some OpenAI-compatible servers do not implement response_format.
-        http_status = response.status_code
-        if response.status_code in {400, 422}:
-            fallback_payload = {key: value for key, value in request_payload.items() if key != "response_format"}
-            request_attempts += 1
-            response = httpx.post(
-                endpoint, headers=headers, json=fallback_payload,
-                timeout=httpx.Timeout(timeout_seconds, connect=5.0),
-            )
-            http_status = response.status_code
-        response.raise_for_status()
-        raw_items = _parse_response(response)
+        request_attempts += attempts
     except Exception as exc:
-        # Never log request headers, payloads, provider response bodies, or exception text.
         logger.warning("AI provider request failed (%s)", type(exc).__name__)
         return {
             "status": "failed",
@@ -515,75 +614,57 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
             "provider_error_code": _provider_error_code(exc),
         }
 
-    allowed_fingerprints = {str(item.get("fingerprint")) for item in eligible if item.get("fingerprint")}
-    normalized = []
-    seen = set()
-    rejection_counts = {
-        "non_object": 0,
-        "missing_fingerprint": 0,
-        "unknown_fingerprint": 0,
-        "duplicate_fingerprint": 0,
-        "missing_root_cause": 0,
-        "missing_impact": 0,
-        "missing_recommendation": 0,
-        "impact_fallback_from_scanner": 0,
-    }
-    for item in raw_items:
-        if not isinstance(item, dict):
-            rejection_counts["non_object"] += 1
-            continue
-        fingerprint_value = item.get("fingerprint")
-        fingerprint = fingerprint_value.strip() if isinstance(fingerprint_value, str) else ""
-        if not fingerprint:
-            rejection_counts["missing_fingerprint"] += 1
-            continue
-        if fingerprint not in allowed_fingerprints:
-            rejection_counts["unknown_fingerprint"] += 1
-            continue
-        if fingerprint in seen:
-            rejection_counts["duplicate_fingerprint"] += 1
-            continue
-        try:
-            confidence = max(0.0, min(1.0, float(item.get("confidence", 0.0))))
-        except (TypeError, ValueError):
-            confidence = 0.0
-        source_finding = next(
-            (finding for finding in eligible if str(finding.get("fingerprint")) == fingerprint),
-            {},
-        )
-        text_fields = {
-            "root_cause": (3000, "missing_root_cause"),
-            "impact": (2000, "missing_impact"),
-            "recommendation": (3000, "missing_recommendation"),
+    normalized, rejection_counts, model_item_keys = _normalize_explanations(raw_items, eligible)
+
+    # Small local models may echo scanner records in a multi-finding response.
+    # Retry only findings without a complete validated explanation, one at a time.
+    explained_fingerprints = {item["fingerprint"] for item in normalized}
+    retry_findings = [
+        finding for finding in eligible
+        if str(finding.get("fingerprint") or "") not in explained_fingerprints
+    ]
+    retry_succeeded = 0
+    for finding in retry_findings:
+        single_payload = {
+            "model": settings.llm_model,
+            "temperature": 0.1,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(
+                    {"language": language, "findings": [_safe_finding(finding)]},
+                    ensure_ascii=False, separators=(",", ":"),
+                )},
+            ],
         }
-        normalized_fields = {}
-        missing_required_field = False
-        for field, (limit, counter) in text_fields.items():
-            value = item.get(field)
-            normalized_value = value.strip()[:limit] if isinstance(value, str) else ""
-            if field == "impact" and not normalized_value:
-                # The scanner's why_it_matters is authoritative evidence and is
-                # a safe fallback when a small local model omits the impact key.
-                scanner_impact = source_finding.get("why_it_matters")
-                if isinstance(scanner_impact, str) and scanner_impact.strip():
-                    normalized_value = scanner_impact.strip()[:limit]
-                    rejection_counts["impact_fallback_from_scanner"] += 1
-            if not normalized_value:
-                rejection_counts[counter] += 1
-                missing_required_field = True
-            normalized_fields[field] = normalized_value
-        if missing_required_field:
-            continue
-        evidence_limits_value = item.get("evidence_limits")
-        evidence_limits = evidence_limits_value.strip()[:2000] if isinstance(evidence_limits_value, str) else ""
-        normalized.append({
-            "fingerprint": fingerprint,
-            **normalized_fields,
-            "confidence": confidence,
-            "evidence_limits": evidence_limits,
-            "source_evidence": _source_evidence(source_finding),
-        })
-        seen.add(fingerprint)
+        try:
+            single_items, attempts, single_status = _request_model_items(
+                endpoint, headers, single_payload, timeout_seconds,
+            )
+            request_attempts += attempts
+            http_status = single_status
+            single_normalized, single_counts, single_keys = _normalize_explanations(
+                single_items, [finding],
+            )
+            _merge_rejection_counts(rejection_counts, single_counts)
+            model_item_keys = sorted(set(model_item_keys) | set(single_keys))
+            raw_items.extend(single_items)
+            if single_normalized:
+                normalized.extend(single_normalized)
+                retry_succeeded += 1
+        except Exception as exc:
+            # Keep partial batch successes; do not expose provider response or exception text.
+            logger.warning(
+                "AI explanation single-finding retry failed (error_type=%s)",
+                type(exc).__name__,
+            )
+
+    if retry_findings:
+        logger.info(
+            "AI explanation individual retries: attempted=%d recovered=%d remaining=%d",
+            len(retry_findings), retry_succeeded, len(retry_findings) - retry_succeeded,
+        )
 
     # Log only model object key names (never values) to diagnose schema drift safely.
     model_item_keys = sorted({
