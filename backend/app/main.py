@@ -140,6 +140,7 @@ from app.security.workspaces_api import router as workspaces_router
 from app.security.tokens_api import router as tokens_router, require_workspace_api_token
 from app.security.dashboard_api import router as dashboard_router
 from app.security.findings_api import router as findings_router
+from app.security.integrations_api import router as integrations_router
 from app.security.tenancy import require_active_workspace
 from app.security.sessions import get_session_context
 from app.security.file_versions import sha256_text, version_matches, project_file_lock
@@ -152,6 +153,7 @@ app.include_router(workspaces_router)
 app.include_router(tokens_router)
 app.include_router(dashboard_router)
 app.include_router(findings_router)
+app.include_router(integrations_router)
 
 
 def _project_in_active_workspace(session, request: Request, project_id: UUID, *, write: bool = False):
