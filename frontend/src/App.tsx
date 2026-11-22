@@ -1802,7 +1802,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
       setSelectedNodeId(generatedNodes[0].id);
       setSelectedEdgeId(null);
       setAiGraphOpen(false);
-      setResult("AI создал черновик · " + (data.graph.name || "workflow") + ". Проверь блоки и соединения, затем нажми «Проверить» и «Сохранить». Запуск не выполнялся.");
+      setResult("AI создал черновик · " + (data.graph.name || "workflow") + ". Проверь блоки и соединения. Граф сохранится автоматически; перед запуском выполни проверку. Запуск не выполнялся.");
       setShowResult(true);
     } catch (error) {
       setAiGraphError(String(error));
@@ -2186,7 +2186,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
             <button role="menuitem" disabled={busy} onClick={() => { setAppMenuOpen(false); void validateWorkflow(); }}><Check size={15}/><span><b>Проверить граф</b><small>Проверить структуру и связи</small></span></button>
             <div className="app-menu-divider"/>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setLeftCollapsed(false); setLeftTab("projects"); setProjectFolderOpen(true); }}><FolderOpen size={15}/><span><b>Библиотека проектов</b><small>Исходные проекты и файлы</small></span></button>
-            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Шаблоны workflow</b><small>Готовые security-сценарии</small></span></button>
+            <button role="menuitem" onClick={() => { setAppMenuOpen(false); setTemplateLibraryOpen(true); }}><Library size={15}/><span><b>Каталог workflow</b><small>Готовые решения и сохранённые графы</small></span></button>
             <button role="menuitem" disabled={busy || aiGraphBusy} onClick={() => { setAppMenuOpen(false); setAiGraphError(""); setAiGraphOpen(true); }}><Sparkles size={15}/><span><b>Создать граф с AI</b><small>Сгенерировать черновик схемы</small></span></button>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setDashboardOpen(true); }}><BarChart3 size={15}/><span><b>Аналитика</b><small>Сводка активной рабочей области</small></span></button>
             <button role="menuitem" onClick={() => { setAppMenuOpen(false); setWorkspaceManagerOpen(true); }}><Building2 size={15}/><span><b>Рабочие области</b><small>Организации и участники</small></span></button>
@@ -2209,7 +2209,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           </select>
           {workspaceSwitching && <i className="workspace-spinner" />}
         </div>
-        <button className="icon-button" type="button" disabled={busy} onClick={() => setTemplateLibraryOpen(true)} title="Библиотека шаблонов" aria-label="Библиотека шаблонов"><Library size={16}/></button>
+        <button className="icon-button" type="button" disabled={busy} onClick={() => setTemplateLibraryOpen(true)} title="Каталог workflow" aria-label="Каталог workflow"><Library size={16}/></button>
         <button className="icon-button" type="button" disabled={busy || aiGraphBusy} onClick={() => { setAiGraphError(""); setAiGraphOpen(true); }} title="Создать граф с AI" aria-label="Создать граф с AI"><Sparkles size={16}/></button>
         <button className="icon-button" type="button" disabled={busy} onClick={saveWorkflow} title="Сохранить workflow" aria-label="Сохранить workflow"><Save size={16}/></button>
         <button className="icon-button" type="button" disabled={busy} onClick={validateWorkflow} title="Проверить workflow" aria-label="Проверить workflow"><Check size={16}/></button>
@@ -2766,7 +2766,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     {aiGraphOpen && <div className="template-library-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !aiGraphBusy) setAiGraphOpen(false); }}>
       <section className="template-library-dialog ai-graph-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-graph-title">
         <header className="template-library-header">
-          <div><span className="eyebrow">AI WORKFLOW DRAFT</span><h2 id="ai-graph-title"><Sparkles size={18}/> Создать граф по описанию</h2><p>AI предложит только блоки из реестра INVEST. Граф будет проверен, но не сохранён и не запущен.</p></div>
+          <div><span className="eyebrow">AI WORKFLOW DRAFT</span><h2 id="ai-graph-title"><Sparkles size={18}/> Создать граф по описанию</h2><p>AI предложит блоки из реестра INVEST. Граф появится как черновик и автоматически сохранится; запуск выполняется отдельно.</p></div>
           <button className="icon-button" onClick={() => !aiGraphBusy && setAiGraphOpen(false)} aria-label="Закрыть"><X size={16}/></button>
         </header>
         <div className="ai-graph-form">
