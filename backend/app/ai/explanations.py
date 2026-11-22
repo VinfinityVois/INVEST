@@ -127,29 +127,94 @@ def _provider_error(exc: Exception) -> str:
         if status in {400, 422}:
             return f"LLM-провайдер отклонил формат запроса (HTTP {status}). Проверьте совместимость OpenAI API и модель."
         return f"LLM-провайдер вернул HTTP {status}."
-    if isinstance(exc, (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError)):
-        return "LLM-провайдер вернул ответ в неожиданном формате. Требуется OpenAI-совместимый chat/completions API."
+    if isinstance(exc, json.JSONDecodeError):
+        return "Модель вернула текст, который не удалось разобрать как JSON. Попробуйте повторить анализ или увеличить LLM_MAX_TOKENS."
+    if isinstance(exc, (KeyError, IndexError, TypeError, ValueError)):
+        return "LLM вернул некорректную структуру ответа. Проверьте совместимость chat/completions API и ответ модели."
+    if isinstance(exc, ExplanationGatewayError):
+        return str(exc)
     if isinstance(exc, ExplanationGatewayError):
         return str(exc)
     return "Не удалось выполнить запрос к LLM-провайдеру. Проверьте настройки и логи worker."
 
 
+def _extract_json_object(content: str) -> dict:
+    """Parse a JSON object from common local-model response variants."""
+    text = content.strip().lstrip("\\ufeff")
+    text = re.sub(r"^\\s*```(?:json)?\\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\\s*```\\s*$", "", text)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # Small local models sometimes add a short preamble despite the JSON-only
+        # instruction. Extract one balanced object without accepting trailing prose.
+        start = text.find("{")
+        if start < 0:
+            raise
+        depth = 0
+        in_string = False
+        escaped = False
+        end = None
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+            elif char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = index + 1
+                    break
+        if end is None:
+            raise
+        parsed = json.loads(text[start:end])
+    if not isinstance(parsed, dict):
+        raise ValueError("AI response JSON must be an object")
+    return parsed
+
+
 def _parse_response(response: httpx.Response) -> list:
     body = response.json()
-    content = body["choices"][0]["message"]["content"]
-    if isinstance(content, list):
-        content = "".join(
-            str(part.get("text", "")) for part in content if isinstance(part, dict)
+    if not isinstance(body, dict):
+        raise ValueError("OpenAI response body must be an object")
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        # Keep the diagnostic useful without exposing provider response contents.
+        keys = ", ".join(sorted(str(key) for key in body.keys())[:12])
+        raise ExplanationGatewayError(
+            f"LLM вернул несовместимый ответ: отсутствует choices[]. Проверьте, что URL указывает на /v1/chat/completions (поля ответа: {keys or 'нет'})."
         )
-    if not isinstance(content, str):
-        raise ValueError("LLM message content is not text")
-    content = content.strip()
-    content = re.sub(r"^\s*```(?:json)?\s*", "", content, flags=re.IGNORECASE)
-    content = re.sub(r"\s*```\s*$", "", content)
-    parsed = json.loads(content)
-    raw_items = parsed.get("explanations", [])
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise ExplanationGatewayError("LLM вернул choices без message; требуется chat/completions API.")
+    content = message.get("content")
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                value = part.get("text")
+                if isinstance(value, str):
+                    parts.append(value)
+        content = "".join(parts)
+    elif isinstance(content, dict):
+        content = json.dumps(content, ensure_ascii=False)
+    if not isinstance(content, str) or not content.strip():
+        finish_reason = choices[0].get("finish_reason")
+        raise ExplanationGatewayError(
+            f"LLM не вернул текст объяснений (finish_reason={finish_reason or 'unknown'}). Увеличьте LLM_MAX_TOKENS или проверьте ответ модели."
+        )
+    parsed = _extract_json_object(content)
+    raw_items = parsed.get("explanations")
     if not isinstance(raw_items, list):
-        raise ValueError("explanations must be an array")
+        raise ValueError("AI JSON must contain an explanations array")
     return raw_items
 
 
@@ -202,7 +267,9 @@ def _provider_error_code(exc: Exception) -> str:
         return "PROVIDER_NETWORK_ERROR"
     if isinstance(exc, httpx.HTTPStatusError):
         return f"PROVIDER_HTTP_{exc.response.status_code}"
-    if isinstance(exc, (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError)):
+    if isinstance(exc, json.JSONDecodeError):
+        return "PROVIDER_INVALID_JSON"
+    if isinstance(exc, (KeyError, IndexError, TypeError, ValueError)):
         return "PROVIDER_INVALID_RESPONSE"
     if isinstance(exc, ExplanationGatewayError):
         return "PROVIDER_CONFIGURATION_INVALID"
@@ -313,7 +380,6 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "temperature": 0.1,
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
-        "reasoning_effort": "none",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
