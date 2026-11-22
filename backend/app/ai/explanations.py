@@ -392,7 +392,12 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "Do not repeat secrets or attempt to infer redacted values. Do not invent CVEs, APIs, "
         "or facts not supported by the supplied evidence. If evidence is insufficient, say so. "
         "Return only a JSON object with an 'explanations' array. Each item must contain "
-        "fingerprint, root_cause, impact, recommendation, confidence (0..1), and evidence_limits."
+        "all six keys: fingerprint, root_cause, impact, recommendation, confidence, and evidence_limits. "
+        "The impact key is mandatory: describe the concrete security or business consequence if the finding is exploited; "
+        "do not omit it, do not rename it to risk or business_impact, and do not leave it empty. "
+        "If the exact consequence is uncertain, state the plausible consequence supported by the finding and qualify the uncertainty. "
+        "Use this exact shape (values are examples, not facts): "
+        '{"explanations":[{"fingerprint":"<exact input fingerprint>","root_cause":"<cause>","impact":"<security consequence>","recommendation":"<actionable fix>","confidence":0.7,"evidence_limits":"<limits>"}]}.'
     )
     user_prompt = json.dumps(
         {"language": language, "findings": payload},
@@ -478,6 +483,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "missing_root_cause": 0,
         "missing_impact": 0,
         "missing_recommendation": 0,
+        "impact_fallback_from_scanner": 0,
     }
     for item in raw_items:
         if not isinstance(item, dict):
@@ -512,6 +518,13 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         for field, (limit, counter) in text_fields.items():
             value = item.get(field)
             normalized_value = value.strip()[:limit] if isinstance(value, str) else ""
+            if field == "impact" and not normalized_value:
+                # The scanner's why_it_matters is authoritative evidence and is
+                # a safe fallback when a small local model omits the impact key.
+                scanner_impact = source_finding.get("why_it_matters")
+                if isinstance(scanner_impact, str) and scanner_impact.strip():
+                    normalized_value = scanner_impact.strip()[:limit]
+                    rejection_counts["impact_fallback_from_scanner"] += 1
             if not normalized_value:
                 rejection_counts[counter] += 1
                 missing_required_field = True
@@ -534,7 +547,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         "rejected_non_object=%d rejected_missing_fingerprint=%d "
         "rejected_unknown_fingerprint=%d rejected_duplicate_fingerprint=%d "
         "rejected_missing_root_cause=%d rejected_missing_impact=%d "
-        "rejected_missing_recommendation=%d",
+        "rejected_missing_recommendation=%d impact_fallback_from_scanner=%d",
         len(raw_items), len(normalized),
         rejection_counts["non_object"],
         rejection_counts["missing_fingerprint"],
@@ -543,6 +556,7 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         rejection_counts["missing_root_cause"],
         rejection_counts["missing_impact"],
         rejection_counts["missing_recommendation"],
+        rejection_counts["impact_fallback_from_scanner"],
     )
     logger.info(
         "AI explanations completed: analyzed=%d explained=%d skipped=%d model=%s",
