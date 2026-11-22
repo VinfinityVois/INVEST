@@ -1181,7 +1181,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           setWorkflowId(draft.workflowId);
           setWorkflowDraftName(draft.graph.name || "Восстановленный черновик");
           setWorkflowDirty(true);
-          setResult("Восстановлен локальный черновик workflow. Изменения будут автоматически сохранены.");
+          setResult("Восстановлен локальный черновик workflow. Изменения будут автоматически сохранены; секретные поля и адреса уведомлений нужно проверить повторно.");
         } else if (active && saved) {
           hydrateWorkflow(saved);
           setResult("Восстановлен последний workflow · " + (saved.name || saved.graph?.name || ""));
@@ -1203,7 +1203,19 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   useEffect(() => {
     if (!workflowReady || !workflowDirty || !activeWorkspaceId) return;
     try {
-      window.localStorage.setItem(workflowDraftStorageKey, JSON.stringify({ workflowId, graph, updatedAt: Date.now() }));
+      // Keep a recovery copy without credentials or notification destinations in browser storage.
+      const safeDraftGraph = {
+        ...graph,
+        nodes: graph.nodes.map(node => {
+          const config = { ...node.config };
+          for (const key of Object.keys(config)) {
+            if (/(api[_-]?key|token|password|secret|authorization|chat[_-]?ids)/i.test(key)) delete config[key];
+          }
+          if (node.type === "notify.webhook") delete config.url;
+          return { ...node, config };
+        }),
+      };
+      window.localStorage.setItem(workflowDraftStorageKey, JSON.stringify({ workflowId, graph: safeDraftGraph, updatedAt: Date.now() }));
     } catch { /* Keep the in-memory graph if browser storage is unavailable. */ }
   }, [workflowReady, workflowDirty, workflowDraftStorageKey, workflowId, graph]);
 
