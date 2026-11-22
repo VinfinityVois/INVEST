@@ -200,6 +200,7 @@ def update_integrations(payload: IntegrationSettingsUpdate, request: Request):
             entity="workspace_integrations",
             entity_id=str(workspace.id),
             details={
+                "actor_user_id": str(request.state.user.id),
                 "git_repository_count": len(payload.git_repositories),
                 "telegram_chat_count": len(payload.telegram_chat_ids),
                 "webhook_host_count": len(payload.webhook_hosts),
