@@ -555,3 +555,62 @@ def test_parser_logs_safe_metadata_for_invalid_http_json(caplog):
     assert "body_bytes=" in diagnostic
     assert "do-not-log" not in diagnostic
 
+
+
+
+def test_gateway_logs_safe_counts_for_rejected_model_explanations(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    payload = {
+        "explanations": [
+            "not-an-object",
+            {},
+            {"fingerprint": "invented-secret-fingerprint", "root_cause": "private text"},
+            {
+                "fingerprint": "finding-a",
+                "root_cause": "Cause",
+                "impact": "Impact",
+                "recommendation": "Fix",
+            },
+            {
+                "fingerprint": "finding-a",
+                "root_cause": "Duplicate",
+                "impact": "Duplicate",
+                "recommendation": "Duplicate",
+            },
+            {
+                "fingerprint": "finding-b",
+                "root_cause": "",
+                "impact": None,
+                "recommendation": "",
+            },
+        ]
+    }
+
+    monkeypatch.setattr(
+        explanations.httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse({
+            "choices": [{"message": {"content": json.dumps(payload)}}]
+        }),
+    )
+
+    result = explanations.explain_findings([
+        {"fingerprint": "finding-a"},
+        {"fingerprint": "finding-b"},
+    ])
+
+    assert result["explained_count"] == 1
+    assert result["unexplained_count"] == 1
+    diagnostic = caplog.text
+    assert "AI explanation normalization: raw_items=6 accepted=1" in diagnostic
+    assert "rejected_non_object=1" in diagnostic
+    assert "rejected_missing_fingerprint=1" in diagnostic
+    assert "rejected_unknown_fingerprint=1" in diagnostic
+    assert "rejected_duplicate_fingerprint=1" in diagnostic
+    assert "rejected_missing_root_cause=1" in diagnostic
+    assert "rejected_missing_impact=1" in diagnostic
+    assert "rejected_missing_recommendation=1" in diagnostic
+    assert "invented-secret-fingerprint" not in diagnostic
+    assert "private text" not in diagnostic
