@@ -660,7 +660,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
         setManifests(data);
         setNodes(current => current.map(node => {
           const manifest = data.find(item => item.type === node.data.nodeType);
-          return manifest ? { ...node, data: { ...node.data, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } } : node;
+          return manifest ? { ...node, data: { ...node.data, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [] } } : node;
         }));
         setNotice("API подключён · реестр компонентов синхронизирован");
       })
