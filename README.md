@@ -169,12 +169,7 @@ API:
 
 Краткий сценарий презентации, preflight и проверка полного прогона: [docs/demo-runbook.md](docs/demo-runbook.md).
 
-Для воспроизводимого показа используйте публичный учебный репозиторий [TBagirov/training](https://github.com/TBagirov/training), зафиксированный CI на commit \`fe1fcbe212669783480666b9b60147c8a8c6eef4\`. Это специально подготовленный учебный стенд, а не production-цель. Добавьте точный URL в корневой \`.env\`:
-
-\`\`\`env
-ALLOWED_TARGETS=https://github.com/TBagirov/training
-NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
-\`\`\`
+Для воспроизводимого показа используйте публичный учебный репозиторий [TBagirov/training](https://github.com/TBagirov/training), зафиксированный CI на commit \`fe1fcbe212669783480666b9b60147c8a8c6eef4\`. Это специально подготовленный учебный стенд, а не production-цель. Добавьте `https://github.com/TBagirov/training` в список Git-репозиториев и `webhook.site` в список webhook-доменов через **Главное меню → Интеграции платформы** активной рабочей области.
 
 Путь демонстрационного Kotlin/Spring-проекта внутри репозитория: \`training-project/\`. Создайте workflow с цепочкой:
 
@@ -190,15 +185,13 @@ NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
 .\scripts\demo.ps1 -WebhookUrl "https://webhook.site/ВАШ-УНИКАЛЬНЫЙ-ID"
 \`\`\`
 
-Перед запуском задайте в корневом \`.env\`:
-\`\`\`env
-ALLOWED_TARGETS=https://github.com/TBagirov/training
-NOTIFY_WEBHOOK_ALLOWED_HOSTS=webhook.site
+Перед запуском добавьте репозиторий и hostname webhook через **Главное меню → Интеграции платформы**. В корневом `.env` остаются только инфраструктурные параметры и настройки LLM:
+```env
 LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=ВАША_OPENAI_COMPATIBLE_MODEL
 LLM_API_KEY=ВАШ_API_KEY
-\`\`\`
-После изменения \`.env\` перезапустите API и worker. Для провайдера, отличного от OpenAI, укажите его OpenAI-compatible endpoint и модель.
+```
+Для провайдера, отличного от OpenAI, укажите его OpenAI-compatible endpoint и модель.
 
 
 ## Условная фильтрация находок
