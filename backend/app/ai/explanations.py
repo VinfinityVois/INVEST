@@ -416,9 +416,9 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         separators=(",", ":"),
     )
     try:
-        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 90.0))
+        timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 180.0))
     except (TypeError, ValueError):
-        timeout_seconds = 90.0
+        timeout_seconds = 180.0
     try:
         max_tokens = max(512, min(int(settings.llm_max_tokens), 32768))
     except (TypeError, ValueError):
