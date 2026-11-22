@@ -20,29 +20,32 @@ def _load_or_create_master_key(path: Path) -> bytes:
         except OSError:
             pass
 
-        fd, temporary_name = tempfile.mkstemp(
-            prefix=".invest-master-",
-            suffix=".tmp",
-            dir=path.parent,
-        )
-        try:
-            with os.fdopen(fd, "wb") as temporary:
-                temporary.write(os.urandom(32))
-                temporary.flush()
-                os.fsync(temporary.fileno())
+        if path.is_file():
+            key = path.read_bytes()
+        else:
+            fd, temporary_name = tempfile.mkstemp(
+                prefix=".invest-master-",
+                suffix=".tmp",
+                dir=path.parent,
+            )
             try:
-                # Hard-link creation is atomic: concurrent API/worker startup
-                # can never observe a partially written master key.
-                os.link(temporary_name, path)
-            except FileExistsError:
-                pass
-        finally:
-            try:
-                os.unlink(temporary_name)
-            except FileNotFoundError:
-                pass
+                with os.fdopen(fd, "wb") as temporary:
+                    temporary.write(os.urandom(32))
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                try:
+                    # Hard-link creation is atomic: concurrent API/worker startup
+                    # can never observe a partially written master key.
+                    os.link(temporary_name, path)
+                except FileExistsError:
+                    pass
+            finally:
+                try:
+                    os.unlink(temporary_name)
+                except FileNotFoundError:
+                    pass
 
-        key = path.read_bytes()
+            key = path.read_bytes()
         try:
             os.chmod(path, 0o600)
         except OSError:
