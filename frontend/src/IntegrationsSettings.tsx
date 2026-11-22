@@ -5,6 +5,7 @@ type IntegrationSettings = {
   git_repositories: string[];
   telegram_chat_ids: string[];
   telegram_bot_configured: boolean;
+  telegram_bot_available: boolean;
   webhook_hosts: string[];
 };
 
@@ -31,6 +32,7 @@ export default function IntegrationsSettings({ onClose }: Props) {
   const [webhookHosts, setWebhookHosts] = useState("");
   const [botToken, setBotToken] = useState("");
   const [tokenConfigured, setTokenConfigured] = useState(false);
+  const [tokenAvailable, setTokenAvailable] = useState(false);
   const [removeToken, setRemoveToken] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ export default function IntegrationsSettings({ onClose }: Props) {
     setTelegramChatIds((data.telegram_chat_ids || []).join("\n"));
     setWebhookHosts((data.webhook_hosts || []).join("\n"));
     setTokenConfigured(Boolean(data.telegram_bot_configured));
+    setTokenAvailable(Boolean(data.telegram_bot_available));
   };
 
   useEffect(() => {
@@ -101,9 +104,9 @@ export default function IntegrationsSettings({ onClose }: Props) {
           <textarea value={gitRepositories} onChange={event => setGitRepositories(event.target.value)} rows={4} placeholder={"https://github.com/owner/repository\nhttps://github.com/another/project"} spellCheck={false}/>
         </section>
         <section className="integration-setting">
-          <div className="integration-setting-heading"><Send size={16}/><div><b>Telegram</b><small>Токен бота хранится зашифрованным. Chat ID — по одному на строку.</small></div><span className={tokenConfigured ? "integration-status is-ready" : "integration-status"}>{tokenConfigured ? "ТОКЕН СОХРАНЁН" : "НЕ ПОДКЛЮЧЁН"}</span></div>
+          <div className="integration-setting-heading"><Send size={16}/><div><b>Telegram</b><small>Токен бота хранится зашифрованным. Chat ID — по одному на строку.</small></div><span className={tokenConfigured ? "integration-status is-ready" : "integration-status"}>{tokenConfigured ? "ЗАШИФРОВАН" : tokenAvailable ? "LEGACY ENV" : "НЕ ПОДКЛЮЧЁН"}</span></div>
           <label className="integration-field-label">Токен Telegram Bot</label>
-          <input type="password" autoComplete="new-password" value={botToken} onChange={event => setBotToken(event.target.value)} placeholder={tokenConfigured ? "Оставь пустым, чтобы не менять токен" : "Вставь токен бота один раз"}/>
+          <input type="password" autoComplete="new-password" value={botToken} onChange={event => setBotToken(event.target.value)} placeholder={tokenConfigured ? "Оставь пустым, чтобы не менять токен" : tokenAvailable ? "Токен уже доступен из legacy-конфигурации; можно перенести сюда" : "Вставь токен бота один раз"}/>
           {tokenConfigured && <label className="integration-remove-token"><input type="checkbox" checked={removeToken} onChange={event => setRemoveToken(event.target.checked)}/> Удалить сохранённый токен</label>}
           <label className="integration-field-label">Получатели (chat_id)</label>
           <textarea value={telegramChatIds} onChange={event => setTelegramChatIds(event.target.value)} rows={3} placeholder={"123456789\n-1001234567890"} spellCheck={false}/>
