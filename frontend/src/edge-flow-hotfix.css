@@ -1,8 +1,120 @@
-/* INVEST UI hotfixes */
+/* INVEST UI hotfixes v3 */
 
-/* Brighter edges (fallback if CategoryEdge not patched) */
+/* ===== Findings / Inspector SCROLL (critical) ===== */
+.shell,
+.shell .layout {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+.shell .layout {
+  align-items: stretch !important;
+  overflow: hidden !important;
+}
+.shell .layout > .panel.palette,
+.shell .layout > .panel.inspector,
+.shell .layout > .editor {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  align-self: stretch !important;
+}
+
+.shell .panel.inspector,
+.shell aside.panel.inspector {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+.shell .panel.inspector > .inspector-top,
+.shell .panel.inspector > .inspector-tabs,
+.shell .panel.inspector > .result-section {
+  flex: 0 0 auto !important;
+}
+
+.shell .panel.inspector > .inspector-tab-panel {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 12px 13px !important;
+  touch-action: pan-y;
+}
+
+.shell .panel.inspector > .inspector-tab-panel[hidden] {
+  display: none !important;
+  flex: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.shell .panel.inspector .finding-browser,
+.shell .panel.inspector .finding-file-group,
+.shell .panel.inspector .findings-head {
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.shell .panel.inspector .finding-detail {
+  max-height: min(42vh, 380px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.shell .panel.inspector .finding-detail pre,
+.shell .panel.inspector .source-code-preview pre,
+.shell .panel.inspector .finding-ai-explanation {
+  max-height: 200px !important;
+  overflow: auto !important;
+}
+
+.shell .panel.inspector .finding p,
+.shell .panel.inspector code,
+.shell .panel.inspector .finding-table-row span,
+.shell .panel.inspector .finding-file-heading b {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  min-width: 0 !important;
+}
+
+.shell .panel.inspector .result-section {
+  max-height: 140px !important;
+  overflow: auto !important;
+  border-top: 1px solid rgba(255,255,255,.08);
+  flex-shrink: 0 !important;
+}
+
+.shell .panel.palette {
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.shell .layout .editor {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+.shell .layout .flow {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  height: 0 !important;
+}
+
+/* ===== Edges brighter ===== */
 .shell .react-flow__edge .react-flow__edge-path {
-  stroke-width: 2.4px;
+  stroke-width: 2.5px;
   opacity: 0.95 !important;
 }
 .shell .react-flow__edge.edge-active .react-flow__edge-path {
@@ -15,122 +127,35 @@
 }
 .shell .react-flow__edge.edge-completed .react-flow__edge-path {
   stroke: #10b981 !important;
-  stroke-width: 2.6px !important;
+  stroke-width: 2.7px !important;
   stroke-dasharray: none !important;
   animation: none !important;
   opacity: 1 !important;
   filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.55)) !important;
 }
 .shell .react-flow__edge.edge-idle .react-flow__edge-path {
-  stroke-width: 2.4px !important;
-  stroke-dasharray: none !important;
-  animation: none !important;
+  stroke-width: 2.5px !important;
   opacity: 0.95 !important;
-  filter: drop-shadow(0 0 4px rgba(148, 163, 184, 0.35)) !important;
+  filter: drop-shadow(0 0 5px rgba(148, 163, 184, 0.4)) !important;
 }
 @keyframes invest-wire-flow { to { stroke-dashoffset: -40; } }
 
-/* Align side panels + center column to same top/bottom */
-.shell .layout {
-  align-items: stretch !important;
-  min-height: 0 !important;
-  height: 100% !important;
-}
-.shell .layout > .panel,
-.shell .layout > .palette,
-.shell .layout > .inspector,
-.shell .layout > .editor {
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  align-self: stretch !important;
-}
-.shell .layout .editor {
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-}
-.shell .layout .flow {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-}
-
-/* Inspector scroll */
-.shell .inspector,
-.shell .layout .inspector.panel {
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-}
-.shell .inspector-top,
-.shell .inspector-tabs { flex: 0 0 auto !important; }
-.shell .inspector-tab-panel {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 12px 13px !important;
-}
-.shell .inspector-tab-panel .finding-detail {
-  max-height: min(40vh, 360px) !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-.shell .inspector-tab-panel .finding-detail pre,
-.shell .inspector-tab-panel .source-code-preview pre,
-.shell .inspector-tab-panel .finding-ai-explanation {
-  max-height: 220px !important;
-  overflow: auto !important;
-}
-.shell .inspector-tab-panel .finding p,
-.shell .inspector-tab-panel code,
-.shell .inspector-tab-panel .finding-table-row,
-.shell .inspector-tab-panel .finding-file-heading b {
-  overflow-wrap: anywhere !important;
-  word-break: break-word !important;
-  min-width: 0 !important;
-}
-.shell .inspector-tab-panel .finding-file-group {
-  max-width: 100% !important;
-  overflow: hidden !important;
-}
-.shell .inspector-tab-panel .findings-head,
-.shell .inspector-tab-panel .finding-browser {
-  min-width: 0 !important;
-  max-width: 100% !important;
-}
-
-.shell .palette {
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  overflow-y: auto !important;
-}
-
-/* Topbar polish */
+/* ===== Topbar + burger RIGHT, menu opens LEFT ===== */
 .shell .topbar {
   display: flex !important;
   align-items: center !important;
-  gap: 12px !important;
+  gap: 10px !important;
   overflow: visible !important;
   position: relative !important;
-  z-index: 50 !important;
+  z-index: 60 !important;
   min-height: 52px !important;
-  padding: 0 4px !important;
 }
 .shell .topbar-leading {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
-  min-width: 0 !important;
   flex: 1 1 auto !important;
+  min-width: 0 !important;
   overflow: visible !important;
 }
 .shell .topbar-trailing {
@@ -139,40 +164,43 @@
   gap: 6px !important;
   flex: 0 0 auto !important;
   margin-left: auto !important;
+  position: relative !important;
+  z-index: 70 !important;
 }
-.shell .app-menu-wrap { position: relative !important; z-index: 90 !important; }
+.shell .app-menu-wrap {
+  position: relative !important;
+  z-index: 100 !important;
+  order: 99;
+}
 .shell .app-menu {
   position: absolute !important;
-  z-index: 300 !important;
-  top: calc(100% + 6px) !important;
-  left: 0 !important;
-  width: min(280px, 92vw) !important;
-  max-height: min(70vh, 520px) !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  left: auto !important;
+  width: min(300px, 92vw) !important;
+  max-height: min(72vh, 560px) !important;
   overflow-y: auto !important;
+  z-index: 400 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform-origin: top right;
+  animation: invest-menu-in .16s ease;
+  box-shadow: 0 12px 40px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06) !important;
+}
+@keyframes invest-menu-in {
+  from { opacity: 0; transform: translateX(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.shell .topbar.menu-open .topbar-trailing > :not(.app-menu-wrap) {
+  opacity: 0.55;
+  transition: opacity .15s ease;
 }
 
-/* Soft UI motion */
-.shell .panel {
-  transition: box-shadow .2s ease, border-color .2s ease, transform .2s ease;
-}
 .shell .workflow-node {
   transition: box-shadow .2s ease, border-color .2s ease, transform .15s ease !important;
 }
-.shell .workflow-node:hover {
-  transform: translateY(-1px);
-}
-.shell .inspector-tab-panel {
-  animation: invest-fade-in .18s ease;
-}
-@keyframes invest-fade-in {
-  from { opacity: 0.6; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
-.shell .icon-button,
-.shell .topbar-trailing button {
-  transition: background .15s ease, border-color .15s ease, transform .12s ease;
-}
-.shell .icon-button:hover,
-.shell .topbar-trailing button:hover {
-  transform: translateY(-1px);
-}
+.shell .workflow-node:hover { transform: translateY(-1px); }
+.shell .icon-button { transition: transform .12s ease, background .15s ease; }
+.shell .icon-button:hover { transform: translateY(-1px); }
