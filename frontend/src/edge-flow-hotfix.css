@@ -1,4 +1,4 @@
-/* INVEST UI hotfixes v7 — Findings scroll via explicit viewport height */
+/* INVEST UI hotfixes v8 */
 
 html, body, #root {
   height: 100% !important;
@@ -40,7 +40,6 @@ html, body, #root {
   overflow: hidden !important;
 }
 
-.shell aside.panel.palette:not(.is-collapsed),
 .shell .panel.palette:not(.is-collapsed) {
   display: block !important;
   overflow-x: hidden !important;
@@ -50,13 +49,11 @@ html, body, #root {
   box-sizing: border-box !important;
 }
 
-.shell aside.panel.inspector:not(.is-collapsed),
 .shell .panel.inspector:not(.is-collapsed) {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
   padding: 0 !important;
-  box-sizing: border-box !important;
 }
 
 .shell .panel.inspector > .inspector-top,
@@ -65,55 +62,43 @@ html, body, #root {
   flex: 0 0 auto !important;
 }
 
-.shell aside.panel.inspector > .inspector-tab-panel,
+/* Findings tab — explicit scroll container */
 .shell .panel.inspector > .inspector-tab-panel,
-.shell .panel.inspector div.inspector-tab-panel {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
+.shell .panel.inspector > .inspector-tab-panel.findings-tab-panel {
   height: calc(100vh - 220px) !important;
   max-height: calc(100vh - 220px) !important;
+  min-height: 0 !important;
   overflow-x: hidden !important;
   overflow-y: scroll !important;
   overscroll-behavior: contain !important;
   -webkit-overflow-scrolling: touch !important;
   padding: 12px 13px !important;
   box-sizing: border-box !important;
-  touch-action: pan-y !important;
   scrollbar-gutter: stable !important;
   scrollbar-width: thin !important;
   scrollbar-color: #3d5a78 transparent !important;
 }
 
-.shell aside.panel.inspector > .inspector-tab-panel[hidden],
-.shell .panel.inspector > .inspector-tab-panel[hidden],
-.shell .panel.inspector div.inspector-tab-panel[hidden] {
+.shell .panel.inspector > .inspector-tab-panel[hidden] {
   display: none !important;
   height: 0 !important;
   max-height: 0 !important;
-  min-height: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
-  flex: 0 0 0 !important;
-  border: 0 !important;
 }
 
-.shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar {
-  width: 10px !important;
-}
+.shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar { width: 10px !important; }
 .shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar-thumb {
   background: #3d5a78 !important;
   border-radius: 8px !important;
-  border: 2px solid transparent !important;
-  background-clip: padding-box !important;
 }
 .shell .panel.inspector > .inspector-tab-panel::-webkit-scrollbar-track {
   background: rgba(0,0,0,.25) !important;
 }
 
-.shell .panel.inspector .result-section {
-  max-height: 110px !important;
-  overflow: auto !important;
-  flex-shrink: 0 !important;
+/* Groups were clipping expanded details */
+.shell .finding-file-group {
+  overflow: visible !important;
 }
 
 .shell .finding-detail {
@@ -123,9 +108,11 @@ html, body, #root {
   gap: 10px !important;
   width: 100% !important;
   min-width: 0 !important;
-  max-height: min(45vh, 400px) !important;
+  max-height: 360px !important;
   overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-y: scroll !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
 }
 
 .shell .finding-detail > * {
