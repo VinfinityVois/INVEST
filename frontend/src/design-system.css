@@ -4133,3 +4133,145 @@
 .shell[data-theme="light"] .workflow-port {
   border-color:#f4f6f8!important;
 }
+
+/* AI explanation report: editorial hierarchy, evidence-first layout and theme parity. */
+.shell .finding-detail > .finding-ai-explanation {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  padding:15px;
+  border:1px solid rgba(168,132,218,.3);
+  border-left:3px solid #a879dc;
+  border-radius:11px;
+  background:linear-gradient(135deg,rgba(117,76,158,.14),var(--surface));
+  box-shadow:0 8px 22px rgba(0,0,0,.08);
+}
+.shell .finding-detail > .finding-ai-explanation > div:first-child {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.shell .finding-detail > .finding-ai-explanation > div:first-child svg {
+  flex:none;
+  color:#bd98ee;
+}
+.shell .finding-detail > .finding-ai-explanation > div:first-child b {
+  color:#cdb0f2;
+  font:700 10px "JetBrains Mono",monospace;
+  letter-spacing:.1em;
+}
+.shell .finding-detail > .finding-ai-explanation > div:first-child span {
+  margin-left:auto;
+  padding:4px 7px;
+  border:1px solid rgba(184,145,230,.28);
+  border-radius:99px;
+  background:rgba(153,105,205,.12);
+  color:#d2b5f3;
+  font:700 9px "JetBrains Mono",monospace;
+  white-space:nowrap;
+}
+.shell .finding-detail > .finding-ai-explanation > p {
+  min-width:0;
+  margin:0;
+  padding:11px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--elevated);
+  color:var(--text-secondary);
+  font-size:11px;
+  line-height:1.6;
+  overflow-wrap:anywhere;
+}
+.shell .finding-detail > .finding-ai-explanation > p b {
+  display:block;
+  margin-bottom:6px;
+  color:var(--accent-text);
+  font:700 9px "JetBrains Mono",monospace;
+  letter-spacing:.08em;
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence {
+  grid-column:1/-1;
+  padding-top:11px;
+  border-top:1px solid var(--border);
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence > b {
+  display:block;
+  margin-bottom:8px;
+  color:var(--text-secondary);
+  font:700 9px "JetBrains Mono",monospace;
+  letter-spacing:.08em;
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence > div {
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  gap:10px;
+  padding:6px 8px;
+  border-radius:5px;
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence > div.is-finding-line {
+  background:color-mix(in srgb,#e5a34a 13%,var(--elevated));
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence > div > span {
+  color:var(--muted);
+  text-align:right;
+  font:10px "JetBrains Mono",monospace;
+}
+.shell .finding-detail > .finding-ai-explanation .ai-source-evidence code {
+  color:var(--text-primary);
+  font:11px/1.55 "JetBrains Mono",monospace;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.shell .finding-detail > .finding-ai-explanation > small {
+  grid-column:1/-1;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.55;
+}
+.shell .finding-detail > .finding-ai-explanation > small.ai-confidence-note {
+  padding-top:8px;
+  border-top:1px solid var(--border);
+}
+.shell .finding-detail > .finding-ai-explanation.ai-explanation-pending {
+  display:block;
+  border-left-color:#d49b54;
+  background:color-mix(in srgb,#d49b54 7%,var(--surface));
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation {
+  border-color:#e3d7f2;
+  border-left-color:#8957bd;
+  background:linear-gradient(135deg,#f7f1fc,#fbfafc);
+  box-shadow:0 7px 20px rgba(61,43,80,.06);
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > div:first-child {
+  border-bottom-color:#e8def1;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > div:first-child svg { color:#8052b3; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > div:first-child b { color:#68438f; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > div:first-child span {
+  border-color:#d9c5ec;
+  background:#efe5f8;
+  color:#68438f;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > p {
+  border-color:#e7deef;
+  background:#fff;
+  color:#4d4358;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > p b { color:#70469c; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence {
+  border-top-color:#e8def1;
+}
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence > b { color:#6d5b7b; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence > div.is-finding-line { background:#fff2df; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation .ai-source-evidence code { color:#354351; }
+.shell[data-theme="light"] .finding-detail > .finding-ai-explanation > small { color:#71677c; }
+@media(max-width:900px) {
+  .shell .finding-detail > .finding-ai-explanation { grid-template-columns:1fr; }
+  .shell .finding-detail > .finding-ai-explanation > div:first-child,
+  .shell .finding-detail > .finding-ai-explanation .ai-source-evidence,
+  .shell .finding-detail > .finding-ai-explanation > small { grid-column:1; }
+}
