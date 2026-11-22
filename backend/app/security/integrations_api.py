@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
+from app.config import settings
 from app.db import SessionLocal
 from app.models import AuditLog, Credential, WorkspaceIntegration
 from app.security.tenancy import require_active_workspace
@@ -133,10 +134,10 @@ def _settings_payload(db, workspace_id) -> dict:
         ).all()
     }
     return {
-        "git_repositories": rows.get("git", {}).get("repositories", []),
-        "telegram_chat_ids": rows.get("telegram", {}).get("chat_ids", []),
+        "git_repositories": rows.get("git", {}).get("repositories", settings.allowed_target_list),
+        "telegram_chat_ids": rows.get("telegram", {}).get("chat_ids", sorted(settings.telegram_allowed_chat_id_set)),
         "telegram_bot_configured": _bot_credential(db, workspace_id) is not None,
-        "webhook_hosts": rows.get("webhook", {}).get("hosts", []),
+        "webhook_hosts": rows.get("webhook", {}).get("hosts", sorted(settings.webhook_allowed_host_list)),
     }
 
 
