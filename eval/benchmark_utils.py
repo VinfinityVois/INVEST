@@ -14,7 +14,7 @@ def _location_candidates(target: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _matches_location(finding: dict[str, Any], target: dict[str, Any]) -> bool:
-    finding_path = str(finding.get("path", "")).replace("\\\\", "/").lstrip("./")
+    finding_path = str(finding.get("path", "")).replace("\\", "/").lstrip("./")
     target_path = str(target.get("path", "")).replace("\\\\", "/").lstrip("./")
     try:
         line = int(finding.get("line", 0))
