@@ -601,6 +601,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [radialMenu, setRadialMenu] = useState<{ x: number; y: number } | null>(null);
   const [nodeActionMenu, setNodeActionMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [nodeReplaceTargetId, setNodeReplaceTargetId] = useState<string | null>(null);
   const [connectionPicker, setConnectionPicker] = useState<{ sourceId: string; sourceHandle: string; dataType: string } | null>(null);
   const [traceFilter, setTraceFilter] = useState("all");
   const [showResult, setShowResult] = useState(true);
@@ -1037,8 +1038,63 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   const replaceSelectedNode = (type: string) => {
     if (!selectedNode) return;
     const manifest = manifests.find(item => item.type === type);
-    if (!manifest) return;
-    updateNode(selectedNode.id, { nodeType: manifest.type, label: manifest.title, category: manifest.category, description: manifest.description, inputPorts: manifest.inputs || [], outputPorts: manifest.outputs || [], config: getSchemaDefaults(manifest) });
+    if (!manifest || manifest.type === selectedNode.data.nodeType) return;
+
+    const nodeId = selectedNode.id;
+    const nextInputs = manifest.inputs || [];
+    const nextOutputs = manifest.outputs || [];
+    const nextConfig = { ...getSchemaDefaults(manifest) };
+    Object.keys(manifest.config_schema?.properties || {}).forEach(key => {
+      if (selectedNode.data.config[key] !== undefined) nextConfig[key] = selectedNode.data.config[key];
+    });
+    const resolvePort = (ports: PortManifest[], handle?: string | null) =>
+      ports.length === 1 ? ports[0] : ports.find(port => port.name === handle);
+    const matchingPort = (ports: PortManifest[], previous?: PortManifest) =>
+      previous ? (ports.find(port => port.name === previous.name && port.data_type === previous.data_type)
+        || ports.find(port => port.data_type === previous.data_type)) : undefined;
+
+    setNodes(current => current.map(node => node.id === nodeId ? {
+      ...node,
+      data: {
+        ...node.data,
+        nodeType: manifest.type,
+        label: manifest.title,
+        category: manifest.category,
+        description: manifest.description,
+        inputPorts: nextInputs,
+        outputPorts: nextOutputs,
+        config: nextConfig,
+      },
+    } : node));
+
+    // Keep only edges whose data types still match after the node replacement.
+    setEdges(current => current.flatMap(edge => {
+      if (edge.target === nodeId) {
+        const sourceNode = nodes.find(node => node.id === edge.source);
+        const sourceManifest = manifests.find(item => item.type === sourceNode?.data.nodeType);
+        const sourcePort = resolvePort(sourceManifest?.outputs || [], edge.sourceHandle);
+        const targetPort = matchingPort(nextInputs, sourcePort);
+        if (!sourcePort || !targetPort || sourcePort.data_type !== targetPort.data_type) return [];
+        return [{ ...edge, targetHandle: nextInputs.length > 1 ? targetPort.name : null }];
+      }
+      if (edge.source === nodeId) {
+        const targetNode = nodes.find(node => node.id === edge.target);
+        const targetManifest = manifests.find(item => item.type === targetNode?.data.nodeType);
+        const oldSourcePort = resolvePort(selectedNode.data.outputPorts || [], edge.sourceHandle);
+        const targetPort = resolvePort(targetManifest?.inputs || [], edge.targetHandle);
+        const sourcePort = matchingPort(nextOutputs, oldSourcePort);
+        if (!sourcePort || !targetPort || sourcePort.data_type !== targetPort.data_type) return [];
+        return [{ ...edge, sourceHandle: nextOutputs.length > 1 ? sourcePort.name : null }];
+      }
+      return [edge];
+    }));
+
+    setWorkflowDirty(true);
+    setNodeReplaceTargetId(null);
+    setNodeActionMenu(null);
+    setSelectedNodeId(nodeId);
+    setRightCollapsed(false);
+    setInspectorTab("properties");
   };
   const renderSchemaFields = () => {
     if (!selectedNode) return null;
@@ -2376,11 +2432,19 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           {leftCollapsed && rightCollapsed && !radialMenu && <div className="radial-access-tip">ПКМ на холсте — быстрые блоки</div>}
           {radialMenu && <RadialMenu x={radialMenu.x} y={radialMenu.y} items={manifests.map(m => ({ type: m.type, title: m.title, category: m.category, description: m.description }))} onClose={() => setRadialMenu(null)} onPick={(type) => { setRadialMenu(null); const m = manifests.find(item => item.type === type); if (m) addNode(m); }} />}
         </ReactFlow>
-        {nodeActionMenu && <div className="node-action-menu" style={{ left: nodeActionMenu.x, top: nodeActionMenu.y }} onMouseDown={event => event.stopPropagation()}>
+        {nodeActionMenu && <div className="node-action-menu" style={{ left: Math.max(8, Math.min(nodeActionMenu.x, window.innerWidth - 236)), top: Math.max(8, Math.min(nodeActionMenu.y, window.innerHeight - 230)) }} onMouseDown={event => event.stopPropagation()}>
           <div className="node-action-menu-title">ДЕЙСТВИЯ С БЛОКОМ</div>
-          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setRightCollapsed(false); setInspectorTab("properties"); setNodeActionMenu(null); }}>Редактировать</button>
-          <button type="button" onClick={() => { const id = nodeActionMenu.nodeId; setNodes(current => current.filter(node => node.id !== id)); setEdges(current => current.filter(edge => edge.source !== id && edge.target !== id)); setWorkflowDirty(true); setSelectedNodeId(null); setNodeActionMenu(null); }}>Удалить</button>
-          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setRightCollapsed(false); setInspectorTab("properties"); setNodeActionMenu(null); }}>Заменить</button>
+          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setRightCollapsed(false); setInspectorTab("properties"); setNodeReplaceTargetId(null); setNodeActionMenu(null); }}>Редактировать</button>
+          <button type="button" onClick={() => { const id = nodeActionMenu.nodeId; setNodes(current => current.filter(node => node.id !== id)); setEdges(current => current.filter(edge => edge.source !== id && edge.target !== id)); setWorkflowDirty(true); setSelectedNodeId(null); setNodeReplaceTargetId(null); setNodeActionMenu(null); }}>Удалить</button>
+          <button type="button" onClick={() => { setSelectedNodeId(nodeActionMenu.nodeId); setNodeReplaceTargetId(current => current === nodeActionMenu.nodeId ? null : nodeActionMenu.nodeId); }}>Заменить блок на…</button>
+          {nodeReplaceTargetId === nodeActionMenu.nodeId && <div className="node-replace-options">
+            <small>НОВЫЙ ТИП БЛОКА</small>
+            {manifests.filter(item => item.type !== nodes.find(node => node.id === nodeActionMenu.nodeId)?.data.nodeType).map(item =>
+              <button type="button" key={item.type} onClick={() => replaceSelectedNode(item.type)}>
+                <span>{item.title}</span><small>{item.category} · {item.type}</small>
+              </button>
+            )}
+          </div>}
         </div>}
         {connectionPicker && <div className="connection-picker" onMouseDown={event => event.stopPropagation()}>
           <div className="connection-picker-head"><div><b>Выбрать блок-получатель</b><small>Выход: {connectionPicker.dataType} · совместимость проверяется по типу данных</small></div><button type="button" onClick={() => setConnectionPicker(null)} aria-label="Закрыть">×</button></div>
