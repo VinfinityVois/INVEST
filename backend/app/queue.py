@@ -17,9 +17,10 @@ from croniter import croniter
 
 from app.db import SessionLocal
 from app.scheduler import next_run_time
-from app.models import AuditLog, Finding, FindingState, WorkflowRun, WorkflowSchedule, WorkflowVersion
+from app.models import AuditLog, Credential, Finding, FindingState, Workflow, WorkflowIntegration, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.security.rate_limit import cleanup_expired_rate_limits
+from app.security.vault import VaultError, decrypt_credential
 from app.workflows.registry import registry
 from app.workflows.schemas import WorkflowGraph
 
@@ -114,6 +115,43 @@ def process_run(run_id: str, worker_id: str) -> None:
         if run is None or run.status not in {"running", "cancelling"} or run.locked_by != worker_id:
             return
         graph_snapshot = run.graph_snapshot
+        workflow = session.get(Workflow, run.workflow_id) if run.workflow_id else None
+        workspace_id = workflow.workspace_id if workflow is not None else None
+        integration_settings = {
+            "git_repositories": [],
+            "telegram_chat_ids": [],
+            "webhook_hosts": [],
+            "telegram_bot_token": None,
+        }
+        if workspace_id is not None:
+            integration_rows = session.scalars(
+                select(WorkspaceIntegration).where(WorkspaceIntegration.workspace_id == workspace_id)
+            ).all()
+            for integration in integration_rows:
+                config = integration.config if isinstance(integration.config, dict) else {}
+                if integration.provider == "git":
+                    integration_settings["git_repositories"] = config.get("repositories", [])
+                elif integration.provider == "telegram":
+                    integration_settings["telegram_chat_ids"] = config.get("chat_ids", [])
+                elif integration.provider == "webhook":
+                    integration_settings["webhook_hosts"] = config.get("hosts", [])
+            bot_credential = session.scalar(
+                select(Credential).where(
+                    Credential.workspace_id == workspace_id,
+                    Credential.provider == "telegram_bot",
+                    Credential.name == "Telegram bot token",
+                )
+            )
+            if bot_credential is not None:
+                try:
+                    integration_settings["telegram_bot_token"] = decrypt_credential(
+                        bot_credential.ciphertext,
+                        bot_credential.nonce,
+                        str(bot_credential.id),
+                        str(workspace_id),
+                    )
+                except VaultError:
+                    logger.warning("Telegram credential could not be decrypted for workspace %s", workspace_id)
         state_rows = session.scalars(
             select(FindingState).where(FindingState.workflow_id == run.workflow_id)
         ).all() if run.workflow_id else []
@@ -180,7 +218,7 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan, force_node_ids=force_node_ids, cache_metadata=cache_metadata)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan, force_node_ids=force_node_ids, cache_metadata=cache_metadata, integration_settings=integration_settings)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:
