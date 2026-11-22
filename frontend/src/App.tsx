@@ -1818,6 +1818,10 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
     setScheduleBusy(true);
     try {
       const id = await persistWorkflow();
+      setWorkflowDirty(false);
+      setWorkflowAutoSave("saved");
+      window.localStorage.removeItem(workflowDraftStorageKey);
+      void refreshWorkflowCatalog().catch(() => undefined);
       const response = await apiFetch("/api/workflows/" + id + "/schedule", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
