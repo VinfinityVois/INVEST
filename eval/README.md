@@ -22,3 +22,16 @@ python eval/run_sca_benchmark.py --repo-root ..\training\training-project --grou
 ```
 
 The SCA runner reads Gradle build files, optional `gradle.properties` and `gradle.lockfile`, then compares exact dependency coordinates and advisory ranges. It never invokes Gradle, Maven, or project scripts.
+
+
+## Kotlin/Spring SAST benchmark
+
+```powershell
+python eval/run_sast_benchmark.py --repo-root ..\training\training-project --ground-truth ..\training\ground-truth\training-findings.json --output eval\reports\training-sast.json
+```
+
+The SAST runner compares Kotlin/Spring findings with exact file/line ground truth and reports precision, recall, F1, missed findings, false positives and triggered SAST controls. It reads source files only; project code is never executed.
+
+## Full local benchmark sequence
+
+Run all three commands above against the same pinned training checkout and ground-truth file. Keep the generated JSON reports as evidence; do not tune rules against a hidden organizer dataset unless that dataset is explicitly provided for evaluation.
