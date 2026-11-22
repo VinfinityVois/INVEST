@@ -1,5 +1,5 @@
 import pytest
-from app.security.vault import decrypt_credential, encrypt_credential, VaultError
+from app.security.vault import decrypt_credential, encrypt_credential, VaultError, _load_or_create_master_key
 
 def test_aes_gcm_roundtrip_and_record_binding(monkeypatch):
     monkeypatch.setenv("MASTER_KEY_HEX", "11" * 32)
@@ -12,3 +12,13 @@ def test_rejects_wrong_master_key_size(monkeypatch):
     monkeypatch.setenv("MASTER_KEY_HEX", "abcd")
     with pytest.raises(VaultError):
         encrypt_credential("secret", "cred-1", "workspace-1")
+
+
+def test_persistent_master_key_is_created_once_and_reused(tmp_path):
+    key_path = tmp_path / "secrets" / "master.key"
+    first = _load_or_create_master_key(key_path)
+    second = _load_or_create_master_key(key_path)
+
+    assert len(first) == 32
+    assert second == first
+    assert key_path.stat().st_size == 32
