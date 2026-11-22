@@ -15,7 +15,7 @@ def _location_candidates(target: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _matches_location(finding: dict[str, Any], target: dict[str, Any]) -> bool:
     finding_path = str(finding.get("path", "")).replace("\\", "/").lstrip("./")
-    target_path = str(target.get("path", "")).replace("\\\\", "/").lstrip("./")
+    target_path = str(target.get("path", "")).replace("\\", "/").lstrip("./")
     try:
         line = int(finding.get("line", 0))
         start = int(target["line"])
@@ -31,11 +31,7 @@ def evaluate_category(
     category: str,
     extra_match: Callable[[dict[str, Any], dict[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
-    """Match detections one-to-one against primary/alternate ground-truth locations.
-
-    Maximum bipartite matching prevents one broad finding from satisfying multiple
-    expected findings. Alternate locations inherit category-specific metadata.
-    """
+    """Match detections one-to-one against primary/alternate ground-truth locations."""
     expected = [item for item in truth.get("findings", []) if item.get("category") == category]
     controls = [item for item in truth.get("controls", []) if item.get("category") == category]
 
@@ -44,15 +40,15 @@ def evaluate_category(
             return False
         return extra_match(finding, target) if extra_match else True
 
-    edges: list[list[int]] = []
+    edges = []
     for target in expected:
-        candidates = _location_candidates(target)
+        locations = _location_candidates(target)
         edges.append([
             index for index, finding in enumerate(actual)
-            if any(matches(finding, location) for location in candidates)
+            if any(matches(finding, location) for location in locations)
         ])
 
-    # Kuhn augmenting paths: maximize TP even where target location ranges overlap.
+    # Maximum bipartite matching: one detection can satisfy only one expected item.
     actual_to_expected: dict[int, int] = {}
 
     def assign(expected_index: int, seen: set[int]) -> bool:
@@ -66,12 +62,13 @@ def evaluate_category(
                 return True
         return False
 
-    expected_to_actual: dict[int, int] = {}
     for expected_index in range(len(expected)):
         assign(expected_index, set())
-    for actual_index, expected_index in actual_to_expected.items():
-        expected_to_actual[expected_index] = actual_index
 
+    expected_to_actual = {
+        expected_index: actual_index
+        for actual_index, expected_index in actual_to_expected.items()
+    }
     matched = [
         {"id": target.get("id"), "finding": actual[expected_to_actual[index]]}
         for index, target in enumerate(expected) if index in expected_to_actual
