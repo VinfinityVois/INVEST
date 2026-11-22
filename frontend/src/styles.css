@@ -1240,3 +1240,225 @@
 .auth-form .auth-remember-login input{width:15px;height:15px;min-height:15px;flex:0 0 15px;margin:0;padding:0;accent-color:#36c995;cursor:pointer}
 .account-logout-trigger{border-color:rgba(248,113,113,.32)!important;color:#ffaaa5!important;background:rgba(248,113,113,.07)!important}
 .account-logout-trigger:hover{border-color:rgba(248,113,113,.55)!important;background:rgba(248,113,113,.13)!important}
+
+
+/* Workflow canvas overlays: node actions and connection picker */
+.node-action-menu {
+  position: fixed;
+  z-index: 1250;
+  width: 220px;
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  padding: 9px;
+  border: 1px solid #426080;
+  border-radius: 10px;
+  background: linear-gradient(155deg, #17263a, #0b1421);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .58), 0 0 0 1px rgba(112, 169, 224, .08);
+  color: #e5edf7;
+}
+.node-action-menu-title {
+  padding: 4px 6px 9px;
+  color: #83a7cb;
+  font: 8px 'DM Mono', monospace;
+  letter-spacing: 1.15px;
+}
+.node-action-menu > button,
+.node-replace-options > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255,255,255,.035);
+  color: #dce9f7;
+  text-align: left;
+  font-size: 10px;
+}
+.node-action-menu > button:hover,
+.node-replace-options > button:hover {
+  border-color: #426b93;
+  background: #1c3550;
+  color: #fff;
+}
+.node-replace-options {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 310px;
+  overflow: auto;
+  margin-top: 9px;
+  padding: 8px 5px 4px;
+  border-top: 1px solid #30445c;
+}
+.node-replace-options > small {
+  padding: 2px 4px 5px;
+  color: #7892ad;
+  font: 7px 'DM Mono', monospace;
+  letter-spacing: .9px;
+}
+.node-replace-options > button {
+  min-height: 42px;
+  margin: 0;
+}
+.node-replace-options > button span {
+  color: #e1edf9;
+  font-size: 9px;
+  font-weight: 700;
+}
+.node-replace-options > button small {
+  color: #8298b2;
+  font: 7px 'DM Mono', monospace;
+}
+.connection-picker {
+  position: fixed;
+  z-index: 1240;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(76vh, 680px);
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  border: 1px solid #426080;
+  border-radius: 12px;
+  background: linear-gradient(155deg, #17263a, #0a121e);
+  box-shadow: 0 24px 80px rgba(0,0,0,.66), 0 0 0 100vmax rgba(2,7,14,.38);
+  color: #e5edf7;
+}
+.connection-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #30445c;
+  background: rgba(255,255,255,.025);
+}
+.connection-picker-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.connection-picker-head b {
+  color: #e8f2fc;
+  font-size: 12px;
+}
+.connection-picker-head small {
+  color: #8da4bd;
+  font: 8px 'DM Mono', monospace;
+}
+.connection-picker-head > button {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #3a5069;
+  border-radius: 6px;
+  background: #122034;
+  color: #b9cde2;
+  font-size: 19px;
+}
+.connection-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 9px;
+  overflow: auto;
+  padding: 12px;
+}
+.connection-picker-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #34465b;
+  border-radius: 8px;
+  background: rgba(8,15,25,.72);
+}
+.connection-picker-card.is-compatible {
+  border-color: #287d6d;
+  background: linear-gradient(145deg, rgba(20,64,57,.35), rgba(8,15,25,.8));
+}
+.connection-picker-card.is-incompatible { opacity: .78; }
+.connection-picker-card > b {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #e2edf8;
+  font-size: 10px;
+}
+.connection-picker-card > small {
+  display: block;
+  margin: 4px 0 9px;
+  color: #8297b0;
+  font: 7px 'DM Mono', monospace;
+}
+.connection-picker-card > button {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px;
+  border: 1px solid #35516d;
+  border-radius: 6px;
+  background: #142338;
+  color: #dce9f7;
+  text-align: left;
+}
+.connection-picker-card > button:not(:disabled):hover {
+  border-color: #65a7df;
+  background: #1c3855;
+}
+.connection-picker-card > button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+.connection-picker-card > button span {
+  font-size: 9px;
+  font-weight: 700;
+}
+.connection-picker-card > button small {
+  color: #8da6c0;
+  font: 7px 'DM Mono', monospace;
+}
+.connection-picker-card > button em {
+  grid-column: 1 / -1;
+  color: #72d2ad;
+  font-size: 7px;
+  font-style: normal;
+}
+.connection-picker-card > button:disabled em { color: #8b97a7; }
+.connection-picker-card > p {
+  margin: 8px 0 2px;
+  color: #8294aa;
+  font-size: 8px;
+}
+.shell[data-theme="light"] .node-action-menu,
+.shell[data-theme="light"] .connection-picker {
+  border-color: #c4d3e2;
+  background: linear-gradient(155deg, #fff, #f1f6fb);
+  color: #1e293b;
+  box-shadow: 0 20px 60px rgba(15,23,42,.22);
+}
+.shell[data-theme="light"] .node-action-menu-title,
+.shell[data-theme="light"] .node-replace-options > small,
+.shell[data-theme="light"] .connection-picker-head small,
+.shell[data-theme="light"] .connection-picker-card > small { color: #647b94; }
+.shell[data-theme="light"] .node-action-menu > button,
+.shell[data-theme="light"] .node-replace-options > button,
+.shell[data-theme="light"] .connection-picker-card { background: #f7faff; color: #26384d; border-color: #d6e1ec; }
+.shell[data-theme="light"] .node-action-menu > button:hover,
+.shell[data-theme="light"] .node-replace-options > button:hover { background: #eaf3fc; }
+.shell[data-theme="light"] .connection-picker-head { border-color: #d6e1ec; }
+.shell[data-theme="light"] .connection-picker-head b,
+.shell[data-theme="light"] .connection-picker-card > b,
+.shell[data-theme="light"] .node-replace-options > button span { color: #1e293b; }
+.shell[data-theme="light"] .connection-picker-card > button { background: #edf4fb; color: #26384d; border-color: #cbd9e7; }
+@media (max-width: 600px) {
+  .connection-picker { width: calc(100vw - 20px); max-height: 82vh; }
+  .connection-picker-grid { grid-template-columns: 1fr; }
+  .node-action-menu { width: 210px; }
+}
