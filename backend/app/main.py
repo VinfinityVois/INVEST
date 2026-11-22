@@ -2357,9 +2357,9 @@ def export_run_report_html(run_id: UUID, request: Request):
     # Keep JSON safe inside an application/json script element and render all
     # dynamic report content through textContent in the browser.
     encoded = json.dumps(report, ensure_ascii=False, separators=(",", ":"), default=str)
-    encoded = (encoded.replace("&", "\\\\u0026").replace("<", "\\\\u003c")
-               .replace(">", "\\\\u003e").replace("\\u2028", "\\\\u2028")
-               .replace("\\u2029", "\\\\u2029"))
+    encoded = (encoded.replace("&", "\\u0026").replace("<", "\\u003c")
+               .replace(">", "\\u003e").replace("\u2028", "\\u2028")
+               .replace("\u2029", "\\u2029"))
     run_data = report.get("run") or {}
     title = html.escape(f"INVEST · Отчёт запуска {run_data.get('id', run_id)}")
     document = """<!doctype html>
