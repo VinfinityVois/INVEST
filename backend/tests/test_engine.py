@@ -529,7 +529,7 @@ def test_workflow_scans_gates_and_delivers_ai_report_to_webhook(tmp_path, monkey
         "explained_count": 1,
     })
     delivered = {}
-    monkeypatch.setattr(engine, "deliver_webhook", lambda url, payload: delivered.update(
+    monkeypatch.setattr(engine, "deliver_webhook", lambda url, payload, **_kwargs: delivered.update(
         url=url, payload=payload
     ) or {"http_status": 200, "delivered": True})
 

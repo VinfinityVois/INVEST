@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/dashboardpanel.tsx","./src/findingcollaboration.tsx","./src/radialmenu.tsx","./src/usermanagement.tsx","./src/workspacemanager.tsx","./src/main.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/DashboardPanel.tsx","./src/FindingCollaboration.tsx","./src/IntegrationsSettings.tsx","./src/RadialMenu.tsx","./src/UserManagement.tsx","./src/WorkspaceManager.tsx","./src/main.tsx"],"version":"5.9.3"}
