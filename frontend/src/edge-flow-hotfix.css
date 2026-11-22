@@ -1,0 +1,64 @@
+/* Runtime edge path animation + inspector scroll + topbar density */
+.shell .react-flow__edge.edge-active .react-flow__edge-path {
+  stroke: #34d399 !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: 10 8 !important;
+  animation: invest-wire-flow 0.7s linear infinite !important;
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.7)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.3)) !important;
+}
+.shell .react-flow__edge.edge-completed .react-flow__edge-path {
+  stroke: #10b981 !important;
+  stroke-width: 2.35px !important;
+  opacity: 0.95 !important;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4)) !important;
+}
+.shell .react-flow__edge.edge-idle .react-flow__edge-path {
+  stroke: #3d5168 !important;
+  stroke-width: 1.55px !important;
+  opacity: 0.4 !important;
+}
+@keyframes invest-wire-flow {
+  to { stroke-dashoffset: -36; }
+}
+.shell .inspector {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+.shell .inspector-tab-panel {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+.shell .layout {
+  min-height: 0 !important;
+}
+.shell .topbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+}
+.shell .topbar-trailing {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-left: auto !important;
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  max-width: 58% !important;
+  overflow: hidden !important;
+}
+.shell .topbar-trailing a,
+.shell .topbar-trailing button {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+.shell .workflow-node.node-running {
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35), 0 0 22px rgba(16, 185, 129, 0.2) !important;
+}
