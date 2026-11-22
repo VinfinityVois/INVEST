@@ -60,7 +60,7 @@ function sectorPath(index: number, count: number) {
 }
 
 export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [position, setPosition] = useState({ x, y });
 
   const wheelItems = useMemo(
@@ -71,7 +71,7 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
     [items],
   );
 
-  const activeItem = wheelItems[activeIndex] ?? wheelItems[0];
+  const activeItem = activeIndex >= 0 ? wheelItems[activeIndex] : null;
 
   useEffect(() => {
     const margin = SIZE / 2 + 12;
@@ -99,7 +99,7 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
         setActiveIndex((current) => (current - 1 + wheelItems.length) % wheelItems.length);
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        const selected = wheelItems[activeIndex];
+        const selected = wheelItems[activeIndex] ?? wheelItems[0];
         if (selected) onPick(selected.type);
       }
     };
@@ -125,7 +125,6 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
       >
         <svg className="weapon-wheel-svg" viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden="true">
           <circle className="weapon-wheel-track" cx={CENTER} cy={CENTER} r="164" />
-          <circle className="weapon-wheel-inner-track" cx={CENTER} cy={CENTER} r="65" />
 
           {wheelItems.map((item, index) => {
             const step = (Math.PI * 2) / wheelItems.length;
@@ -175,18 +174,11 @@ export default function RadialMenu({ x, y, items, onPick, onClose }: Props) {
           })}
         </svg>
 
-        <div className="weapon-wheel-core">
-          <span className="weapon-wheel-core-caption">WORKFLOW BLOCK</span>
-          <b key={activeItem.type} className="weapon-wheel-core-title">
-            {activeItem.title}
-          </b>
+        {activeItem && <div className="weapon-wheel-core" aria-live="polite">
+          <b key={activeItem.type} className="weapon-wheel-core-title">{activeItem.title}</b>
           <span className="weapon-wheel-core-category">{activeItem.category}</span>
-          <p>{activeItem.description || activeItem.type}</p>
-          <button type="button" onClick={() => onPick(activeItem.type)}>
-            ДОБАВИТЬ
-          </button>
-          <small>ESC  закрыть     выбор</small>
-        </div>
+          <button type="button" onClick={() => onPick(activeItem.type)}>ДОБАВИТЬ</button>
+        </div>}
       </div>
     </div>
   );
