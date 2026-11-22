@@ -8,9 +8,144 @@
       "version": 1,
       "category": "CI",
       "description": "Полный детерминированный security gate для pull request: Secrets, SCA, Kotlin/Spring SAST, объединение находок и CI policy.",
-      "tags": ["pull-request", "security", "secrets", "sca", "sast", "ci"],
-      "setup_required": ["source.git.url"],
+      "tags": [
+        "pull-request",
+        "security",
+        "secrets",
+        "sca",
+        "sast",
+        "ci"
+      ],
+      "setup_required": [
+        "source.git.url"
+      ],
       "node_count": 7
+    },
+    {
+      "id": "secrets-fast",
+      "file": "secrets-fast.json",
+      "name": "Экспресс-проверка секретов",
+      "version": 1,
+      "category": "Secrets",
+      "description": "Быстрый поиск утёкших ключей, токенов и паролей с итоговым Security Gate.",
+      "tags": [
+        "secrets",
+        "quick-check",
+        "credentials"
+      ],
+      "setup_required": [
+        "source.upload.path"
+      ],
+      "node_count": 5
+    },
+    {
+      "id": "dependency-audit",
+      "file": "dependency-audit.json",
+      "name": "Аудит зависимостей",
+      "version": 1,
+      "category": "SCA",
+      "description": "Проверка Maven/Gradle зависимостей и Spring Boot starters по локальной базе advisory с AI-объяснениями и policy gate.",
+      "tags": [
+        "sca",
+        "maven",
+        "gradle",
+        "spring-boot",
+        "cve"
+      ],
+      "setup_required": [
+        "source.upload.path"
+      ],
+      "node_count": 6
+    },
+    {
+      "id": "kotlin-sast-review",
+      "file": "kotlin-sast-review.json",
+      "name": "Аудит Kotlin / Spring",
+      "version": 1,
+      "category": "SAST",
+      "description": "Статический анализ Kotlin/Spring: injection, Spring Security и контроль доступа, затем AI-рекомендации и Security Gate.",
+      "tags": [
+        "sast",
+        "kotlin",
+        "spring",
+        "injection",
+        "idor"
+      ],
+      "setup_required": [
+        "source.upload.path",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_API_KEY"
+      ],
+      "node_count": 6
+    },
+    {
+      "id": "full-appsec-gate",
+      "file": "full-appsec-gate.json",
+      "name": "Полный AppSec Gate",
+      "version": 1,
+      "category": "Security",
+      "description": "Комплексная проверка секретов, зависимостей и Kotlin/Spring SAST. Объединяет и дедуплицирует находки, формирует AI-объяснения и принимает policy-решение.",
+      "tags": [
+        "secrets",
+        "sca",
+        "sast",
+        "ai",
+        "ci-gate"
+      ],
+      "setup_required": [
+        "source.upload.path",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_API_KEY"
+      ],
+      "node_count": 8
+    },
+    {
+      "id": "high-risk-ai-triage",
+      "file": "high-risk-ai-triage.json",
+      "name": "AI-триаж критичных находок",
+      "version": 1,
+      "category": "AI",
+      "description": "Запускает три сканера, объединяет результаты, отбирает HIGH/CRITICAL через logic.compare и передаёт только приоритетные находки в AI. Security Gate оценивает полный набор.",
+      "tags": [
+        "ai",
+        "triage",
+        "logic-compare",
+        "high",
+        "critical"
+      ],
+      "setup_required": [
+        "source.upload.path",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_API_KEY"
+      ],
+      "node_count": 9
+    },
+    {
+      "id": "scheduled-full-audit",
+      "file": "scheduled-full-audit.json",
+      "name": "Плановый полный аудит",
+      "version": 1,
+      "category": "Automation",
+      "description": "Автоматический запуск полного набора проверок по расписанию с AI-объяснениями и Security Gate. Расписание можно изменить в Schedule trigger.",
+      "tags": [
+        "schedule",
+        "automation",
+        "secrets",
+        "sca",
+        "sast",
+        "ai"
+      ],
+      "setup_required": [
+        "source.upload.path",
+        "cron/timezone",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
+        "LLM_API_KEY"
+      ],
+      "node_count": 8
     }
   ]
 }
