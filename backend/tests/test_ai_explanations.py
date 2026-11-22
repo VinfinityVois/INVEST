@@ -245,6 +245,48 @@ def test_gateway_retries_unexplained_findings_individually_and_keeps_partial_suc
     assert "individual retries: attempted=2 recovered=1 unresolved=1 deferred=0" in caplog.text
 
 
+
+def test_gateway_retries_up_to_twelve_unexplained_findings(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        user_data = json.loads(kwargs["json"]["messages"][1]["content"])
+        sent = user_data["findings"]
+        calls.append(len(sent))
+        if len(calls) == 1:
+            # Simulate the batch response echoing scanner objects instead of explanations.
+            items = [
+                {**finding, "recommendation": "scanner recommendation"}
+                for finding in sent
+            ]
+            return FakeResponse({"choices": [{"message": {"content": json.dumps({"explanations": items})}}]})
+        fingerprint = sent[0]["fingerprint"]
+        item = {
+            "fingerprint": fingerprint,
+            "root_cause": "The observed unsafe pattern permits an untrusted operation.",
+            "impact": "An attacker may cause the operation to affect protected data.",
+            "recommendation": "Validate and authorize the operation before execution.",
+            "confidence": 0.8,
+            "evidence_limits": "",
+        }
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({"explanations": [item]})}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    caplog.set_level("INFO", logger="secworkflow.ai")
+    findings = [{"fingerprint": f"finding-{index}"} for index in range(12)]
+
+    result = explanations.explain_findings(findings)
+
+    assert calls == [12] + [1] * 12
+    assert result["explained_count"] == 12
+    assert result["unexplained_count"] == 0
+    assert result["coverage"] == 1.0
+    assert "individual retries: attempted=12 recovered=12 unresolved=0 deferred=0" in caplog.text
+
+
 def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
