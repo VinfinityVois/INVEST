@@ -32,5 +32,7 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index("ix_workspace_integrations_workspace_id", table_name="workspace_integrations")
-    op.drop_table("workspace_integrations")
+    raise RuntimeError(
+        "0011_workspace_integrations downgrade is intentionally blocked; "
+        "workspace integration settings and encrypted credentials require an explicit export."
+    )
