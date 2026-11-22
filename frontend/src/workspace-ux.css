@@ -578,3 +578,27 @@
   background:#e4f1e8!important;
   color:#145c35!important;
 }
+
+/* Restore readable surfaces for legacy dark-styled widgets in the light theme. */
+.shell[data-theme="light"] .type-matrix-card {
+  background:#f7faf7!important;
+  border-color:#d5ded7!important;
+  color:#34443a!important;
+}
+.shell[data-theme="light"] .type-matrix-card b {
+  color:#26352b!important;
+}
+.shell[data-theme="light"] .type-matrix-card small {
+  color:#718076!important;
+}
+.shell[data-theme="light"] .type-matrix-card:hover,
+.shell[data-theme="light"] .type-matrix-card.is-active {
+  background:#e4f1e8!important;
+  border-color:#83b995!important;
+}
+.shell[data-theme="light"] .type-matrix-card .type-tip {
+  background:#f8faf8!important;
+  border-color:#d5ded7!important;
+  color:#34443a!important;
+  box-shadow:0 12px 28px rgba(31,51,67,.16);
+}
