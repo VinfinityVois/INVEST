@@ -1,0 +1,206 @@
+/* Responsive / adaptive layout */
+
+@media (max-width: 1280px) {
+  .shell .layout {
+    grid-template-columns: 220px minmax(0, 1fr) minmax(300px, 340px) !important;
+    gap: 10px !important;
+  }
+  .shell .layout.left-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr) minmax(300px, 340px) !important;
+  }
+  .shell .layout.right-collapsed {
+    grid-template-columns: 220px minmax(0, 1fr) 52px !important;
+  }
+  .shell .topbar { gap: 8px !important; padding-inline: 8px !important; }
+  .shell .brand { min-width: 0 !important; }
+  .shell .brand small { display: none !important; }
+}
+
+@media (max-width: 1024px) {
+  .shell { padding-left: 10px !important; padding-right: 10px !important; }
+  .shell .layout,
+  .shell .layout.left-collapsed,
+  .shell .layout.right-collapsed,
+  .shell .layout.left-collapsed.right-collapsed {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(280px, 38vh) !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+  .shell .layout > .editor {
+    grid-row: 1 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+  .shell .layout > .panel.inspector,
+  .shell .layout > aside.panel.inspector {
+    grid-row: 2 !important;
+    max-height: 38vh !important;
+    height: 100% !important;
+    overflow: hidden !important;
+  }
+  .shell .layout > .panel.palette,
+  .shell .layout > aside.panel.palette {
+    position: absolute !important;
+    z-index: 30 !important;
+    top: 58px !important;
+    left: 10px !important;
+    width: min(300px, calc(100vw - 24px)) !important;
+    max-height: min(70vh, 520px) !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
+  }
+  .shell .layout > .panel.palette.is-collapsed {
+    position: absolute !important;
+    width: 48px !important;
+    left: 10px !important;
+    top: 58px !important;
+  }
+  .shell .panel.inspector > .inspector-tab-panel,
+  .shell .panel.inspector > .inspector-tab-panel.findings-tab-panel {
+    height: calc(38vh - 100px) !important;
+    max-height: calc(38vh - 100px) !important;
+    overflow-y: scroll !important;
+  }
+  .shell .topbar-trailing .revision,
+  .shell .actions .validate { display: none !important; }
+  .auth-stage { grid-template-columns: 1fr !important; }
+  .auth-decoration { display: none !important; }
+  .user-management-dialog {
+    width: min(100vw - 16px, 960px) !important;
+    max-height: min(92vh, 900px) !important;
+  }
+  .user-profile-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 760px) {
+  html, body, #root {
+    height: 100% !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .shell {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    padding: 0 8px !important;
+    overflow: hidden !important;
+  }
+  .shell .topbar {
+    min-height: 48px !important;
+    height: auto !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 8px 4px !important;
+    overflow: visible !important;
+  }
+  .shell .brand b { font-size: 11px !important; }
+  .shell .brand small,
+  .shell .status { display: none !important; }
+  .shell .workspace-context > span { display: none !important; }
+  .shell .topbar-trailing .icon-button,
+  .shell .theme-toggle {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+  .shell .layout,
+  .shell .layout.left-collapsed,
+  .shell .layout.right-collapsed,
+  .shell .layout.left-collapsed.right-collapsed {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(0, 1fr) minmax(240px, 42vh) !important;
+    gap: 8px !important;
+    padding: 8px 0 !important;
+  }
+  .shell .layout > .panel.palette:not(.is-collapsed) {
+    position: fixed !important;
+    z-index: 40 !important;
+    top: 52px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: min(60vh, 420px) !important;
+    border-radius: 12px !important;
+  }
+  .shell .layout > .panel.inspector { max-height: 42vh !important; }
+  .shell .panel.inspector > .inspector-tab-panel,
+  .shell .panel.inspector > .inspector-tab-panel.findings-tab-panel {
+    height: calc(42vh - 96px) !important;
+    max-height: calc(42vh - 96px) !important;
+  }
+  .shell .editor-head h1,
+  .shell .workflow-title-input { font-size: 16px !important; }
+  .shell .editor-head p,
+  .shell .counts { display: none !important; }
+  .shell .finding-detail { max-height: min(50vh, 360px) !important; }
+  .shell .app-menu {
+    position: fixed !important;
+    top: 52px !important;
+    right: 8px !important;
+    left: 8px !important;
+    width: auto !important;
+    max-height: min(70vh, 480px) !important;
+  }
+  .auth-screen {
+    padding: 64px 12px 56px !important;
+    align-items: start !important;
+    overflow-y: auto !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+  .auth-topbar { padding: 10px 12px !important; }
+  .auth-brand small { display: none !important; }
+  .auth-card {
+    width: 100% !important;
+    padding: 22px 18px !important;
+    border-radius: 14px !important;
+  }
+  .auth-card h1 { font-size: 20px !important; }
+  .auth-footer {
+    flex-direction: column !important;
+    gap: 4px !important;
+    text-align: center !important;
+  }
+  .user-management-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+  .user-access-tabs { overflow-x: auto !important; flex-wrap: nowrap !important; }
+  .user-access-tabs button span { display: none !important; }
+  .user-profile-banner { flex-wrap: wrap !important; }
+  .user-filter-row,
+  .user-create-form {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .shell .brand b { font-size: 10px !important; }
+  .auth-card { padding: 18px 14px !important; }
+  .shell .panel.inspector > .inspector-tab-panel { padding: 10px !important; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .shell .icon-button,
+  .shell .theme-toggle,
+  .user-access-tabs button,
+  .shell .inspector-tabs button { min-height: 40px !important; }
+  .shell .finding-table-row { min-height: 48px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell *,
+  .auth-screen * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
