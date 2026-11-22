@@ -137,6 +137,35 @@ def _assert_foreign_keys(connection):
     assert errors == []
 
 
+def _assert_workspace_integrations(connection, present):
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master "
+        "WHERE type = 'table' AND name = 'workspace_integrations'"
+    ).fetchone() is not None
+    assert exists is present
+
+    if present:
+        columns = {
+            row[1]: row
+            for row in connection.execute(
+                'PRAGMA table_info("workspace_integrations")'
+            ).fetchall()
+        }
+        assert set(columns) == {
+            "id", "workspace_id", "provider", "config", "created_at", "updated_at"
+        }
+        assert columns["workspace_id"][3] == 1
+        assert columns["provider"][3] == 1
+        assert columns["config"][3] == 1
+        indexes = {
+            row[1]
+            for row in connection.execute(
+                'PRAGMA index_list("workspace_integrations")'
+            ).fetchall()
+        }
+        assert "ix_workspace_integrations_workspace_id" in indexes
+
+
 def _seed_existing_rows(connection):
     workflow_id = "a" * 32
 
@@ -370,13 +399,14 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
     _run_alembic(database_url, "upgrade", "head")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0010_finding_collaboration")
+        _assert_revision(connection, "0011_workspace_integrations")
         _assert_timestamp_nullability(connection, nullable=False)
         _assert_auth_tables(connection, present=True)
         _assert_rate_limit_schema(connection, present=True)
         _assert_timestamps_populated(connection)
         _assert_existing_rows_preserved(connection)
         _assert_workspace_backfill(connection)
+        _assert_workspace_integrations(connection, present=True)
         _assert_foreign_keys(connection)
 
     # Ownership assignment is deliberately non-reversible without a
@@ -385,8 +415,9 @@ def test_alembic_sqlite_upgrade_downgrade_cycle(tmp_path):
         _run_alembic(database_url, "downgrade", "0007_login_rate_limits")
 
     with sqlite3.connect(database_path) as connection:
-        _assert_revision(connection, "0010_finding_collaboration")
+        _assert_revision(connection, "0011_workspace_integrations")
         _assert_workspace_backfill(connection)
+        _assert_workspace_integrations(connection, present=True)
         _assert_existing_rows_preserved(connection)
         _assert_foreign_keys(connection)
 
