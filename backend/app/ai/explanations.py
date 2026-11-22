@@ -248,23 +248,34 @@ def _parse_response(response: httpx.Response) -> list:
         raise
     raw_items = parsed.get("explanations")
     if not isinstance(raw_items, list):
-        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-        completion_tokens = usage.get("completion_tokens")
-        prompt_tokens = usage.get("prompt_tokens")
-        finish_reason = choices[0].get("finish_reason")
-        parsed_keys = ", ".join(sorted(str(key) for key in parsed.keys())[:16])
-        logger.warning(
-            "AI provider response structure invalid "
-            "(phase=explanations_array field_type=%s json_keys=%s finish_reason=%s "
-            "completion_tokens=%s prompt_tokens=%s content_chars=%d)",
-            type(raw_items).__name__,
-            parsed_keys or "none",
-            str(finish_reason or "unknown")[:32],
-            completion_tokens if isinstance(completion_tokens, (int, float)) else "unknown",
-            prompt_tokens if isinstance(prompt_tokens, (int, float)) else "unknown",
-            len(content),
-        )
-        raise ExplanationGatewayError("LLM вернул JSON без обязательного массива explanations.")
+        # Some OpenAI-compatible local models follow the requested item schema
+        # but use "issues" as the array key. The downstream normalizer still
+        # validates every fingerprint and required field against scanner input.
+        issues_items = parsed.get("issues")
+        if isinstance(issues_items, list):
+            logger.warning(
+                "AI provider response used compatible array alias (alias=issues items=%d)",
+                len(issues_items),
+            )
+            raw_items = issues_items
+        else:
+            usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+            completion_tokens = usage.get("completion_tokens")
+            prompt_tokens = usage.get("prompt_tokens")
+            finish_reason = choices[0].get("finish_reason")
+            parsed_keys = ", ".join(sorted(str(key) for key in parsed.keys())[:16])
+            logger.warning(
+                "AI provider response structure invalid "
+                "(phase=explanations_array field_type=%s json_keys=%s finish_reason=%s "
+                "completion_tokens=%s prompt_tokens=%s content_chars=%d)",
+                type(raw_items).__name__,
+                parsed_keys or "none",
+                str(finish_reason or "unknown")[:32],
+                completion_tokens if isinstance(completion_tokens, (int, float)) else "unknown",
+                prompt_tokens if isinstance(prompt_tokens, (int, float)) else "unknown",
+                len(content),
+            )
+            raise ExplanationGatewayError("LLM вернул JSON без обязательного массива explanations.")
     return raw_items
 
 
