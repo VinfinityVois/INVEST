@@ -1,26 +1,181 @@
 {
   "name": "INVEST · Kotlin training demo",
   "nodes": [
-    {"id":"trigger","type":"trigger.manual","position":{"x":80,"y":300},"config":{}},
-    {"id":"source","type":"source.git","position":{"x":320,"y":300},"config":{"url":"https://github.com/TBagirov/training","ref":"fe1fcbe212669783480666b9b60147c8a8c6eef4","subdirectory":"training-project"}},
-    {"id":"secrets","type":"scan.secrets","position":{"x":600,"y":80},"config":{}},
-    {"id":"sca","type":"scan.sca","position":{"x":600,"y":230},"config":{}},
-    {"id":"sast","type":"scan.sast","position":{"x":600,"y":380},"config":{}},
-    {"id":"merge","type":"findings.merge","position":{"x":880,"y":230},"config":{}},
-    {"id":"ai","type":"ai.explain","position":{"x":1140,"y":230},"config":{"language":"ru","max_findings":20}},
-    {"id":"notify","type":"notify.webhook","position":{"x":1400,"y":230},"config":{"url":""}},
-    {"id":"gate","type":"ci.gate","position":{"x":1140,"y":430},"config":{"block_on":["CRITICAL","HIGH"],"warn_on":["MEDIUM","LOW","INFO"]}}
+    {
+      "id": "trigger",
+      "type": "trigger.manual",
+      "position": {
+        "x": 80,
+        "y": 300
+      },
+      "config": {}
+    },
+    {
+      "id": "source",
+      "type": "source.git",
+      "position": {
+        "x": 320,
+        "y": 300
+      },
+      "config": {
+        "url": "https://github.com/TBagirov/training",
+        "ref": "fe1fcbe212669783480666b9b60147c8a8c6eef4",
+        "subdirectory": "training-project"
+      }
+    },
+    {
+      "id": "secrets",
+      "type": "scan.secrets",
+      "position": {
+        "x": 600,
+        "y": 80
+      },
+      "config": {}
+    },
+    {
+      "id": "sca",
+      "type": "scan.sca",
+      "position": {
+        "x": 600,
+        "y": 230
+      },
+      "config": {}
+    },
+    {
+      "id": "sast",
+      "type": "scan.sast",
+      "position": {
+        "x": 600,
+        "y": 380
+      },
+      "config": {}
+    },
+    {
+      "id": "merge",
+      "type": "findings.merge",
+      "position": {
+        "x": 880,
+        "y": 230
+      },
+      "config": {}
+    },
+    {
+      "id": "regex",
+      "type": "logic.regex",
+      "position": {
+        "x": 1040,
+        "y": 230
+      },
+      "config": {
+        "field": "message",
+        "pattern": "(?i)sql\\s+injection"
+      }
+    },
+    {
+      "id": "ai",
+      "type": "ai.explain",
+      "position": {
+        "x": 1260,
+        "y": 230
+      },
+      "config": {
+        "language": "ru",
+        "max_findings": 20
+      }
+    },
+    {
+      "id": "notify",
+      "type": "notify.webhook",
+      "position": {
+        "x": 1520,
+        "y": 230
+      },
+      "config": {
+        "url": ""
+      }
+    },
+    {
+      "id": "gate",
+      "type": "ci.gate",
+      "position": {
+        "x": 1260,
+        "y": 430
+      },
+      "config": {
+        "block_on": [
+          "CRITICAL",
+          "HIGH"
+        ],
+        "warn_on": [
+          "MEDIUM",
+          "LOW",
+          "INFO"
+        ]
+      }
+    }
   ],
   "edges": [
-    {"id":"e-trigger-source","source":"trigger","target":"source"},
-    {"id":"e-source-secrets","source":"source","target":"secrets"},
-    {"id":"e-source-sca","source":"source","target":"sca"},
-    {"id":"e-source-sast","source":"source","target":"sast"},
-    {"id":"e-secrets-merge","source":"secrets","target":"merge"},
-    {"id":"e-sca-merge","source":"sca","target":"merge"},
-    {"id":"e-sast-merge","source":"sast","target":"merge"},
-    {"id":"e-merge-ai","source":"merge","target":"ai"},
-    {"id":"e-ai-notify","source":"ai","target":"notify"},
-    {"id":"e-merge-gate","source":"merge","target":"gate"}
+    {
+      "id": "e-trigger-source",
+      "source": "trigger",
+      "target": "source"
+    },
+    {
+      "id": "e-source-secrets",
+      "source": "source",
+      "target": "secrets"
+    },
+    {
+      "id": "e-source-sca",
+      "source": "source",
+      "target": "sca"
+    },
+    {
+      "id": "e-source-sast",
+      "source": "source",
+      "target": "sast"
+    },
+    {
+      "id": "e-secrets-merge",
+      "source": "secrets",
+      "target": "merge"
+    },
+    {
+      "id": "e-sca-merge",
+      "source": "sca",
+      "target": "merge"
+    },
+    {
+      "id": "e-sast-merge",
+      "source": "sast",
+      "target": "merge"
+    },
+    {
+      "id": "e-ai-notify",
+      "source": "ai",
+      "target": "notify"
+    },
+    {
+      "id": "e-merge-gate",
+      "source": "merge",
+      "target": "gate"
+    },
+    {
+      "id": "e-merge-regex",
+      "source": "merge",
+      "target": "regex"
+    },
+    {
+      "id": "e-regex-ai-true",
+      "source": "regex",
+      "target": "ai",
+      "source_handle": "true"
+    },
+    {
+      "id": "e-regex-ai-false",
+      "source": "regex",
+      "target": "ai",
+      "source_handle": "false"
+    }
   ]
 }
