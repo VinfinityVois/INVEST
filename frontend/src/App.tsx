@@ -736,6 +736,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
 
   useEffect(() => {
     if (!workflowId) {
+      if (!workflowReady) return;
       setWorkflowRuns([]);
       setLastRunId(null);
       window.localStorage.removeItem("invest.lastRunId");
@@ -767,7 +768,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   useEffect(() => {
     if (!workflowId) { setWorkflowVersions([]); return; }
     void refreshWorkflowVersions(workflowId);
-  }, [workflowId]);
+  }, [workflowId, workflowReady]);
 
   const refreshWorkflowVersions = async (id: string) => {
     setVersionsLoading(true);
