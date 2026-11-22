@@ -192,6 +192,59 @@ def test_gateway_retries_without_response_format(monkeypatch):
     assert result["status"] == "completed"
 
 
+
+def test_gateway_retries_unexplained_findings_individually_and_keeps_partial_success(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    calls = []
+
+    def fake_post(url, **kwargs):
+        payload = kwargs["json"]
+        user_data = json.loads(payload["messages"][1]["content"])
+        sent = user_data["findings"]
+        calls.append(len(sent))
+        if len(calls) == 1:
+            # Batch response echoes scanner metadata and is rejected by the strict schema.
+            items = [
+                {**finding, "recommendation": "scanner recommendation"}
+                for finding in sent
+            ]
+            return FakeResponse({"choices": [{"message": {"content": json.dumps({"issues": items})}}]})
+        fingerprint = sent[0]["fingerprint"]
+        if fingerprint == "finding-a":
+            item = {
+                "fingerprint": fingerprint,
+                "root_cause": "Unsafe input reaches a sensitive operation.",
+                "impact": "An attacker may trigger unintended behavior.",
+                "recommendation": "Validate input before the sensitive operation.",
+                "confidence": 0.8,
+                "evidence_limits": "",
+            }
+        else:
+            item = {
+                "fingerprint": fingerprint,
+                "message": "scanner echo only",
+                "recommendation": "scanner recommendation",
+            }
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({"explanations": [item]})}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    caplog.set_level("INFO", logger="secworkflow.ai")
+    result = explanations.explain_findings([
+        {"fingerprint": "finding-a", "why_it_matters": "Potential unauthorized action."},
+        {"fingerprint": "finding-b", "why_it_matters": "Potential data exposure."},
+    ])
+
+    assert calls == [2, 1, 1]
+    assert result["status"] == "completed"
+    assert result["explained_count"] == 1
+    assert result["unexplained_count"] == 1
+    assert result["explanations"][0]["fingerprint"] == "finding-a"
+    assert result["provider_attempts"] == 3
+    assert "individual retries: attempted=2 recovered=1 remaining=1" in caplog.text
+
+
 def test_gateway_reports_authentication_failure_without_leaking_key(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
