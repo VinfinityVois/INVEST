@@ -14,7 +14,7 @@
     {"id":"compare","type":"logic.compare","position":{"x":1080,"y":300},"config":{"field":"severity","operator":"equals","value":"HIGH"}},
     {"id":"ai","type":"ai.explain","position":{"x":1080,"y":470},"config":{"language":"ru","max_findings":20}},
     {"id":"webhook","type":"notify.webhook","position":{"x":1360,"y":420},"config":{"url":""}},
-    {"id":"telegram","type":"notify.telegram","position":{"x":1360,"y":540},"config":{"chat_ids":[]}},
+    {"id":"telegram","type":"notify.telegram","position":{"x":1360,"y":540},"config":{}},
     {"id":"gate","type":"ci.gate","position":{"x":1360,"y":180},"config":{"policy_pack":"bank-strict"}}
   ],
   "edges": [
