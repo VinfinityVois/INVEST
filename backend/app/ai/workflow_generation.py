@@ -185,8 +185,9 @@ def generate_workflow_graph(prompt: str) -> dict:
         "Do not add AI explanations unless requested. Scanner nodes are the only source of findings; AI cannot "
         "create findings or alter scanner decisions."
     )
+    timeout_seconds = max(10.0, min(float(settings.llm_timeout_seconds), 90.0))
     request = {
-        "model": settings.llm_model, "temperature": 0.1, "max_tokens": 3000,
+        "model": settings.llm_model, "temperature": 0.1, "max_tokens": 4000,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -195,29 +196,47 @@ def generate_workflow_graph(prompt: str) -> dict:
     }
     headers = {"Authorization": f"Bearer {(settings.llm_api_key or '').strip()}", "Content-Type": "application/json"}
     try:
-        response = httpx.post(endpoint, headers=headers, json=request, timeout=httpx.Timeout(35.0, connect=5.0))
+        response = httpx.post(endpoint, headers=headers, json=request, timeout=httpx.Timeout(timeout_seconds, connect=5.0))
         if response.status_code in {400, 422}:
             fallback = {key: value for key, value in request.items() if key != "response_format"}
-            response = httpx.post(endpoint, headers=headers, json=fallback, timeout=httpx.Timeout(35.0, connect=5.0))
+            response = httpx.post(endpoint, headers=headers, json=fallback, timeout=httpx.Timeout(timeout_seconds, connect=5.0))
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         if isinstance(content, list):
             content = "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
         if not isinstance(content, str):
             raise ValueError("LLM response content is not text")
+        if not content.strip():
+            raise WorkflowGenerationError("LLM-провайдер вернул пустой ответ. Повторите запрос или проверьте модель и лимит токенов.")
         fence = chr(96) * 3
         content = re.sub(r"^\s*" + re.escape(fence) + r"(?:json)?\s*", "", content.strip(), flags=re.I)
         content = re.sub(r"\s*" + re.escape(fence) + r"\s*$", "", content)
         raw = json.loads(content)
+    except WorkflowGenerationError:
+        raise
     except httpx.TimeoutException as exc:
-        logger.warning("Workflow generation timed out")
-        raise WorkflowGenerationError("LLM-провайдер не ответил за 35 секунд.") from exc
+        logger.warning("Workflow generation timed out after %.1f seconds", timeout_seconds)
+        raise WorkflowGenerationError(f"LLM-провайдер не ответил за {timeout_seconds:g} секунд. Попробуйте ещё раз или проверьте доступность модели.") from exc
     except httpx.HTTPStatusError as exc:
-        logger.warning("Workflow generation provider returned HTTP %s", exc.response.status_code)
-        raise WorkflowGenerationError(f"LLM-провайдер вернул HTTP {exc.response.status_code}.") from exc
+        status = exc.response.status_code
+        logger.warning("Workflow generation provider returned HTTP %s", status)
+        if status in {401, 403}:
+            message = "LLM-провайдер отклонил авторизацию. Проверьте LLM_API_KEY."
+        elif status == 404:
+            message = "LLM endpoint или модель не найдены. Проверьте LLM_BASE_URL и LLM_MODEL."
+        elif status == 429:
+            message = "LLM-провайдер ограничил запросы или исчерпан лимит. Проверьте квоту."
+        elif status in {400, 422}:
+            message = "LLM-провайдер отклонил формат запроса. Проверьте совместимость модели с OpenAI chat/completions."
+        else:
+            message = f"LLM-провайдер вернул HTTP {status}."
+        raise WorkflowGenerationError(message) from exc
+    except json.JSONDecodeError as exc:
+        logger.warning("Workflow generation returned invalid JSON")
+        raise WorkflowGenerationError("LLM-провайдер вернул неполный или некорректный JSON. Упростите описание и повторите запрос.") from exc
     except Exception as exc:
         logger.warning("Workflow generation failed (%s)", type(exc).__name__)
-        raise WorkflowGenerationError("Не удалось получить корректный JSON от LLM-провайдера.") from exc
+        raise WorkflowGenerationError("Не удалось получить корректный JSON от LLM-провайдера. Проверьте worker/API logs и повторите запрос.") from exc
     graph = normalize_generated_graph(raw, prompt)
     return {"graph": graph.model_dump(mode="json"), "validation": validate_graph(graph, registry).model_dump(),
             "warnings": ["Граф создан как черновик. Проверь источник, URL уведомлений и настройки блоков перед сохранением или запуском."]}
