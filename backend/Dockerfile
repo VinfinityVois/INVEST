@@ -4,8 +4,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 appuser \
-    && mkdir -p /workspace \
-    && chown -R appuser:appuser /workspace
+    && mkdir -p /workspace /run/invest-secrets \
+    && chown -R appuser:appuser /workspace /run/invest-secrets
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
