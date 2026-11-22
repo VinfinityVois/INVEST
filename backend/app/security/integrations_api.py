@@ -17,7 +17,7 @@ from app.security.vault import VaultError, encrypt_credential
 
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
-_CHAT_ID = re.compile(r"^-?\\d{5,20}$")
+_CHAT_ID = re.compile(r"^-?\d{5,20}$")
 _GIT_LABEL = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 _DOMAIN_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
