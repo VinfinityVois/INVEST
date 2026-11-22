@@ -81,7 +81,48 @@ class Settings(BaseSettings):
         if not origins:
             raise ValueError("ALLOWED_ORIGINS is empty after parsing")
 
+        if self.app_env.strip().lower() == "production" and any(
+            not origin.startswith("https://") for origin in origins
+        ):
+            raise ValueError("ALLOWED_ORIGINS must use HTTPS in production")
+
         return origins
+
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        # Force parsing here so malformed and missing origins fail during
+        # Settings construction, not later when middleware first reads them.
+        origins = self.allowed_origin_list
+        if self.app_env.strip().lower() == "production" and not origins:
+            raise ValueError(
+                "ALLOWED_ORIGINS must be explicitly configured in production"
+            )
+        if self.app_env.strip().lower() != "production":
+            return self
+
+        secret = self.app_secret_key.strip()
+        lowered_secret = secret.lower()
+        if len(secret) < 32:
+            raise ValueError(
+                "APP_SECRET_KEY must contain at least 32 characters in production"
+            )
+
+        unsafe_prefixes = (
+            "development-only-change-me",
+            "replace-with-random-secret",
+            "change-me-local",
+        )
+        if lowered_secret.startswith(unsafe_prefixes):
+            raise ValueError(
+                "APP_SECRET_KEY must not contain a known placeholder in production"
+            )
+
+        database_scheme = urlsplit(self.database_url).scheme.lower()
+        if database_scheme != "postgresql+psycopg":
+            raise ValueError(
+                "DATABASE_URL must use PostgreSQL in production"
+            )
+        return self
 
     @property
     def allowed_target_list(self) -> list[str]:
