@@ -885,7 +885,7 @@ def test_logic_regex_node_splits_findings_by_pattern(tmp_path, monkeypatch):
             {"id": "trigger", "type": "trigger.manual"},
             {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
             {"id": "scan", "type": "scan.secrets"},
-            {"id": "regex", "type": "logic.regex", "config": {"field": "message", "pattern": r"(?i)sql\\s+injection"}},
+            {"id": "regex", "type": "logic.regex", "config": {"field": "message", "pattern": r"(?i)sql\s+injection"}},
         ],
         edges=[
             {"id": "e1", "source": "trigger", "target": "source"},
