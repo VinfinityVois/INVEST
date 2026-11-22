@@ -36,7 +36,7 @@ def _validate_webhook_url(raw_url: str, allowed_hosts=None) -> str:
     }
     host = parsed.hostname.lower().rstrip(".")
     if host not in allowed:
-        raise WebhookDeliveryError("Домен webhook отсутствует в NOTIFY_WEBHOOK_ALLOWED_HOSTS.")
+        raise WebhookDeliveryError("Домен webhook отсутствует в списке разрешений Настроек платформы (NOTIFY_WEBHOOK_ALLOWED_HOSTS).")
     try:
         addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     except OSError as exc:
