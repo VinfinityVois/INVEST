@@ -867,3 +867,66 @@ def test_ai_provider_failure_keeps_scanner_results_and_marks_run_partial(tmp_pat
     assert result["outputs"]["ai"]["status"] == "failed"
     assert result["outputs"]["ai"]["findings"][0]["fingerprint"] == "finding-1"
     assert result["trace"][-1]["diagnostic_level"] == "error"
+
+
+
+def test_logic_regex_node_splits_findings_by_pattern(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda _path, **_kwargs: [
+        {"fingerprint": "sql-1", "rule_id": "SQL_INJECTION", "severity": "HIGH", "message": "Possible SQL injection"},
+        {"fingerprint": "secret-1", "rule_id": "SECRET", "severity": "MEDIUM", "message": "Hardcoded credential"},
+    ])
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "regex", "type": "logic.regex", "config": {"field": "message", "pattern": r"(?i)sql\\s+injection"}},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "regex"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "completed"
+    assert result["outputs"]["regex"]["summary"] == {"total": 2, "matched": 1, "unmatched": 1}
+    assert [item["fingerprint"] for item in result["outputs"]["regex"]["matched_findings"]] == ["sql-1"]
+    assert [item["fingerprint"] for item in result["outputs"]["regex"]["unmatched_findings"]] == ["secret-1"]
+
+
+def test_logic_regex_node_rejects_invalid_pattern_without_crashing(tmp_path, monkeypatch):
+    import app.workflows.engine as engine
+
+    project = tmp_path / "sample"
+    project.mkdir()
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(engine, "scan_directory", lambda _path, **_kwargs: [
+        {"fingerprint": "one", "message": "finding"}
+    ])
+    graph = WorkflowGraph(
+        nodes=[
+            {"id": "trigger", "type": "trigger.manual"},
+            {"id": "source", "type": "source.upload", "config": {"path": "sample"}},
+            {"id": "scan", "type": "scan.secrets"},
+            {"id": "regex", "type": "logic.regex", "config": {"field": "message", "pattern": "("}},
+        ],
+        edges=[
+            {"id": "e1", "source": "trigger", "target": "source"},
+            {"id": "e2", "source": "source", "target": "scan"},
+            {"id": "e3", "source": "scan", "target": "regex"},
+        ],
+    )
+
+    result = execute_graph(graph, registry)
+
+    assert result["status"] == "failed"
+    assert result["outputs"]["regex"]["status"] == "failed"
+    assert result["outputs"]["regex"]["reason_code"] == "INVALID_REGEX"
