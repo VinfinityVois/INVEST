@@ -650,7 +650,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                     url=node.config.get("url", ""),
                     ref=node.config.get("ref"),
                     workspace_root=settings.workspace_root,
-                    allowed_targets=(integration_settings or {}).get("git_repositories") or settings.allowed_target_list,
+                    allowed_targets=((integration_settings or {}).get("git_repositories") if (integration_settings or {}).get("git_configured") else settings.allowed_target_list),
                 )
                 source_path = source["path"]
                 subdirectory = node.config.get("subdirectory")
@@ -935,9 +935,9 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             report = next((item for item in reversed(reports) if isinstance(item.get("findings"), list)), {})
             findings = report.get("findings", []) if isinstance(report, dict) else []
             runtime = integration_settings or {}
-            default_chat_ids = runtime.get("telegram_chat_ids") or sorted(settings.telegram_allowed_chat_id_set)
+            default_chat_ids = runtime.get("telegram_chat_ids") if runtime.get("telegram_configured") else sorted(settings.telegram_allowed_chat_id_set)
             chat_ids = node.config.get("chat_ids") or default_chat_ids
-            allowed_chat_ids = runtime.get("telegram_chat_ids") or settings.telegram_allowed_chat_id_set
+            allowed_chat_ids = runtime.get("telegram_chat_ids") if runtime.get("telegram_configured") else settings.telegram_allowed_chat_id_set
             if not chat_ids:
                 output = {"status": "configuration_required", "message": "Добавьте получателей Telegram в Настройки платформы.", "delivered": False}
             elif not report:
@@ -974,7 +974,7 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
             else:
                 payload = build_notification_payload(report)
                 try:
-                    delivery = deliver_webhook(endpoint, payload, allowed_hosts=(integration_settings or {}).get("webhook_hosts") or settings.webhook_allowed_host_list)
+                    delivery = deliver_webhook(endpoint, payload, allowed_hosts=((integration_settings or {}).get("webhook_hosts") if (integration_settings or {}).get("webhook_configured") else settings.webhook_allowed_host_list))
                     output = {
                         "status": "completed",
                         "message": "Уведомление доставлено.",
