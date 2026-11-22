@@ -168,9 +168,12 @@ def update_integrations(payload: IntegrationSettingsUpdate, request: Request):
         elif payload.telegram_bot_token:
             if credential is None:
                 credential_id = uuid4()
-                ciphertext, nonce, key_id = encrypt_credential(
-                    payload.telegram_bot_token, str(credential_id), str(workspace.id)
-                )
+                try:
+                    ciphertext, nonce, key_id = encrypt_credential(
+                        payload.telegram_bot_token, str(credential_id), str(workspace.id)
+                    )
+                except VaultError as exc:
+                    raise HTTPException(status_code=503, detail="Credential vault is unavailable. Configure the platform master key once, then retry.") from exc
                 db.add(Credential(
                     id=credential_id,
                     workspace_id=workspace.id,
@@ -181,9 +184,12 @@ def update_integrations(payload: IntegrationSettingsUpdate, request: Request):
                     key_id=key_id,
                 ))
             else:
-                ciphertext, nonce, key_id = encrypt_credential(
-                    payload.telegram_bot_token, str(credential.id), str(workspace.id)
-                )
+                try:
+                    ciphertext, nonce, key_id = encrypt_credential(
+                        payload.telegram_bot_token, str(credential.id), str(workspace.id)
+                    )
+                except VaultError as exc:
+                    raise HTTPException(status_code=503, detail="Credential vault is unavailable. Configure the platform master key once, then retry.") from exc
                 credential.ciphertext = ciphertext
                 credential.nonce = nonce
                 credential.key_id = key_id
