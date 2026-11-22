@@ -89,7 +89,7 @@ def test_gateway_sends_only_redacted_finding_fields(monkeypatch):
     }])
 
     assert captured["url"] == "https://llm.example/v1/chat/completions"
-    assert captured["timeout"].read == 90.0
+    assert captured["timeout"].read == 180.0
     assert captured["payload"]["max_tokens"] == 1400
     prompt = captured["payload"]["messages"][1]["content"]
     assert "must-not-be-sent" not in prompt
