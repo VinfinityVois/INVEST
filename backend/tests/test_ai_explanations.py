@@ -439,3 +439,37 @@ def test_secret_finding_sends_only_dedicated_masked_ai_context(monkeypatch):
     assert result["insufficient_evidence_count"] == 0
     assert result["evidence_coverage"] == 1.0
     assert result["explanations"][0]["source_evidence"][0]["text"] == 'api_key = "[REDACTED]"'
+
+
+def test_parser_accepts_json_with_markdown_fence_and_preamble():
+    payload = {
+        "choices": [{
+            "message": {
+                "content": 'Результат анализа:\n```json\n{"explanations": []}\n```'
+            }
+        }]
+    }
+    response = FakeResponse(payload)
+    assert explanations._parse_response(response) == []
+
+
+def test_parser_reports_non_chat_completions_response_shape():
+    response = FakeResponse({"message": "Ollama native API response"})
+    try:
+        explanations._parse_response(response)
+    except explanations.ExplanationGatewayError as exc:
+        assert "choices[]" in str(exc)
+        assert "message" in str(exc)
+    else:
+        raise AssertionError("Unexpected response shape must be rejected clearly")
+
+
+def test_parser_accepts_content_as_structured_text_parts():
+    response = FakeResponse({
+        "choices": [{
+            "message": {
+                "content": [{"type": "text", "text": '{"explanations": []}'}]
+            }
+        }]
+    })
+    assert explanations._parse_response(response) == []
