@@ -735,8 +735,33 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   };
 
   useEffect(() => {
-    if (!workflowId) { setWorkflowRuns([]); return; }
+    if (!workflowId) {
+      setWorkflowRuns([]);
+      setLastRunId(null);
+      window.localStorage.removeItem("invest.lastRunId");
+      setFindings([]);
+      setTelemetry(null);
+      return;
+    }
+    let active = true;
     void refreshWorkflowRuns(workflowId);
+    apiFetch("/api/workflows/" + workflowId + "/runs")
+      .then(response => response.ok ? response.json() : [])
+      .then((rows: WorkflowRunSummary[]) => {
+        if (!active) return;
+        const latest = rows[0];
+        if (latest?.id) {
+          setLastRunId(latest.id);
+          window.localStorage.setItem("invest.lastRunId", latest.id);
+        } else {
+          setLastRunId(null);
+          window.localStorage.removeItem("invest.lastRunId");
+          setFindings([]);
+          setTelemetry(null);
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
   }, [workflowId]);
 
   useEffect(() => {
