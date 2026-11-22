@@ -65,15 +65,14 @@
 }
 
 .shell .panel.inspector .finding-detail {
-  max-height: min(42vh, 380px) !important;
+  max-height: min(55vh, 520px) !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
 }
 
 .shell .panel.inspector .finding-detail pre,
-.shell .panel.inspector .source-code-preview pre,
-.shell .panel.inspector .finding-ai-explanation {
-  max-height: 200px !important;
+.shell .panel.inspector .source-code-preview pre {
+  max-height: 220px !important;
   overflow: auto !important;
 }
 
@@ -204,3 +203,100 @@
 .shell .workflow-node:hover { transform: translateY(-1px); }
 .shell .icon-button { transition: transform .12s ease, background .15s ease; }
 .shell .icon-button:hover { transform: translateY(-1px); }
+
+/* ===== Findings detail: STACK vertically (readable) ===== */
+.shell .finding-detail,
+.shell .panel.inspector .finding-detail,
+.shell .inspector-tab-panel .finding-detail {
+  display: flex !important;
+  flex-direction: column !important;
+  grid-template-columns: none !important;
+  gap: 10px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.shell .finding-detail > * {
+  grid-column: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.shell .finding-detail > .finding-explanation,
+.shell .finding-detail > .finding-remediation,
+.shell .finding-detail > .finding-ai-explanation {
+  display: block !important;
+  grid-template-columns: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+
+.shell .finding-detail > .finding-ai-explanation {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.shell .finding-detail > .finding-ai-explanation > p,
+.shell .finding-detail > .finding-ai-explanation > div,
+.shell .finding-detail > .finding-ai-explanation > small {
+  grid-column: auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+}
+
+.shell .finding-explanation p,
+.shell .finding-remediation p,
+.shell .finding-ai-explanation p,
+.shell .finding-ai-explanation small {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  writing-mode: horizontal-tb !important;
+  line-height: 1.55 !important;
+  font-size: 12px !important;
+}
+
+.shell .finding-detail .finding-location,
+.shell .finding-detail .source-code-preview,
+.shell .finding-detail .source-code-head,
+.shell .finding-detail .source-code-head span,
+.shell .finding-detail .finding-lifecycle,
+.shell .finding-detail .finding-history {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  writing-mode: horizontal-tb !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.shell .finding-detail .source-code-head {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.shell .finding-detail .source-code-preview pre,
+.shell .finding-detail .source-code-preview .code-line {
+  writing-mode: horizontal-tb !important;
+  white-space: pre !important;
+}
+
+.shell .finding-detail .finding-lifecycle {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.shell .finding-detail .ai-source-evidence > div {
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+}
