@@ -140,9 +140,9 @@ def _provider_error(exc: Exception) -> str:
 
 def _extract_json_object(content: str) -> dict:
     """Parse a JSON object from common local-model response variants."""
-    text = content.strip().lstrip("\\ufeff")
+    text = content.strip().lstrip("\ufeff")
     if text.startswith("```"):
-        first_newline = text.find("\\n")
+        first_newline = text.find("\n")
         if first_newline >= 0:
             text = text[first_newline + 1:]
     if text.endswith("```"):
@@ -164,7 +164,7 @@ def _extract_json_object(content: str) -> dict:
             if in_string:
                 if escaped:
                     escaped = False
-                elif char == "\\\\":
+                elif char == "\\":
                     escaped = True
                 elif char == '"' :
                     in_string = False
