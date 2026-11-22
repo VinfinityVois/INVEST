@@ -127,6 +127,29 @@ def test_gateway_honors_llm_max_tokens_above_4096(monkeypatch):
     assert captured["max_tokens"] == 8192
 
 
+def test_gateway_explicitly_enforces_requested_russian_language(monkeypatch):
+    monkeypatch.setattr(settings, "llm_base_url", "https://llm.example/v1")
+    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(settings, "llm_api_key", "test-api-key")
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured["system_prompt"] = kwargs["json"]["messages"][0]["content"]
+        return FakeResponse({"choices": [{"message": {"content": json.dumps({
+            "explanations": [{
+                "fingerprint": "abc", "root_cause": "Причина", "impact": "Влияние",
+                "recommendation": "Исправление", "confidence": 0.8, "evidence_limits": ""
+            }]
+        }, ensure_ascii=False)}}]})
+
+    monkeypatch.setattr(explanations.httpx, "post", fake_post)
+    result = explanations.explain_findings([{"fingerprint": "abc"}], {"language": "ru"})
+
+    assert result["status"] == "completed"
+    assert "exclusively in Russian" in captured["system_prompt"]
+    assert "Do not use Chinese" in captured["system_prompt"]
+
+
 def test_gateway_rejects_non_https_remote_endpoint(monkeypatch):
     monkeypatch.setattr(settings, "llm_base_url", "http://remote.example/v1")
     monkeypatch.setattr(settings, "llm_model", "test-model")
