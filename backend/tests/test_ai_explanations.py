@@ -522,6 +522,16 @@ def test_parser_accepts_content_as_structured_text_parts():
     assert explanations._parse_response(response) == []
 
 
+def test_parser_accepts_issues_alias_for_explanations_array():
+    response = FakeResponse({
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {"content": json.dumps({"issues": [{"fingerprint": "abc"}]})},
+        }],
+    })
+    assert explanations._parse_response(response) == [{"fingerprint": "abc"}]
+
+
 def test_parser_logs_safe_metadata_when_explanations_array_is_missing(caplog):
     response = FakeResponse({
         "choices": [{
