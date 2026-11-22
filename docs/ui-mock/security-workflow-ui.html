@@ -31,37 +31,52 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #06090f; }
   ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #334155; }
   .scroll-y { overflow-y: auto !important; overflow-x: hidden; min-height: 0; }
   .workflow-grid {
     background-size: 24px 24px;
-    background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
     background-color: #06090f;
   }
-  .wire-idle { stroke-opacity: 0.35; filter: none; }
+  .wire-base { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .wire-done {
+    stroke-opacity: 0.75;
+    filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.4));
+  }
+  .wire-idle { stroke-opacity: 0.22; }
   .wire-active {
     stroke-opacity: 1;
-    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.7));
-    stroke-dasharray: 8 6;
-    animation: dash-flow 0.9s linear infinite;
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.85)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.35));
+    stroke-dasharray: 10 8;
+    animation: wire-flow 0.7s linear infinite;
   }
-  .wire-done {
-    stroke-opacity: 0.85;
-    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.35));
+  .wire-active-glow {
+    stroke-opacity: 0.35;
+    filter: blur(2px);
+    stroke-width: 6;
+    animation: glow-pulse 1.2s ease-in-out infinite;
   }
-  @keyframes dash-flow { to { stroke-dashoffset: -28; } }
-  @keyframes pulse-port {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
-    50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+  @keyframes wire-flow { to { stroke-dashoffset: -36; } }
+  @keyframes glow-pulse {
+    0%, 100% { stroke-opacity: 0.2; }
+    50% { stroke-opacity: 0.45; }
   }
-  .port-active { animation: pulse-port 1.4s ease-in-out infinite; }
+  @keyframes port-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
+    50% { box-shadow: 0 0 0 7px rgba(16,185,129,0); }
+  }
+  .port-live { animation: port-pulse 1.3s ease-in-out infinite; }
+  .node-running { animation: node-ring 1.5s ease-in-out infinite; }
+  @keyframes node-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.35); }
+    50% { box-shadow: 0 0 24px 2px rgba(244, 63, 94, 0.25); }
+  }
 </style>
 </head>
 <body class="h-full flex flex-col font-sans select-none overflow-hidden text-xs">
 
 <header class="h-12 border-b border-cyberBorder bg-[#090d16]/95 backdrop-blur px-3 flex items-center gap-3 shrink-0 z-30">
-  <div class="flex items-center gap-2.5 shrink-0 min-w-0">
-    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+  <div class="flex items-center gap-2.5 shrink-0">
+    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
     </div>
     <div class="leading-tight">
@@ -73,226 +88,234 @@
       <div class="text-[9px] font-mono tracking-widest text-slate-500 uppercase">Контроль безопасности · Cybergarden</div>
     </div>
   </div>
-  <div class="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/90 border border-emerald-500/30 shrink-0">
+  <div class="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/90 border border-emerald-500/30">
     <span class="relative flex h-2 w-2">
       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
       <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
     </span>
-    <span class="font-mono text-[10px] text-slate-300 whitespace-nowrap">API · реестр синхронизирован</span>
+    <span class="font-mono text-[10px] text-slate-300">API · реестр синхронизирован</span>
   </div>
-  <div class="flex-1 min-w-0"></div>
-  <button class="hidden md:flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900/80 border border-slate-700/60 text-[10px] font-mono text-slate-300 shrink-0 max-w-[180px]">
-    <span class="text-slate-500 uppercase">WS</span>
-    <span class="truncate">sever_vv304ubk@mail.ru</span>
-    <span class="text-slate-500">▾</span>
-  </button>
-  <div class="hidden xl:flex items-center gap-1 shrink-0">
-    <button class="px-2 py-1 rounded text-[10px] text-slate-400 hover:text-slate-200 hover:bg-slate-800/80">Профиль</button>
-    <button class="px-2 py-1 rounded text-[10px] text-slate-400 hover:text-slate-200 hover:bg-slate-800/80">Обзор</button>
-    <button class="px-2 py-1 rounded text-[10px] text-slate-400 hover:text-slate-200 hover:bg-slate-800/80">Workspace</button>
-  </div>
-  <div class="h-4 w-px bg-slate-700/80 shrink-0"></div>
+  <div class="flex-1"></div>
   <div class="flex items-center gap-1.5 shrink-0">
-    <button class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[10px] font-medium">Шаблоны</button>
-    <button class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-cyan-300 border border-slate-700/70 text-[10px] font-medium">AI-граф</button>
-    <button class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[10px] font-medium">Сохранить</button>
-    <button class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-emerald-300 border border-slate-700/70 text-[10px] font-medium">Проверить</button>
-    <button class="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[10px] shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center gap-1">
-      <svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      Запустить всё
-    </button>
+    <button class="px-2 py-1 rounded bg-slate-800/80 text-slate-300 border border-slate-700/70 text-[10px]">Шаблоны</button>
+    <button class="px-2 py-1 rounded bg-slate-800/80 text-cyan-300 border border-slate-700/70 text-[10px]">AI-граф</button>
+    <button class="px-2 py-1 rounded bg-slate-800/80 text-slate-300 border border-slate-700/70 text-[10px]">Сохранить</button>
+    <button class="px-2 py-1 rounded bg-slate-800/80 text-emerald-300 border border-slate-700/70 text-[10px]">Проверить</button>
+    <button class="px-3 py-1.5 rounded bg-emerald-500 text-slate-950 font-semibold text-[10px] shadow-[0_0_15px_rgba(16,185,129,0.3)]">▶ Запустить всё</button>
   </div>
 </header>
 
 <div class="flex-1 flex min-h-0 overflow-hidden">
-
-  <aside class="w-[290px] max-w-[290px] bg-[#090d16] border-r border-cyberBorder flex flex-col shrink-0 min-h-0 z-20">
-    <div class="p-2.5 border-b border-cyberBorder flex items-center justify-between bg-[#0a101d] shrink-0">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="font-semibold text-slate-100 uppercase tracking-wider text-[10px] truncate">Компоненты</span>
-        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[9px]">12</span>
-      </div>
-    </div>
-    <div class="p-2 border-b border-cyberBorder flex gap-1 bg-[#080d17] shrink-0">
-      <button class="flex-1 py-1.5 rounded bg-slate-800/90 border border-emerald-500/40 font-semibold text-emerald-400 text-[10px]">Ноды</button>
-      <button class="flex-1 py-1.5 rounded text-slate-400 hover:bg-slate-800/50 text-[10px]">Проекты</button>
-    </div>
-    <div class="p-2 border-b border-cyberBorder shrink-0 space-y-1.5 bg-[#06090f]">
-      <input class="w-full bg-[#0d1424] border border-cyberBorder rounded px-2.5 py-1.5 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50" placeholder="Найти ноду..." type="text"/>
-      <div class="flex gap-1 overflow-x-auto pb-0.5 text-[9px] font-mono">
-        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 shrink-0">Все</span>
-        <span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">Trigger</span>
-        <span class="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-400/30 shrink-0">Source</span>
-        <span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">Security</span>
-        <span class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 shrink-0">Logic</span>
-        <span class="px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/30 shrink-0">AI</span>
-        <span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 shrink-0">Gate</span>
-      </div>
-    </div>
-    <div class="flex-1 scroll-y p-2 space-y-1.5">
-      <div class="text-[8.5px] font-mono uppercase text-amber-400/90 font-bold px-1 pt-1">⚡ Триггеры</div>
-      <div class="p-2 rounded-lg border border-amber-500/40 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-400"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Manual trigger</div><div class="text-[9px] font-mono text-slate-400">trigger.manual</div></div></div>
-      <div class="p-2 rounded-lg border border-amber-500/25 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-400/50"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Schedule trigger</div><div class="text-[9px] font-mono text-slate-400">trigger.schedule</div></div></div>
-      <div class="text-[8.5px] font-mono uppercase text-cyan-400 font-bold px-1 pt-2">📂 Источники</div>
-      <div class="p-2 rounded-lg border border-cyan-400/40 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Workspace source</div><div class="text-[9px] font-mono text-slate-400">source.upload</div></div></div>
-      <div class="p-2 rounded-lg border border-cyan-400/25 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400/50"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Git repository</div><div class="text-[9px] font-mono text-slate-400">source.git</div></div></div>
-      <div class="text-[8.5px] font-mono uppercase text-emerald-400 font-bold px-1 pt-2">🛡️ Сканеры</div>
-      <div class="p-2 rounded-lg border border-emerald-500/40 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Secrets scanner</div><div class="text-[9px] font-mono text-slate-400">scan.secrets</div></div></div>
-      <div class="p-2 rounded-lg border border-emerald-500/25 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500/50"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Dependency scanner</div><div class="text-[9px] font-mono text-slate-400">scan.sca</div></div></div>
-      <div class="p-2 rounded-lg border border-emerald-500/25 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500/50"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Kotlin SAST</div><div class="text-[9px] font-mono text-slate-400">scan.sast</div></div></div>
-      <div class="text-[8.5px] font-mono uppercase text-purple-400 font-bold px-1 pt-2">🔀 Логика</div>
-      <div class="p-2 rounded-lg border border-purple-500/40 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-purple-400"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Merge findings</div><div class="text-[9px] font-mono text-slate-400">findings.merge</div></div></div>
-      <div class="text-[8.5px] font-mono uppercase text-pink-400 font-bold px-1 pt-2">✨ AI</div>
-      <div class="p-2 rounded-lg border border-pink-500/40 bg-[#0e172a] relative overflow-hidden cursor-grab"><div class="absolute left-0 top-0 bottom-0 w-1 bg-pink-400"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">AI Explanation</div><div class="text-[9px] font-mono text-slate-400">ai.explain</div></div></div>
-      <div class="text-[8.5px] font-mono uppercase text-rose-400 font-bold px-1 pt-2">🚦 Gate</div>
-      <div class="p-2 rounded-lg border border-rose-500/40 bg-[#0e172a] relative overflow-hidden cursor-grab mb-2"><div class="absolute left-0 top-0 bottom-0 w-1 bg-rose-400"></div><div class="pl-1.5"><div class="text-[11px] font-medium text-slate-100">Quality PR Gate</div><div class="text-[9px] font-mono text-slate-400">ci.gate</div></div></div>
+  <aside class="w-[280px] bg-[#090d16] border-r border-cyberBorder flex flex-col shrink-0 min-h-0">
+    <div class="p-2.5 border-b border-cyberBorder bg-[#0a101d] shrink-0 font-semibold text-[10px] uppercase tracking-wider text-slate-100">Компоненты · 12</div>
+    <div class="flex-1 scroll-y p-2 space-y-1.5 text-[11px]">
+      <div class="text-[8px] font-mono text-amber-400 font-bold px-1">TRIGGER</div>
+      <div class="p-2 rounded border border-amber-500/40 bg-[#0e172a]">Manual trigger</div>
+      <div class="p-2 rounded border border-amber-500/25 bg-[#0e172a]">Schedule</div>
+      <div class="text-[8px] font-mono text-cyan-400 font-bold px-1 pt-1">SOURCE</div>
+      <div class="p-2 rounded border border-cyan-400/40 bg-[#0e172a]">Workspace source</div>
+      <div class="text-[8px] font-mono text-emerald-400 font-bold px-1 pt-1">SCAN</div>
+      <div class="p-2 rounded border border-emerald-500/40 bg-[#0e172a]">Secrets / SCA / SAST</div>
+      <div class="text-[8px] font-mono text-purple-400 font-bold px-1 pt-1">LOGIC · AI · GATE</div>
+      <div class="p-2 rounded border border-purple-500/40 bg-[#0e172a]">Merge findings</div>
+      <div class="p-2 rounded border border-pink-500/40 bg-[#0e172a]">AI explain</div>
+      <div class="p-2 rounded border border-rose-500/40 bg-[#0e172a] mb-2">ci.gate</div>
     </div>
   </aside>
 
-  <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#06090f]">
-    <div class="h-9 px-3 border-b border-cyberBorder bg-[#080d17]/90 flex items-center justify-between shrink-0 gap-2">
-      <div class="flex items-center gap-2 min-w-0">
-        <h2 class="text-[12px] font-semibold text-slate-100 shrink-0">Security pipeline</h2>
-        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
-          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>Несохранено
-        </span>
-        <span class="text-[10px] font-mono text-slate-500 hidden sm:inline">8 блоков · 9 связей</span>
-      </div>
+  <main class="flex-1 flex flex-col min-w-0 min-h-0 bg-[#06090f]">
+    <div class="h-9 px-3 border-b border-cyberBorder bg-[#080d17] flex items-center gap-2 shrink-0">
+      <h2 class="text-[12px] font-semibold text-slate-100">Security pipeline</h2>
+      <span class="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">▶ run · 7/8</span>
+      <span class="text-[10px] text-slate-500 font-mono">активный путь подсвечен</span>
     </div>
 
     <div class="flex-1 relative min-h-0 overflow-auto workflow-grid">
-      <div class="relative w-[1680px] h-[780px] p-8">
+      <div class="relative w-[1680px] h-[780px] p-8" id="stage">
         <svg class="absolute inset-0 w-full h-full pointer-events-none z-0" aria-hidden="true">
           <defs>
-            <linearGradient id="g-amber-green" x1="0%" x2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
-            <linearGradient id="g-cyan-green" x1="0%" x2="100%"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
-            <linearGradient id="g-green-purple" x1="0%" x2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#a855f7"/></linearGradient>
-            <linearGradient id="g-purple-pink" x1="0%" x2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient>
-            <linearGradient id="g-pink-rose" x1="0%" x2="100%"><stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#f43f5e"/></linearGradient>
+            <linearGradient id="g1" x1="0%" x2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="g2" x1="0%" x2="100%"><stop offset="0%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="g3" x1="0%" x2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#a855f7"/></linearGradient>
+            <linearGradient id="g4" x1="0%" x2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#ec4899"/></linearGradient>
+            <linearGradient id="g5" x1="0%" x2="100%"><stop offset="0%" stop-color="#ec4899"/><stop offset="100%" stop-color="#f43f5e"/></linearGradient>
+            <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#10b981"/>
+            </marker>
+            <marker id="arrow-rose" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#f43f5e"/>
+            </marker>
           </defs>
-          <path class="wire-done" d="M 220 120 C 300 120, 300 90, 380 90" fill="none" stroke="url(#g-amber-green)" stroke-width="2.2"/>
-          <path class="wire-done" d="M 220 300 C 300 300, 300 140, 380 140" fill="none" stroke="url(#g-cyan-green)" stroke-width="2.2"/>
-          <path class="wire-done" d="M 220 300 C 300 300, 300 340, 380 340" fill="none" stroke="url(#g-cyan-green)" stroke-width="2"/>
-          <path class="wire-done" d="M 220 300 C 300 300, 300 540, 380 540" fill="none" stroke="url(#g-cyan-green)" stroke-width="2"/>
-          <path class="wire-done" d="M 620 120 C 700 120, 700 280, 780 280" fill="none" stroke="url(#g-green-purple)" stroke-width="2.2"/>
-          <path class="wire-done" d="M 620 360 C 700 360, 700 310, 780 310" fill="none" stroke="url(#g-green-purple)" stroke-width="2"/>
-          <path class="wire-done" d="M 620 560 C 700 560, 700 340, 780 340" fill="none" stroke="url(#g-green-purple)" stroke-width="2"/>
-          <path class="wire-done" d="M 1000 310 C 1060 310, 1060 310, 1100 310" fill="none" stroke="url(#g-purple-pink)" stroke-width="2.2"/>
-          <path class="wire-active" d="M 1320 310 C 1380 310, 1380 310, 1440 310" fill="none" stroke="url(#g-pink-rose)" stroke-width="2.8"/>
+          <path class="wire-base wire-done" d="M 220 120 C 300 120 300 90 380 90" stroke="url(#g1)" stroke-width="2.2"/>
+          <path class="wire-base wire-done" d="M 220 300 C 300 300 300 140 380 140" stroke="url(#g2)" stroke-width="2.2"/>
+          <path class="wire-base wire-done" d="M 220 300 C 300 300 300 340 380 340" stroke="url(#g2)" stroke-width="2"/>
+          <path class="wire-base wire-done" d="M 220 300 C 300 300 300 540 380 540" stroke="url(#g2)" stroke-width="2"/>
+          <path class="wire-base wire-done" d="M 620 120 C 700 120 700 280 780 280" stroke="url(#g3)" stroke-width="2.2"/>
+          <path class="wire-base wire-done" d="M 620 360 C 700 360 700 310 780 310" stroke="url(#g3)" stroke-width="2"/>
+          <path class="wire-base wire-done" d="M 620 560 C 700 560 700 340 780 340" stroke="url(#g3)" stroke-width="2"/>
+          <path id="path-merge-ai" class="wire-base wire-done" d="M 1000 310 C 1060 310 1060 310 1100 310" stroke="url(#g4)" stroke-width="2.4" marker-end="url(#arrow-green)"/>
+          <path class="wire-base wire-active-glow" d="M 1320 310 C 1380 310 1380 310 1440 310" stroke="#f43f5e" stroke-width="6"/>
+          <path id="path-ai-gate" class="wire-base wire-active" d="M 1320 310 C 1380 310 1380 310 1440 310" stroke="url(#g5)" stroke-width="2.8" marker-end="url(#arrow-rose)"/>
+          <path id="path-spine" class="wire-base wire-active" d="M 220 300 C 400 300 600 310 780 310" stroke="url(#g3)" stroke-width="1.8" style="stroke-opacity:0.4; animation-duration:1.1s"/>
         </svg>
+        <svg class="absolute inset-0 w-full h-full pointer-events-none z-[1]" id="particles" aria-hidden="true"></svg>
 
         <div class="absolute left-8 top-10 w-48 rounded-lg bg-[#0e1626]/95 border-2 border-amber-500/50 z-10">
-          <div class="px-2 py-1 border-b border-amber-500/30 bg-amber-500/10 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-amber-300 font-bold">⚡ ТРИГГЕР</span><span class="text-[8px] font-mono text-amber-300">ЗАВЕРШЁН</span></div>
+          <div class="px-2 py-1 border-b border-amber-500/30 bg-amber-500/10 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-amber-300 font-bold">⚡ ТРИГГЕР</span>
+            <span class="text-[8px] font-mono text-amber-300">ЗАВЕРШЁН</span>
+          </div>
           <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Manual trigger</div><div class="font-mono text-[9px] text-amber-400/80">trigger.manual</div></div>
         </div>
         <div class="absolute left-8 top-[240px] w-48 rounded-lg bg-[#0e1626]/95 border-2 border-cyan-400/50 z-10">
-          <div class="px-2 py-1 border-b border-cyan-400/30 bg-cyan-500/10 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-cyan-300 font-bold">📂 ИСТОЧНИК</span><span class="text-[8px] font-mono text-cyan-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">NEVZ-main (2)</div><div class="font-mono text-[9px] text-cyan-400/90">source.upload</div><div class="mt-1.5 text-[9px] bg-slate-900/80 p-1 rounded border border-cyan-400/20 font-mono">13334 файлов · 491 MiB</div></div>
+          <div class="px-2 py-1 border-b border-cyan-400/30 bg-cyan-500/10 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-cyan-300 font-bold">📂 SOURCE</span>
+            <span class="text-[8px] font-mono text-cyan-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">NEVZ-main (2)</div><div class="font-mono text-[9px] text-cyan-400/90">source.upload</div></div>
         </div>
         <div class="absolute left-[380px] top-6 w-56 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/55 z-10">
-          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/15 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-emerald-300 font-bold">🛡️ SECURITY</span><span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Secrets scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.secrets</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-emerald-500/30 text-[9px] flex justify-between"><span>Готово</span><span class="text-amber-300 font-mono">найдено: 4</span></div></div>
+          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/15 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-emerald-300 font-bold">🛡️ SECRETS</span>
+            <span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Secrets scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.secrets · 4</div></div>
         </div>
         <div class="absolute left-[380px] top-[250px] w-56 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/40 z-10">
-          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-emerald-300 font-bold">📦 SECURITY</span><span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Dependency scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sca</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-slate-800 text-[9px] flex justify-between"><span>Готово</span><span class="text-emerald-400 font-mono">0</span></div></div>
+          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-emerald-300 font-bold">📦 SCA</span>
+            <span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Dependency scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sca · 0</div></div>
         </div>
         <div class="absolute left-[380px] top-[460px] w-56 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/40 z-10">
-          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-emerald-300 font-bold">🛡️ SECURITY</span><span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Kotlin SAST</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sast</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-slate-800 text-[9px] flex justify-between"><span>Готово · 225 мс</span><span class="text-emerald-400 font-mono">0</span></div></div>
+          <div class="px-2 py-1 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-emerald-300 font-bold">🛡️ SAST</span>
+            <span class="text-[8px] font-mono text-emerald-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Kotlin SAST</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sast · 0</div></div>
         </div>
         <div class="absolute left-[780px] top-[230px] w-52 rounded-lg bg-[#0e1626]/95 border-2 border-purple-500/50 z-10">
-          <div class="px-2 py-1 border-b border-purple-500/30 bg-purple-500/10 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-purple-300 font-bold">🔀 MERGE</span><span class="text-[8px] font-mono text-purple-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Merge findings</div><div class="font-mono text-[9px] text-purple-400/90">findings.merge</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-purple-500/20 text-[9px]">Уникальных: <span class="text-amber-400 font-bold">4</span></div></div>
+          <div class="px-2 py-1 border-b border-purple-500/30 bg-purple-500/10 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-purple-300 font-bold">🔀 MERGE</span>
+            <span class="text-[8px] font-mono text-purple-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Merge findings</div><div class="font-mono text-[9px] text-purple-400/90">4 unique</div></div>
         </div>
         <div class="absolute left-[1100px] top-[200px] w-52 rounded-lg bg-[#0e1626]/95 border-2 border-pink-500/50 z-10">
-          <div class="px-2 py-1 border-b border-pink-500/30 bg-pink-500/15 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-pink-300 font-bold">✨ AI</span><span class="text-[8px] font-mono text-pink-300">ЗАВЕРШЁН</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">AI explanation</div><div class="font-mono text-[9px] text-pink-400/90">ai.explain</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-pink-500/20 text-[9px]">Покрытие <span class="text-pink-300">100%</span> · 4/4</div></div>
+          <div class="px-2 py-1 border-b border-pink-500/30 bg-pink-500/15 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-pink-300 font-bold">✨ AI</span>
+            <span class="text-[8px] font-mono text-pink-300">ЗАВЕРШЁН</span>
+          </div>
+          <div class="p-2.5">
+            <div class="font-semibold text-slate-100 text-[11px]">AI explanation</div>
+            <div class="font-mono text-[9px] text-pink-400/90">100% · 4/4</div>
+            <div class="mt-2 flex justify-end"><div class="w-2.5 h-2.5 rounded-full bg-pink-400 border-2 border-slate-900 port-live"></div></div>
+          </div>
         </div>
-        <div class="absolute left-[1440px] top-[200px] w-52 rounded-lg bg-[#0e1626]/95 border-2 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.25)] z-10 ring-1 ring-rose-500/30">
-          <div class="px-2 py-1 border-b border-rose-500/30 bg-rose-500/15 rounded-t-lg flex justify-between"><span class="text-[9px] font-mono text-rose-300 font-bold">🚦 GATE</span><span class="text-[8px] font-mono text-rose-200 animate-pulse">ВЫПОЛНЯЕТСЯ</span></div>
-          <div class="p-2.5"><div class="font-semibold text-slate-100 text-[11px]">Security Gate</div><div class="font-mono text-[9px] text-rose-400/90">ci.gate</div><div class="mt-1 p-1.5 rounded bg-slate-900/90 border border-rose-500/25 text-[9px] text-rose-200/90">Проверка политики… 4 MEDIUM</div></div>
+        <div class="absolute left-[1440px] top-[200px] w-52 rounded-lg bg-[#0e1626]/95 border-2 border-rose-500/60 z-10 node-running">
+          <div class="px-2 py-1 border-b border-rose-500/30 bg-rose-500/15 rounded-t-lg flex justify-between">
+            <span class="text-[9px] font-mono text-rose-300 font-bold">🚦 GATE</span>
+            <span class="text-[8px] font-mono text-rose-200 animate-pulse">ВЫПОЛНЯЕТСЯ</span>
+          </div>
+          <div class="p-2.5">
+            <div class="font-semibold text-slate-100 text-[11px]">Security Gate</div>
+            <div class="font-mono text-[9px] text-rose-400/90">ci.gate · policy check…</div>
+            <div class="mt-2 flex justify-start"><div class="w-2.5 h-2.5 rounded-full bg-pink-400 border-2 border-slate-900 port-live"></div></div>
+          </div>
         </div>
       </div>
     </div>
 
     <footer class="h-7 border-t border-cyberBorder bg-[#080d17] px-3 flex items-center justify-between text-[10px] text-slate-400 shrink-0">
-      <span class="text-emerald-400 font-medium">ВЫПОЛНЕНИЕ · 7/8 шагов · сейчас: gate</span>
-      <button class="px-2 py-0.5 rounded bg-slate-800/90 border border-slate-700 text-slate-200">Запуски <span class="font-mono text-emerald-400">1</span></button>
+      <span class="text-emerald-400 font-medium">ВЫПОЛНЕНИЕ · поток по связям · сейчас: <span class="text-rose-300">gate</span></span>
+      <div class="flex items-center gap-2">
+        <label class="flex items-center gap-1 text-[9px] text-slate-500 cursor-pointer">
+          <input type="checkbox" id="toggleAnim" checked class="rounded border-slate-600"/> анимация связей
+        </label>
+        <button class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-200">Запуски 1</button>
+      </div>
     </footer>
   </main>
 
-  <aside class="w-[340px] max-w-[340px] bg-[#090d16] border-l border-cyberBorder flex flex-col shrink-0 min-h-0 z-20">
-    <div class="p-2.5 border-b border-cyberBorder flex items-center justify-between shrink-0">
-      <div>
-        <div class="text-[9px] font-mono uppercase tracking-wider text-slate-500">INSPECTOR / CONTEXT</div>
-        <div class="font-semibold text-slate-100 text-[12px] mt-0.5">Инспектор</div>
-      </div>
+  <aside class="w-[320px] bg-[#090d16] border-l border-cyberBorder flex flex-col shrink-0 min-h-0">
+    <div class="p-2.5 border-b border-cyberBorder shrink-0">
+      <div class="text-[9px] font-mono text-slate-500 uppercase">Inspector</div>
+      <div class="font-semibold text-slate-100 text-[12px]">Findings · 4</div>
     </div>
-    <div class="flex border-b border-cyberBorder px-2.5 pt-1.5 gap-3 text-[11px] font-medium text-slate-400 shrink-0">
-      <button class="pb-1.5 border-b-2 border-transparent hover:text-slate-200">Свойства</button>
-      <button class="pb-1.5 border-b-2 border-emerald-500 text-emerald-400 font-semibold flex items-center gap-1">Findings <span class="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-[9px] font-mono">4</span></button>
-      <button class="pb-1.5 border-b-2 border-transparent hover:text-slate-200">Telemetry</button>
-    </div>
-
-    <div class="flex-1 scroll-y p-2.5 space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="font-semibold text-slate-200 text-[12px]">Результаты безопасности</span>
-        <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-mono text-[10px] font-bold">4</span>
+    <div class="flex-1 scroll-y p-2.5 space-y-2 text-[10px]">
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] p-2">
+        <span class="text-amber-400 font-mono text-[8px]">MEDIUM</span>
+        <div class="font-mono text-slate-200 mt-0.5">generic_assignment</div>
+        <div class="text-pink-300/90 mt-1 text-[9px]"><b>AI-1:</b> Отзовите ключ, vault/CI secrets.</div>
       </div>
-      <div class="flex flex-wrap gap-1.5">
-        <select class="bg-[#0d1424] border border-cyberBorder rounded px-1.5 py-1 text-[10px] text-slate-300"><option>Все уровни</option><option>Critical</option><option>High</option><option>Medium</option></select>
-        <select class="bg-[#0d1424] border border-cyberBorder rounded px-1.5 py-1 text-[10px] text-slate-300"><option>Все</option><option>Open</option></select>
-        <span class="ml-auto font-mono text-[10px] text-slate-500 self-center">4 / 4</span>
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] p-2">
+        <span class="text-amber-400 font-mono text-[8px]">MEDIUM</span>
+        <div class="font-mono text-slate-200 mt-0.5">generic_assignment #2</div>
+        <div class="text-pink-300/90 mt-1 text-[9px]"><b>AI-2:</b> .gitignore + secret manager, ротация.</div>
       </div>
-
-      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
-        <div class="px-2 py-1 bg-[#0e172a] border-b border-cyberBorder font-mono text-[9px] text-slate-400 flex justify-between"><span class="truncate">EVA/…/electron-builder.env</span><span class="text-amber-400">2</span></div>
-        <div class="p-2 space-y-1.5">
-          <div class="flex items-center gap-1.5"><span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[8px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 text-[11px]">generic_assignment</span></div>
-          <div class="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded border border-slate-800">Возможный секрет в присваивании; значение похоже на токен API.</div>
-          <div class="text-[9px] text-pink-300/90 border-t border-slate-800/80 pt-1.5"><div class="font-mono text-[8px] text-pink-400/70 uppercase">AI-1</div>Отзовите ключ в панели провайдера, удалите строку из env и перенесите значение в vault / CI secrets.</div>
-        </div>
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] p-2">
+        <span class="text-rose-400 font-mono text-[8px]">HIGH</span>
+        <div class="font-mono text-slate-200 mt-0.5">aws_access_key</div>
+        <div class="text-pink-300/90 mt-1 text-[9px]"><b>AI-3:</b> IAM least privilege + Secrets Manager.</div>
       </div>
-
-      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
-        <div class="px-2 py-1 bg-[#0e172a] border-b border-cyberBorder font-mono text-[9px] text-slate-400 flex justify-between"><span class="truncate">EVA/…/electron-builder.env</span><span class="text-amber-400">2</span></div>
-        <div class="p-2 space-y-1.5">
-          <div class="flex items-center gap-1.5"><span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[8px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 text-[11px]">generic_assignment</span></div>
-          <div class="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded border border-slate-800">Второе присваивание: строка похожа на пароль или private key material.</div>
-          <div class="text-[9px] text-pink-300/90 border-t border-slate-800/80 pt-1.5"><div class="font-mono text-[8px] text-pink-400/70 uppercase">AI-2</div>Не коммитьте PEM/пароли. Используйте .gitignore и secret manager; ротируйте учётные данные.</div>
-        </div>
-      </div>
-
-      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
-        <div class="px-2 py-1 bg-[#0e172a] border-b border-cyberBorder font-mono text-[9px] text-slate-400 flex justify-between"><span class="truncate">config/application.yml</span><span class="text-rose-400">1</span></div>
-        <div class="p-2 space-y-1.5">
-          <div class="flex items-center gap-1.5"><span class="px-1 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[8px] font-mono font-bold">HIGH</span><span class="font-mono text-slate-200 text-[11px]">aws_access_key</span></div>
-          <div class="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded border border-slate-800">AWS Access Key ID в конфигурации Spring Boot.</div>
-          <div class="text-[9px] text-pink-300/90 border-t border-slate-800/80 pt-1.5"><div class="font-mono text-[8px] text-pink-400/70 uppercase">AI-3</div>IAM least privilege + AWS Secrets Manager / env; запретите hardcode в YAML.</div>
-        </div>
-      </div>
-
-      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
-        <div class="px-2 py-1 bg-[#0e172a] border-b border-cyberBorder font-mono text-[9px] text-slate-400 flex justify-between"><span class="truncate">src/…/keys/dev.pem</span><span class="text-amber-400">1</span></div>
-        <div class="p-2 space-y-1.5">
-          <div class="flex items-center gap-1.5"><span class="px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[8px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 text-[11px]">private_key_block</span></div>
-          <div class="text-[10px] text-slate-300 bg-slate-900/60 p-1.5 rounded border border-slate-800">Блок приватного ключа в дереве исходников.</div>
-          <div class="text-[9px] text-pink-300/90 border-t border-slate-800/80 pt-1.5"><div class="font-mono text-[8px] text-pink-400/70 uppercase">AI-4</div>Удалите PEM из репозитория; храните ключи только на агентах CI или в HSM.</div>
-        </div>
-      </div>
-
-      <div class="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-950/10 text-[10px] text-slate-400 mb-2">
-        <div class="text-slate-200 font-medium mb-0.5">Изолированный анализ</div>
-        Проект не запускается. ZIP в sandbox, Git — allowlist. Секреты маскируются.
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] p-2 mb-2">
+        <span class="text-amber-400 font-mono text-[8px]">MEDIUM</span>
+        <div class="font-mono text-slate-200 mt-0.5">private_key_block</div>
+        <div class="text-pink-300/90 mt-1 text-[9px]"><b>AI-4:</b> Удалить PEM из repo, только CI/HSM.</div>
       </div>
     </div>
   </aside>
 </div>
 
 <footer class="h-6 bg-[#04060b] border-t border-cyberBorder/50 px-3 flex items-center justify-between text-[9px] font-mono text-slate-500 shrink-0">
-  <span><span class="text-slate-400 font-semibold">INVEST</span> · AI SECURITY WORKFLOW</span>
-  <span>EDITOR · 0.8.0</span>
+  <span>INVEST · AI SECURITY WORKFLOW</span>
+  <span>EDITOR · 0.8.1 · wire-flow</span>
 </footer>
+
+<script>
+(function () {
+  const svg = document.getElementById('particles');
+  if (!svg) return;
+
+  function spawnDots(pathId, color, count, durationMs) {
+    const path = document.getElementById(pathId);
+    if (!path) return;
+    const len = path.getTotalLength();
+    for (let i = 0; i < count; i++) {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('r', '3.5');
+      c.setAttribute('fill', color);
+      c.style.filter = 'drop-shadow(0 0 4px ' + color + ')';
+      svg.appendChild(c);
+      const delay = (i / count) * durationMs;
+      const start = performance.now() - delay;
+      function frame(now) {
+        if (!document.getElementById('toggleAnim')?.checked) {
+          c.setAttribute('opacity', '0');
+          requestAnimationFrame(frame);
+          return;
+        }
+        const t = ((now - start) % durationMs) / durationMs;
+        const pt = path.getPointAtLength(t * len);
+        c.setAttribute('cx', pt.x);
+        c.setAttribute('cy', pt.y);
+        c.setAttribute('opacity', String(0.3 + 0.7 * Math.sin(t * Math.PI)));
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+  }
+
+  spawnDots('path-ai-gate', '#fb7185', 4, 1800);
+  spawnDots('path-spine', '#34d399', 3, 2800);
+
+  document.getElementById('toggleAnim')?.addEventListener('change', (e) => {
+    document.querySelectorAll('.wire-active, .wire-active-glow').forEach((el) => {
+      el.style.animationPlayState = e.target.checked ? 'running' : 'paused';
+    });
+  });
+})();
+</script>
 </body>
 </html>
