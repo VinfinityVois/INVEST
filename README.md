@@ -218,7 +218,7 @@ API:
 
 ### Настройка Webhook
 
-- В \`.env\` задаётся \`NOTIFY_WEBHOOK_ALLOWED_HOSTS\` — точный список разрешённых DNS-hostname через запятую; по умолчанию разрешён только \`webhook.site\`.
+- Разрешённые DNS-hostname настраиваются в **Главное меню → Интеграции платформы** и сохраняются отдельно для каждого Workspace. `NOTIFY_WEBHOOK_ALLOWED_HOSTS` остаётся legacy-резервом, если в Workspace ещё нет настроек.
 - Нода принимает только HTTPS на порту 443, без credentials, query и fragment.
 - DNS-адреса проверяются на публичную маршрутизируемость; redirects запрещены, proxy из окружения не используется.
 - Таймаут доставки — 10 секунд. Ошибка доставки помечает ноду и запуск как failed; незаданный URL отображается как configuration required.
@@ -262,7 +262,7 @@ The entropy threshold is a confidence signal, not proof that a value is live. Th
 3. В настройках GitHub repository → Settings → Secrets and variables → Actions добавьте:
    - \`INVEST_API_BASE_URL\` — публичный HTTPS URL API, доступный GitHub-hosted runner;
    - \`INVEST_CI_TOKEN\` — созданный workspace-scoped API token.
-4. В интерфейсе INVEST сохраните workflow в том же Workspace, содержащий ровно одну ноду \`CI security gate\`. Источник должен быть разрешён через \`ALLOWED_TARGETS\`.
+4. В интерфейсе INVEST сохраните workflow в том же Workspace, содержащий ровно одну ноду \`CI security gate\`. Git-источник должен быть добавлен в Интеграции платформы активного Workspace.
 5. Скопируйте UUID workflow и запустите GitHub Actions → **INVEST security check** → Run workflow, передав UUID.
 
 CI API:
@@ -370,4 +370,4 @@ API:
 - `GET /api/presets/{preset_id}` returns a sanitized graph preview;
 - `POST /api/presets/{preset_id}/clone` creates a new saved workflow with fresh node/edge IDs and does not execute it.
 
-In the editor, open **Каталог workflow** → **Создать workflow** on **PR Gate**. Then replace the example Git URL with a repository URL already permitted by `ALLOWED_TARGETS`, save the workflow, and run it. The resulting graph contains exactly one `ci.gate` node and can be used with the protected `/api/ci/workflows/{workflow_id}/runs` endpoint after a workspace API token with `workflow:run` and `run:read` scopes is created. Cloning never starts a scan automatically.
+In the editor, open **Каталог workflow** → **Создать workflow** on **PR Gate**. Then replace the example Git URL with a repository URL already added in **Platform integrations** for the active Workspace, save the workflow, and run it. The resulting graph contains exactly one `ci.gate` node and can be used with the protected `/api/ci/workflows/{workflow_id}/runs` endpoint after a workspace API token with `workflow:run` and `run:read` scopes is created. Cloning never starts a scan automatically.
