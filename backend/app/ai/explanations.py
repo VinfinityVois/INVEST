@@ -634,8 +634,8 @@ def explain_findings(findings: list[dict[str, Any]], config: dict[str, Any] | No
         finding for finding in eligible
         if str(finding.get("fingerprint") or "") not in explained_fingerprints
     ]
-    # Bound extra work: at most six individual retries, each with a shorter timeout.
-    max_individual_retries = 6
+    # Bound extra work while covering a typical 12-finding scan; larger scans remain capped.
+    max_individual_retries = 12
     retry_queue = retry_findings[:max_individual_retries]
     retry_succeeded = 0
     retry_timeout_seconds = min(timeout_seconds, 90.0)
