@@ -17,7 +17,7 @@ from croniter import croniter
 
 from app.db import SessionLocal
 from app.scheduler import next_run_time
-from app.models import AuditLog, Credential, Finding, FindingState, Workflow, WorkflowIntegration, WorkflowRun, WorkflowSchedule, WorkflowVersion
+from app.models import AuditLog, Credential, Finding, FindingState, Workflow, WorkspaceIntegration, WorkflowRun, WorkflowSchedule, WorkflowVersion
 from app.workflows.engine import WorkflowExecutionError, execute_graph
 from app.security.rate_limit import cleanup_expired_rate_limits
 from app.security.vault import VaultError, decrypt_credential
