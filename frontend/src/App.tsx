@@ -702,12 +702,16 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
   }, [workflowId]);
 
   useEffect(() => {
-    if (!lastRunId) return;
+    if (!lastRunId) { setFindings([]); return; }
     let active = true;
-    apiFetch("/api/runs/" + lastRunId + "/telemetry")
-      .then(response => response.ok ? response.json() : null)
-      .then((data: Telemetry | null) => { if (active && data) setTelemetry(data); })
-      .catch(() => undefined);
+    Promise.all([
+      apiFetch("/api/runs/" + lastRunId + "/telemetry"),
+      apiFetch("/api/runs/" + lastRunId + "/findings"),
+    ]).then(async ([telemetryResponse, findingsResponse]) => {
+      if (!active) return;
+      if (telemetryResponse.ok) setTelemetry(await telemetryResponse.json() as Telemetry);
+      if (findingsResponse.ok) setFindings(await findingsResponse.json() as Finding[]);
+    }).catch(() => undefined);
     return () => { active = false; };
   }, [lastRunId]);
 
