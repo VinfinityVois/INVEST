@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     webhook_allowed_hosts: str | None = None
     telegram_bot_token: str | None = None
     telegram_allowed_chat_ids: str = ""
+    telegram_proxy: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str | None = None

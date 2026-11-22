@@ -85,10 +85,16 @@ def deliver_telegram(
     endpoint = f"{TELEGRAM_API}/bot{token}/sendMessage"
     delivered = []
     try:
+        proxy = (settings.telegram_proxy or "").strip() or None
+        # опционально: разрешить только socks5/http(s)
+        if proxy and not proxy.startswith(("socks5://", "socks5h://", "http://", "https://")):
+            raise TelegramDeliveryError("TELEGRAM_PROXY must be socks5:// or http(s)://")
+
         with httpx.Client(
-            timeout=httpx.Timeout(10.0, connect=4.0),
+            timeout=httpx.Timeout(20.0, connect=10.0),  # через прокси чуть дольше
             follow_redirects=False,
             trust_env=False,
+            proxy=proxy,
         ) as client:
             for chat_id in chat_ids:
                 response = client.post(
