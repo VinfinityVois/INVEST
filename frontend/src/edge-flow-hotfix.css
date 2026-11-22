@@ -1,24 +1,30 @@
-/* Runtime edge path animation + inspector scroll + topbar density */
+/* Edge execution flow + inspector + topbar — force-visible */
 .shell .react-flow__edge.edge-active .react-flow__edge-path {
   stroke: #34d399 !important;
-  stroke-width: 3px !important;
-  stroke-dasharray: 10 8 !important;
-  animation: invest-wire-flow 0.7s linear infinite !important;
-  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.7)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.3)) !important;
+  stroke-width: 3.2px !important;
+  stroke-dasharray: 12 8 !important;
+  animation: invest-wire-flow 0.65s linear infinite !important;
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.85)) !important;
+  opacity: 1 !important;
 }
 .shell .react-flow__edge.edge-completed .react-flow__edge-path {
   stroke: #10b981 !important;
-  stroke-width: 2.35px !important;
-  opacity: 0.95 !important;
-  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4)) !important;
+  stroke-width: 2.5px !important;
+  stroke-dasharray: none !important;
+  animation: none !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.45)) !important;
 }
 .shell .react-flow__edge.edge-idle .react-flow__edge-path {
-  stroke: #3d5168 !important;
-  stroke-width: 1.55px !important;
-  opacity: 0.4 !important;
+  stroke: #334155 !important;
+  stroke-width: 1.5px !important;
+  stroke-dasharray: none !important;
+  animation: none !important;
+  opacity: 0.35 !important;
+  filter: none !important;
 }
 @keyframes invest-wire-flow {
-  to { stroke-dashoffset: -36; }
+  to { stroke-dashoffset: -40; }
 }
 .shell .inspector {
   display: flex !important;
@@ -34,31 +40,38 @@
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch;
 }
-.shell .layout {
-  min-height: 0 !important;
+.shell .layout { min-height: 0 !important; }
+.shell .workflow-node.node-running {
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.45), 0 0 28px rgba(16, 185, 129, 0.28) !important;
 }
 .shell .topbar {
   display: flex !important;
   align-items: center !important;
-  gap: 10px !important;
+  gap: 12px !important;
   flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  min-width: 0 !important;
+}
+.shell .topbar-leading {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
   overflow: hidden !important;
 }
 .shell .topbar-trailing {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
+  flex: 0 0 auto !important;
   margin-left: auto !important;
-  flex: 0 1 auto !important;
-  min-width: 0 !important;
-  max-width: 58% !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+.shell .topbar .status {
+  max-width: 180px !important;
   overflow: hidden !important;
-}
-.shell .topbar-trailing a,
-.shell .topbar-trailing button {
+  text-overflow: ellipsis !important;
   white-space: nowrap !important;
-  flex-shrink: 0 !important;
 }
-.shell .workflow-node.node-running {
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35), 0 0 22px rgba(16, 185, 129, 0.2) !important;
+.shell .workspace-context {
+  max-width: 220px !important;
 }
