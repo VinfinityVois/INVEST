@@ -2388,9 +2388,9 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
             const sourceNode = nodes.find(node => node.data.category === "Source");
             if (!sourceNode) { setResult("В графе отсутствует блок-источник."); return; }
             updateNode(sourceNode.id, { nodeType: "source.git", label: "Git repository", description: "Клонирует разрешённый HTTPS-репозиторий в изолированную рабочую область.", config: { url: gitUrl.trim(), ...(gitRef.trim() ? { ref: gitRef.trim() } : {}) }, executionStatus: "idle", executionDetail: "" });
-            setResult("Git-источник настроен. Добавьте точный URL в ALLOWED_TARGETS корневого .env, затем нажмите «Запустить».");
+            setResult("Git-источник настроен. Проверьте, что репозиторий добавлен в Настройки платформы → Интеграции, затем нажмите «Запустить».");
           }}><GitBranch size={13}/> Использовать Git-источник</button>
-          <small className="upload-hint">Только HTTPS и точное совпадение с ALLOWED_TARGETS в корневом .env. Клонирование выполняется worker при запуске.</small>
+          <small className="upload-hint">Только HTTPS и репозитории из Настройки платформы → Интеграции. Клонирование выполняется worker при запуске.</small>
         </div>
           </div>}
         </section>}
@@ -2507,7 +2507,7 @@ function AuthenticatedApp({ user, onUserUpdated, onLogout }: { user: AuthUser; o
           </> : selectedNode.data.nodeType === "notify.webhook" ? <>
             <div className="ai-node-guide"><div><Zap size={15}/><b>WEBHOOK · ДОСТАВКА УВЕДОМЛЕНИЯ</b></div><p>Отправляет JSON-сводку после AI explanation. В уведомление не включаются исходный код, code context и masked values.</p></div>
             {renderSchemaFields()}
-            <p className="edit-hint">Разрешённый домен задаётся через NOTIFY_WEBHOOK_ALLOWED_HOSTS в корневом .env. Только HTTPS:443, без redirects.</p>
+            <p className="edit-hint">Добавьте hostname в Настройки платформы → Интеграции. Только HTTPS:443, без redirects и переходов по перенаправлениям.</p>
             {telemetry?.node_results?.[selectedNode.id]?.message && <div className="ai-provider-run-state"><b>ПОСЛЕДНИЙ РЕЗУЛЬТАТ: {String(telemetry.node_results[selectedNode.id].status || "unknown").toUpperCase()}</b><p>{telemetry.node_results[selectedNode.id].message}</p></div>}
           </> : selectedNode.data.nodeType === "trigger.schedule" ? <>
             <div className="ai-node-guide"><div><Activity size={15}/><b>SCHEDULE · АВТОМАТИЧЕСКИЙ ЗАПУСК</b></div><p>Worker проверяет наступление времени по расписанию и ставит workflow в обычную очередь запусков. Код проекта не запускается.</p></div>
