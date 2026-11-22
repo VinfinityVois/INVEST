@@ -1,623 +1,328 @@
 <!DOCTYPE html>
-<html class="dark h-full" lang="ru">
+<html class="h-full bg-[#06090f] text-slate-200 antialiased" lang="ru">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ЦЕНТР-ИНВЕСТ · AI Security Workflow</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            ci: {
-              950: '#0B0E13',
-              900: '#14181F',
-              850: '#1A2029',
-              800: '#252B33',
-              700: '#3A424C',
-              600: '#4F5863',
-              500: '#6B7682',
-              400: '#8B95A1',
-              300: '#B8C0C8',
-              200: '#D4DAE0',
-              100: '#E8ECF0',
-              50: '#F4F6F8',
-            },
-            accent: {
-              50: '#E8F5EE',
-              100: '#CDEFD9',
-              200: '#9DDEB8',
-              300: '#6CCB94',
-              400: '#3BB56F',
-              500: '#1B9A55',
-              600: '#157A44',
-              700: '#0F5C34',
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
-          },
-          borderRadius: {
-            sm: '4px',
-            DEFAULT: '6px',
-            md: '6px',
-            lg: '8px',
-          },
-          boxShadow: {
-            panel: '0 1px 2px rgba(0,0,0,.25), 0 4px 16px rgba(0,0,0,.2)',
-            node: '0 2px 12px rgba(0,0,0,.35)',
-            'node-run': '0 0 0 1px rgba(27,154,85,.35), 0 4px 20px rgba(27,154,85,.12)',
-            'node-err': '0 0 0 1px rgba(198,40,40,.4), 0 4px 20px rgba(198,40,40,.1)',
-          },
-          transitionDuration: {
-            micro: '140ms',
-            small: '200ms',
-          }
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ЦЕНТР-ИНВЕСТ // AI SECURITY WORKFLOW - PR Gate</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          cyberDark: '#06090f',
+          cyberPanel: '#0a101d',
+          cyberCard: '#0f172a',
+          cyberBorder: 'rgba(255, 255, 255, 0.08)',
+          cyberGreen: '#10b981',
+          cyberGreenGlow: '#059669',
+          cyberCyan: '#06b6d4',
+          cyberAmber: '#f59e0b',
+        },
+        fontFamily: {
+          mono: ['\"JetBrains Mono\"', 'monospace', 'ui-monospace'],
+          sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
         }
       }
     }
-  </script>
-  <style>
-    :root {
-      --radius: 6px;
-      --accent: #1B9A55;
-    }
-    html, body { height: 100%; }
-    body {
-      font-feature-settings: "ss01" on, "cv11" on;
-      -webkit-font-smoothing: antialiased;
-    }
-    .canvas-dots {
-      background-color: #14181F;
-      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
-      background-size: 20px 20px;
-    }
-    .scroll-thin::-webkit-scrollbar { width: 5px; height: 5px; }
-    .scroll-thin::-webkit-scrollbar-track { background: transparent; }
-    .scroll-thin::-webkit-scrollbar-thumb {
-      background: #3A424C;
-      border-radius: 4px;
-    }
-    .scroll-thin::-webkit-scrollbar-thumb:hover { background: #4F5863; }
-    .truncate-path {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
-    .port {
-      width: 10px; height: 10px;
-      border-radius: 9999px;
-      border: 2px solid #6B7682;
-      background: #14181F;
-    }
-    .port-accent { border-color: #1B9A55; }
-    .port-warn { border-color: #C62828; }
-    .port-ai { border-color: #6B7682; }
-    @keyframes pulse-soft {
-      0%, 100% { opacity: 1; }
-      50% { opacity: .45; }
-    }
-    .status-pulse { animation: pulse-soft 1.3s ease-in-out infinite; }
-    @media (prefers-reduced-motion: reduce) {
-      .status-pulse { animation: none; }
-    }
-    .btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      height: 32px; padding: 0 12px;
-      font-size: 12px; font-weight: 500;
-      border-radius: 4px;
-      white-space: nowrap;
-      transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
-    }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
-    .btn-primary {
-      background: #157A44; color: #fff; border: 1px solid #0F5C34;
-    }
-    .btn-primary:hover { background: #1B9A55; }
-    .btn-ghost {
-      background: transparent; color: #B8C0C8; border: 1px solid #3A424C;
-    }
-    .btn-ghost:hover { background: #252B33; color: #E8ECF0; }
-    .btn-soft {
-      background: rgba(27,154,85,.12); color: #6CCB94; border: 1px solid rgba(27,154,85,.3);
-    }
-    .btn-soft:hover { background: rgba(27,154,85,.2); }
-    .chip {
-      display: inline-flex; align-items: center;
-      height: 20px; padding: 0 8px;
-      font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
-      border-radius: 2px; letter-spacing: .02em;
-    }
-    .node-card {
-      width: 240px;
-      border-radius: 6px;
-      background: #1A2029;
-      border: 1px solid #3A424C;
-      box-shadow: 0 2px 12px rgba(0,0,0,.35);
-    }
-    .node-card.selected { border-color: #1B9A55; box-shadow: 0 0 0 1px rgba(27,154,85,.35), 0 4px 20px rgba(27,154,85,.12); }
-    .node-card.error { border-color: #C62828; box-shadow: 0 0 0 1px rgba(198,40,40,.35); }
-    .node-card.running { border-color: #3BB56F; }
-  </style>
+  }
+</script>
+<style>
+  html, body { height: 100%; margin: 0; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #06090f; }
+  ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  .scroll-y { overflow-y: auto; overflow-x: hidden; min-height: 0; }
+  .workflow-grid {
+    background-size: 24px 24px;
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-color: #06090f;
+  }
+  .bezier-wire { filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.35)); }
+</style>
 </head>
-<body class="h-screen overflow-hidden flex flex-col bg-ci-950 text-ci-100 font-sans antialiased">
+<body class="h-full flex flex-col font-sans select-none overflow-hidden text-xs">
 
-  <!-- TOP BAR -->
-  <header class="h-12 shrink-0 border-b border-ci-800 bg-ci-950/95 backdrop-blur flex items-center justify-between px-3 z-40">
-    <div class="flex items-center gap-3 min-w-0">
-      <div class="flex items-center gap-2 shrink-0">
-        <div class="w-7 h-7 rounded-sm bg-accent-600/15 border border-accent-600/40 flex items-center justify-center text-accent-400">
-          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
-        </div>
-        <div class="leading-tight">
-          <div class="flex items-center gap-1.5 text-[12px]">
-            <span class="font-semibold text-white tracking-wide">ЦЕНТР-ИНВЕСТ</span>
-            <span class="text-ci-600">/</span>
-            <span class="font-mono text-[11px] font-medium text-accent-400">AI Security Workflow</span>
-          </div>
-          <p class="text-[10px] text-ci-500 font-medium tracking-wide uppercase">Контроль безопасности · CyberGarden</p>
-        </div>
-      </div>
-      <div class="hidden lg:flex items-center gap-2 pl-3 border-l border-ci-800">
-        <span class="relative flex h-1.5 w-1.5">
-          <span class="status-pulse absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-70"></span>
-          <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-accent-500"></span>
-        </span>
-        <span class="text-[11px] text-ci-400">API · реестр синхронизирован</span>
-      </div>
+<header class="h-12 border-b border-cyberBorder bg-[#090d16]/95 backdrop-blur px-3.5 flex items-center justify-between shrink-0 z-30">
+  <div class="flex items-center space-x-3 min-w-0">
+    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)] shrink-0">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
     </div>
-
-    <div class="flex items-center gap-1.5 shrink-0">
-      <div class="hidden md:flex items-center gap-0.5 p-0.5 rounded-sm bg-ci-900 border border-ci-800">
-        <button class="btn btn-ghost border-0 h-7 px-2.5 text-ci-300">
-          <i data-lucide="layout-template" class="w-3.5 h-3.5"></i>
-          <span>Шаблоны</span>
-        </button>
-        <button class="btn btn-ghost border-0 h-7 px-2.5 text-ci-300">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-          <span>AI-граф</span>
-        </button>
-        <button class="btn btn-ghost border-0 h-7 px-2.5 text-ci-300">
-          <i data-lucide="save" class="w-3.5 h-3.5"></i>
-          <span>Сохранить</span>
-        </button>
-        <button class="btn btn-ghost border-0 h-7 px-2.5 text-ci-300">
-          <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
-          <span>Проверить</span>
-        </button>
+    <div class="min-w-0">
+      <div class="flex items-center space-x-1.5 leading-none">
+        <span class="font-bold tracking-wider text-slate-100 uppercase text-[12px]">Центр-Инвест</span>
+        <span class="text-slate-500 font-mono text-[11px]">/</span>
+        <span class="text-emerald-400 font-semibold tracking-wide text-[12px]">AI SECURITY WORKFLOW</span>
       </div>
-      <button class="btn btn-soft h-8">
-        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-        Блок
-      </button>
-      <button class="btn btn-primary h-8">
-        <i data-lucide="play" class="w-3.5 h-3.5"></i>
-        Запустить
-      </button>
-      <div class="w-px h-4 bg-ci-800 mx-0.5"></div>
-      <button class="btn btn-ghost border-0 h-8 w-8 p-0 justify-center" title="Тема">
-        <i data-lucide="sun" class="w-4 h-4"></i>
-      </button>
-      <button class="btn btn-ghost border-0 h-8 w-8 p-0 justify-center" title="Меню">
-        <i data-lucide="menu" class="w-4 h-4"></i>
-      </button>
+      <div class="text-[9.5px] font-mono tracking-widest text-slate-400 mt-0.5 uppercase">Контроль безопасности · Cybergarden</div>
     </div>
-  </header>
-
-  <!-- MAIN -->
-  <div class="flex-1 flex min-h-0 overflow-hidden">
-
-    <!-- LEFT RAIL -->
-    <aside class="w-72 shrink-0 border-r border-ci-800 bg-ci-950 flex flex-col min-h-0">
-      <div class="p-3 border-b border-ci-800">
-        <div class="flex items-center justify-between mb-2">
-          <div>
-            <span class="text-[10px] font-mono uppercase tracking-wider text-ci-500">Workflow builder</span>
-            <h2 class="text-[13px] font-semibold text-white flex items-center gap-1.5">
-              <i data-lucide="git-branch" class="w-3.5 h-3.5 text-accent-400"></i>
-              Рабочая область
-            </h2>
-          </div>
-          <span class="chip bg-ci-800 text-ci-300 border border-ci-700">13</span>
-        </div>
-        <div class="grid grid-cols-2 gap-0.5 p-0.5 rounded-sm bg-ci-900 border border-ci-800">
-          <button class="h-7 rounded-sm text-[11px] font-medium text-ci-400 hover:text-white hover:bg-ci-800 flex items-center justify-center gap-1">
-            <i data-lucide="boxes" class="w-3.5 h-3.5"></i> Nodes
-          </button>
-          <button class="h-7 rounded-sm text-[11px] font-semibold text-accent-300 bg-ci-800 border border-accent-600/25 flex items-center justify-center gap-1">
-            <i data-lucide="folder" class="w-3.5 h-3.5"></i> Projects
-            <span class="text-[10px] px-1 rounded-sm bg-accent-600/20 text-accent-300">2</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="p-3 border-b border-ci-800 space-y-2">
-        <p class="text-[11px] text-ci-400 leading-snug">Проекты и архивы для анализа. Скан только allowlist / учебные.</p>
-        <div class="relative">
-          <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ci-500"></i>
-          <input class="w-full h-8 bg-ci-900 border border-ci-800 rounded-sm pl-8 pr-8 text-[12px] text-ci-100 placeholder:text-ci-500 focus:outline-none focus:border-accent-500/50" placeholder="Найти проект или блок" type="search"/>
-          <kbd class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-ci-500 bg-ci-800 px-1 rounded-sm border border-ci-700">/</kbd>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto scroll-thin p-3 space-y-3">
-        <div class="flex items-center justify-between text-[11px] font-medium text-ci-300">
-          <span class="flex items-center gap-1">
-            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-ci-500"></i>
-            Проекты
-          </span>
-          <span class="font-mono text-ci-500">2</span>
-        </div>
-
-        <button class="w-full py-2 px-2.5 rounded-sm border border-dashed border-accent-600/35 hover:border-accent-500 bg-ci-900/50 text-accent-300 text-[11px] font-medium flex flex-col items-center gap-0.5 transition-colors duration-micro">
-          <span class="flex items-center gap-1.5 font-semibold">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            Добавить ZIP в библиотеку
-          </span>
-          <span class="text-[10px] text-ci-500 font-normal">до 300 MiB · постоянное хранение</span>
-        </button>
-
-        <!-- project cards -->
-        <div class="rounded-sm border border-ci-800 bg-ci-900/80 p-2.5 space-y-2">
-          <div class="flex items-start gap-2 min-w-0">
-            <i data-lucide="archive" class="w-4 h-4 text-ci-400 shrink-0 mt-0.5"></i>
-            <div class="min-w-0">
-              <div class="text-[12px] font-medium text-ci-100 truncate-path">day_planner</div>
-              <div class="text-[10px] font-mono text-ci-500">3 файлов · 0.0 MiB</div>
-            </div>
-          </div>
-          <div class="flex items-center justify-between pt-1.5 border-t border-ci-800">
-            <div class="flex gap-1">
-              <button class="btn btn-ghost h-6 px-2 text-[10px]">Открыть</button>
-              <button class="btn btn-soft h-6 px-2 text-[10px]">Применить</button>
-            </div>
-            <div class="flex text-ci-500">
-              <button class="p-1 hover:text-ci-200 rounded-sm"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
-              <button class="p-1 hover:text-ci-200 rounded-sm"><i data-lucide="pencil" class="w-3 h-3"></i></button>
-              <button class="p-1 hover:text-red-400 rounded-sm"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-sm border border-accent-600/40 bg-ci-900 p-2.5 space-y-2 shadow-node-run">
-          <div class="flex items-start gap-2 min-w-0">
-            <i data-lucide="folder-check" class="w-4 h-4 text-accent-400 shrink-0 mt-0.5"></i>
-            <div class="min-w-0">
-              <div class="text-[12px] font-semibold text-accent-300 flex items-center gap-1.5 truncate-path">
-                <span class="truncate-path">NEVZ-main (2)</span>
-                <span class="w-1.5 h-1.5 rounded-full bg-accent-400 shrink-0"></span>
-              </div>
-              <div class="text-[10px] font-mono text-ci-500">13334 файлов · 491.5 MiB</div>
-            </div>
-          </div>
-          <div class="flex items-center justify-between pt-1.5 border-t border-ci-800">
-            <div class="flex gap-1">
-              <button class="btn btn-ghost h-6 px-2 text-[10px]">Открыть</button>
-              <button class="btn btn-soft h-6 px-2 text-[10px] font-semibold">Применить</button>
-            </div>
-            <div class="flex text-ci-500">
-              <button class="p-1 hover:text-ci-200 rounded-sm"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
-              <button class="p-1 hover:text-ci-200 rounded-sm"><i data-lucide="pencil" class="w-3 h-3"></i></button>
-              <button class="p-1 hover:text-red-400 rounded-sm"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-            </div>
-          </div>
-        </div>
-
-        <div class="pt-2 border-t border-ci-800 space-y-2">
-          <div class="text-[10px] font-mono uppercase tracking-wider text-ci-500 font-semibold">Быстрый источник</div>
-          <button class="btn btn-ghost w-full justify-center h-8">
-            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-            Загрузить ZIP
-          </button>
-          <label class="block text-[11px] text-ci-400">HTTPS-репозиторий</label>
-          <input class="w-full h-8 bg-ci-900 border border-ci-800 rounded-sm px-2.5 text-[11px] font-mono text-ci-200 placeholder:text-ci-600 focus:outline-none focus:border-accent-500/40" value="https://github.com/owner/repo"/>
-          <label class="block text-[11px] text-ci-400">Ветка</label>
-          <input class="w-full h-8 bg-ci-900 border border-ci-800 rounded-sm px-2.5 text-[11px] font-mono text-ci-200 placeholder:text-ci-600 focus:outline-none focus:border-accent-500/40" placeholder="main"/>
-        </div>
-      </div>
-    </aside>
-
-    <!-- CANVAS -->
-    <section class="flex-1 flex flex-col min-w-0 min-h-0 relative canvas-dots">
-      <div class="h-11 shrink-0 border-b border-ci-800 bg-ci-950/80 backdrop-blur px-4 flex items-center justify-between z-10">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-[10px] font-mono uppercase tracking-wider text-accent-400 font-semibold">Editor</span>
-            <span class="text-ci-700">/</span>
-            <h1 class="text-[13px] font-semibold text-white truncate">Security pipeline</h1>
-            <span class="inline-flex items-center gap-1.5 h-5 px-2 rounded-sm text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/25">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-              Несохранённые изменения
-            </span>
-          </div>
-          <p class="text-[11px] text-ci-500 truncate">Перетаскивайте блоки · соединяйте порты · выбирайте элемент</p>
-        </div>
-        <div class="flex items-center gap-3 text-[11px] font-mono text-ci-400 shrink-0">
-          <span><span class="text-ci-200 font-semibold">8</span> блоков</span>
-          <span class="text-ci-700">·</span>
-          <span><span class="text-ci-200 font-semibold">9</span> связей</span>
-        </div>
-      </div>
-
-      <div class="flex-1 relative overflow-hidden">
-        <!-- simplified nodes layout -->
-        <div class="absolute inset-0 p-8">
-          <!-- wires simplified -->
-          <svg class="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-            <path d="M 280 120 C 340 120, 360 200, 420 200" fill="none" stroke="#1B9A55" stroke-width="2" opacity=".7"/>
-            <path d="M 280 220 C 340 220, 360 210, 420 210" fill="none" stroke="#4F5863" stroke-width="1.5"/>
-            <path d="M 280 320 C 360 320, 360 220, 420 220" fill="none" stroke="#4F5863" stroke-width="1.5"/>
-            <path d="M 660 210 C 720 210, 740 140, 800 140" fill="none" stroke="#6B7682" stroke-width="2"/>
-            <path d="M 660 220 C 720 220, 740 280, 800 280" fill="none" stroke="#4F5863" stroke-width="1.5"/>
-          </svg>
-
-          <!-- source -->
-          <div class="node-card absolute left-6 top-[88px] selected">
-            <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 port port-accent"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-accent-600/15 border border-accent-600/30 flex items-center justify-center text-accent-400 shrink-0">
-                  <i data-lucide="folder-input" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">NEVZ-main (2)</div>
-                  <div class="text-[10px] font-mono text-ci-500">source.upload</div>
-                </div>
-              </div>
-              <span class="chip bg-accent-600/15 text-accent-300 border border-accent-600/30 shrink-0">OK</span>
-            </div>
-            <div class="px-3 py-2 text-[11px] text-ci-400">Каталог проекта · сканеры подключены</div>
-          </div>
-
-          <!-- secrets -->
-          <div class="node-card absolute left-6 top-[200px]">
-            <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 port port-accent"></div>
-            <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 port port-accent"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-ci-800 border border-ci-700 flex items-center justify-center text-ci-300 shrink-0">
-                  <i data-lucide="key-round" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">Secrets scanner</div>
-                  <div class="text-[10px] font-mono text-ci-500">scan.secrets</div>
-                </div>
-              </div>
-              <span class="chip bg-accent-600/15 text-accent-300 border border-accent-600/30">4</span>
-            </div>
-            <div class="px-3 py-2 grid grid-cols-2 gap-1.5 text-[10px] font-mono text-ci-500">
-              <div class="bg-ci-950/80 rounded-sm px-1.5 py-1 border border-ci-800">1.3 с</div>
-              <div class="bg-ci-950/80 rounded-sm px-1.5 py-1 border border-ci-800 text-accent-300">4 находки</div>
-            </div>
-          </div>
-
-          <!-- sca -->
-          <div class="node-card absolute left-6 top-[320px]">
-            <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 port"></div>
-            <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 port"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-ci-800 border border-ci-700 flex items-center justify-center text-ci-300 shrink-0">
-                  <i data-lucide="package-search" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">Dependency scanner</div>
-                  <div class="text-[10px] font-mono text-ci-500">scan.sca</div>
-                </div>
-              </div>
-              <span class="chip bg-ci-800 text-ci-400 border border-ci-700">0</span>
-            </div>
-          </div>
-
-          <!-- merge -->
-          <div class="node-card absolute left-[420px] top-[180px]">
-            <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 port port-accent"></div>
-            <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 port port-accent"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-ci-800 border border-ci-700 flex items-center justify-center text-ci-200 shrink-0">
-                  <i data-lucide="merge" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">Merge findings</div>
-                  <div class="text-[10px] font-mono text-ci-500">findings.merge</div>
-                </div>
-              </div>
-              <span class="chip bg-ci-800 text-ci-300 border border-ci-700">4</span>
-            </div>
-          </div>
-
-          <!-- ai error -->
-          <div class="node-card error absolute left-[800px] top-[100px]">
-            <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 port port-warn"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-red-950/40 border border-red-500/30 flex items-center justify-center text-red-300 shrink-0">
-                  <i data-lucide="bot" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">AI explanation</div>
-                  <div class="text-[10px] font-mono text-ci-500">ai.explain</div>
-                </div>
-              </div>
-              <span class="chip bg-red-500/15 text-red-300 border border-red-500/30">Ошибка</span>
-            </div>
-            <div class="px-3 py-2 space-y-1.5">
-              <p class="text-[11px] text-red-200/90 leading-snug">HTTP 403 · проверьте LLM_API_KEY</p>
-              <div class="grid grid-cols-3 gap-1 text-[10px] font-mono text-ci-500">
-                <div class="bg-ci-950 rounded-sm px-1 py-1 border border-ci-800 text-center">1.7 с</div>
-                <div class="bg-ci-950 rounded-sm px-1 py-1 border border-ci-800 text-center">4</div>
-                <div class="bg-ci-950 rounded-sm px-1 py-1 border border-ci-800 text-center">0%</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- gate -->
-          <div class="node-card absolute left-[800px] top-[260px]">
-            <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 port"></div>
-            <div class="px-3 py-2 border-b border-ci-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-sm bg-ci-800 border border-ci-700 flex items-center justify-center text-ci-300 shrink-0">
-                  <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold text-white truncate">Security Gate</div>
-                  <div class="text-[10px] font-mono text-ci-500">ci.gate</div>
-                </div>
-              </div>
-              <span class="chip bg-ci-800 text-ci-400 border border-ci-700">CI</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- zoom -->
-        <div class="absolute left-4 bottom-12 flex flex-col gap-0.5 p-0.5 rounded-sm bg-ci-950 border border-ci-800 shadow-panel">
-          <button class="w-8 h-8 flex items-center justify-center text-ci-400 hover:text-white hover:bg-ci-800 rounded-sm"><i data-lucide="plus" class="w-4 h-4"></i></button>
-          <button class="w-8 h-8 flex items-center justify-center text-ci-400 hover:text-white hover:bg-ci-800 rounded-sm"><i data-lucide="minus" class="w-4 h-4"></i></button>
-          <div class="h-px bg-ci-800 mx-1"></div>
-          <button class="w-8 h-8 flex items-center justify-center text-ci-400 hover:text-white hover:bg-ci-800 rounded-sm"><i data-lucide="maximize" class="w-4 h-4"></i></button>
-        </div>
-      </div>
-
-      <footer class="h-8 shrink-0 border-t border-ci-800 bg-ci-950/90 px-3 flex items-center justify-between text-[11px] text-ci-500">
-        <div class="flex items-center gap-2 font-mono min-w-0">
-          <span class="text-red-300 font-medium flex items-center gap-1 shrink-0">
-            <i data-lucide="circle-alert" class="w-3.5 h-3.5"></i>
-            Ошибка · 8/8 шагов
-          </span>
-          <span class="text-ci-700 hidden sm:inline">|</span>
-          <span class="truncate-path hidden sm:inline">Связь: перетащите конец для переназначения</span>
-        </div>
-        <button class="btn btn-ghost h-6 px-2 text-[10px] font-mono">
-          <i data-lucide="activity" class="w-3 h-3 text-accent-400"></i>
-          Запуски <span class="text-ci-200 font-semibold">1</span>
-        </button>
-      </footer>
-    </section>
-
-    <!-- RIGHT: findings — fixed overflow -->
-    <aside class="w-[380px] shrink-0 border-l border-ci-800 bg-ci-950 flex flex-col min-h-0">
-      <div class="p-3 border-b border-ci-800 space-y-2.5 shrink-0">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <h2 class="text-[13px] font-semibold text-white truncate">Результаты</h2>
-            <span class="chip bg-accent-600/15 text-accent-300 border border-accent-600/30">4</span>
-          </div>
-          <div class="flex shrink-0">
-            <button class="p-1.5 text-ci-400 hover:text-white rounded-sm hover:bg-ci-800"><i data-lucide="filter" class="w-4 h-4"></i></button>
-            <button class="p-1.5 text-ci-400 hover:text-white rounded-sm hover:bg-ci-800"><i data-lucide="download" class="w-4 h-4"></i></button>
-          </div>
-        </div>
-        <div class="flex flex-wrap gap-1">
-          <button class="chip bg-amber-500/15 text-amber-300 border border-amber-500/30">4 открыто</button>
-          <button class="chip bg-ci-900 text-ci-400 border border-ci-800">0 риск</button>
-          <button class="chip bg-ci-900 text-ci-400 border border-ci-800">0 FP</button>
-        </div>
-        <div class="relative">
-          <select class="w-full h-8 appearance-none bg-ci-900 border border-ci-800 rounded-sm px-2.5 pr-8 text-[12px] text-ci-200 focus:outline-none focus:border-accent-500/40">
-            <option>Все уровни</option>
-            <option>Critical</option>
-            <option>High</option>
-            <option>Medium</option>
-            <option>Low</option>
-          </select>
-          <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-ci-500 pointer-events-none"></i>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto scroll-thin p-3 space-y-3">
-        <div class="flex items-center justify-between gap-2 text-[11px] font-mono text-ci-500">
-          <div class="flex items-center gap-1.5 min-w-0">
-            <i data-lucide="file-code-2" class="w-3.5 h-3.5 shrink-0"></i>
-            <span class="truncate-path text-ci-300" title="NEVZ-main/EVA/manufacturing-optim...">NEVZ-main/EVA/manufacturing-optim…</span>
-          </div>
-          <span class="shrink-0">2</span>
-        </div>
-
-        <!-- finding card: stacked sections, no 3-col crush -->
-        <article class="rounded-sm border border-ci-800 bg-ci-900/90 p-3 space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="chip bg-amber-500/15 text-amber-300 border border-amber-500/30">MEDIUM</span>
-              <span class="text-[12px] font-mono font-medium text-ci-100 truncate-path">generic_assignment</span>
-            </div>
-            <button class="text-ci-500 hover:text-white shrink-0"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></button>
-          </div>
-          <p class="text-[11px] text-ci-400 font-mono truncate-path">Возможный секрет · Secrets scanner</p>
-
-          <div class="space-y-2">
-            <div class="rounded-sm border border-ci-800 bg-ci-950/80 p-2.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-400/90 mb-1 flex items-center gap-1">
-                <i data-lucide="alert-triangle" class="w-3 h-3"></i>
-                Почему это проблема
-              </div>
-              <p class="text-[12px] text-ci-200 leading-relaxed">
-                В исходном коде обнаружено значение, похожее на секрет или токен доступа.
-              </p>
-            </div>
-            <div class="rounded-sm border border-ci-800 bg-ci-950/80 p-2.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-accent-400 mb-1 flex items-center gap-1">
-                <i data-lucide="wrench" class="w-3 h-3"></i>
-                Как исправить
-              </div>
-              <p class="text-[12px] text-ci-200 leading-relaxed">
-                Отозовите секрет, удалите из репозитория, перенесите в secret manager или переменные окружения.
-              </p>
-            </div>
-            <div class="rounded-sm border border-red-500/25 bg-red-950/20 p-2.5">
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-red-300 mb-1 flex items-center gap-1">
-                <i data-lucide="bot" class="w-3 h-3"></i>
-                AI explanation
-              </div>
-              <p class="text-[12px] text-ci-300 leading-relaxed">
-                Провайдер не ответил (HTTP 403). Проверьте LLM_API_KEY и перезапустите api/worker.
-              </p>
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between gap-2 pt-1">
-            <span class="text-[10px] font-mono text-ci-500 truncate-path">[REDACTED]</span>
-            <div class="flex gap-1 shrink-0">
-              <button class="btn btn-ghost h-7 px-2 text-[11px]">FP</button>
-              <button class="btn btn-soft h-7 px-2 text-[11px]">Задача</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="rounded-sm border border-ci-800 bg-ci-900/60 p-2.5 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="chip bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">MEDIUM</span>
-            <div class="min-w-0">
-              <div class="text-[12px] font-mono font-medium text-ci-100 truncate-path">generic_assignment</div>
-              <div class="text-[10px] text-ci-500 font-mono truncate-path">NEVZ-main/EVA · возможная утечка</div>
-            </div>
-          </div>
-          <button class="btn btn-ghost h-7 px-2 text-[11px] shrink-0">Ещё</button>
-        </article>
-      </div>
-
-      <div class="p-3 border-t border-ci-800 flex items-center justify-between gap-2 text-[11px] text-ci-400 shrink-0">
-        <span class="flex items-center gap-1.5 min-w-0 truncate-path">
-          <i data-lucide="shield" class="w-3.5 h-3.5 text-accent-400 shrink-0"></i>
-          Gate: <span class="text-accent-300 font-medium">ожидает</span>
-        </span>
-        <button class="text-accent-400 hover:text-accent-300 font-semibold shrink-0">Экспорт</button>
-      </div>
-    </aside>
   </div>
+  <div class="hidden md:flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-900/90 border border-emerald-500/30 shrink-0">
+    <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+    <span class="font-mono text-[11px] text-slate-300">API подключён · реестр компонентов синхронизирован</span>
+  </div>
+  <div class="flex items-center space-x-2 shrink-0">
+    <button class="px-2.5 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[11px] font-medium">Шаблоны</button>
+    <button class="px-2.5 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[11px] font-medium">AI-граф</button>
+    <button class="px-2.5 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[11px] font-medium">Сохранить</button>
+    <button class="px-2.5 py-1 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/70 text-[11px] font-medium">Проверить</button>
+    <button class="px-3.5 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-[11px] shadow-[0_0_15px_rgba(16,185,129,0.3)]">Запустить всё</button>
+  </div>
+</header>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.lucide) lucide.createIcons();
-    });
-  </script>
+<div class="flex-1 flex min-h-0 overflow-hidden relative">
+
+  <aside class="w-[305px] max-w-[305px] bg-[#090d16] border-r border-cyberBorder flex flex-col shrink-0 min-h-0 z-20">
+    <div class="p-3 border-b border-cyberBorder flex items-center justify-between bg-[#0a101d] shrink-0">
+      <div class="flex items-center space-x-2 min-w-0">
+        <span class="font-semibold text-slate-100 uppercase tracking-wider text-[11px]">Компоненты & Панель</span>
+        <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[10px]">18</span>
+      </div>
+    </div>
+    <div class="p-2 border-b border-cyberBorder flex space-x-1.5 bg-[#080d17] shrink-0">
+      <button class="flex-1 py-1.5 px-2 rounded bg-slate-800/90 border border-emerald-500/40 font-semibold text-emerald-400 text-xs">Ноды графа <span class="ml-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full text-[9px] font-mono">12</span></button>
+      <button class="flex-1 py-1.5 px-2 rounded font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-xs">Проекты <span class="ml-1 px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded-full text-[9px] font-mono">2</span></button>
+    </div>
+    <div class="p-2.5 border-b border-cyberBorder space-y-2 bg-[#06090f] shrink-0">
+      <input class="w-full bg-[#0d1424] border border-cyberBorder rounded px-3 py-1.5 text-slate-200 text-xs placeholder-slate-500 focus:outline-none focus:border-emerald-500/60" placeholder="Найти ноду или тип..." type="text"/>
+      <div class="flex items-center gap-1 overflow-x-auto pb-1 text-[9.5px] font-mono">
+        <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 shrink-0 font-semibold">Все</span>
+        <span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">Trigger</span>
+        <span class="px-1.5 py-0.5 rounded bg-cyan-400/5 text-cyan-400 border border-cyan-400/40 shrink-0">Source</span>
+        <span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0">Security</span>
+        <span class="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 shrink-0">Logic</span>
+        <span class="px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/30 shrink-0">AI</span>
+        <span class="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 shrink-0">Gate</span>
+      </div>
+    </div>
+    <div class="flex-1 scroll-y p-2.5 space-y-2">
+      <div class="text-[9px] font-mono uppercase tracking-wider text-amber-400/90 font-bold flex justify-between px-1 pt-1"><span>⚡ ТРИГГЕРЫ</span><span class="text-slate-500 font-normal">2</span></div>
+      <div class="p-2 rounded-lg border border-amber-500/40 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-400"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Manual trigger</div><div class="text-[9.5px] font-mono text-slate-400">trigger.manual</div></div>
+      </div>
+      <div class="p-2 rounded-lg border border-amber-500/30 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-400/60"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Schedule trigger</div><div class="text-[9.5px] font-mono text-slate-400">trigger.schedule</div></div>
+      </div>
+      <div class="text-[9px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex justify-between px-1 pt-2"><span>📂 ИСТОЧНИКИ</span><span class="text-slate-500 font-normal">2</span></div>
+      <div class="p-2 rounded-lg border border-cyan-400/40 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Workspace source</div><div class="text-[9.5px] font-mono text-slate-400">source.upload</div></div>
+      </div>
+      <div class="p-2 rounded-lg border border-cyan-400/30 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-cyan-400/60"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Git repository</div><div class="text-[9.5px] font-mono text-slate-400">source.git</div></div>
+      </div>
+      <div class="text-[9px] font-mono uppercase tracking-wider text-emerald-400 font-bold flex justify-between px-1 pt-2"><span>🛡️ SCANNERS</span><span class="text-slate-500 font-normal">3</span></div>
+      <div class="p-2 rounded-lg border border-emerald-500/40 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Secrets scanner</div><div class="text-[9.5px] font-mono text-slate-400">scan.secrets</div></div>
+      </div>
+      <div class="p-2 rounded-lg border border-emerald-500/30 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500/60"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Dependency scanner</div><div class="text-[9.5px] font-mono text-slate-400">scan.sca</div></div>
+      </div>
+      <div class="p-2 rounded-lg border border-emerald-500/30 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500/60"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Kotlin SAST</div><div class="text-[9.5px] font-mono text-slate-400">scan.sast</div></div>
+      </div>
+      <div class="text-[9px] font-mono uppercase tracking-wider text-purple-400 font-bold flex justify-between px-1 pt-2"><span>🔀 ЛОГИКА</span><span class="text-slate-500 font-normal">1</span></div>
+      <div class="p-2 rounded-lg border border-purple-500/40 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-purple-400"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Merge findings</div><div class="text-[9.5px] font-mono text-slate-400">findings.merge</div></div>
+      </div>
+      <div class="text-[9px] font-mono uppercase tracking-wider text-pink-400 font-bold flex justify-between px-1 pt-2"><span>✨ AI</span><span class="text-slate-500 font-normal">1</span></div>
+      <div class="p-2 rounded-lg border border-pink-500/40 bg-[#0e172a] relative overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-pink-400"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">AI Explanation</div><div class="text-[9.5px] font-mono text-slate-400">ai.explain</div></div>
+      </div>
+      <div class="text-[9px] font-mono uppercase tracking-wider text-rose-400 font-bold flex justify-between px-1 pt-2"><span>🚦 GATE</span><span class="text-slate-500 font-normal">1</span></div>
+      <div class="p-2 rounded-lg border border-rose-500/40 bg-[#0e172a] relative overflow-hidden mb-3">
+        <div class="absolute left-0 top-0 bottom-0 w-1 bg-rose-400"></div>
+        <div class="pl-2"><div class="font-medium text-slate-100 text-[11px]">Quality PR Gate</div><div class="text-[9.5px] font-mono text-slate-400">ci.gate</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col relative overflow-hidden bg-[#06090f] min-w-0 min-h-0">
+    <div class="h-10 px-4 border-b border-cyberBorder bg-[#080d17]/80 backdrop-blur flex items-center justify-between shrink-0 z-10">
+      <div class="flex items-center space-x-3 min-w-0">
+        <h2 class="text-sm font-semibold text-slate-100">PR Gate</h2>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 animate-pulse"></span>Есть несохранённые изменения
+        </span>
+        <span class="text-[11px] font-mono text-slate-400 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700/60">9 блоков · 10 связей</span>
+      </div>
+    </div>
+
+    <div class="flex-1 relative min-h-0 overflow-auto workflow-grid">
+      <div class="relative min-w-[1500px] min-h-[700px] p-10">
+        <svg class="absolute inset-0 w-full h-full pointer-events-none z-0">
+          <defs>
+            <linearGradient id="w1" x1="0%" x2="100%"><stop offset="0%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="w2" x1="0%" x2="100%"><stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
+            <linearGradient id="w3" x1="0%" x2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient>
+            <linearGradient id="w4" x1="0%" x2="100%"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#d946ef"/></linearGradient>
+            <linearGradient id="w5" x1="0%" x2="100%"><stop offset="0%" stop-color="#d946ef"/><stop offset="100%" stop-color="#f43f5e"/></linearGradient>
+          </defs>
+          <path class="bezier-wire" d="M 240 135 C 330 135, 330 80, 420 80" fill="none" stroke="url(#w1)" stroke-dasharray="4 3" stroke-width="2"/>
+          <path class="bezier-wire" d="M 240 280 C 330 280, 330 120, 420 120" fill="none" stroke="url(#w2)" stroke-width="2.2"/>
+          <path class="bezier-wire" d="M 240 280 C 330 280, 330 330, 420 330" fill="none" stroke="url(#w2)" stroke-width="2.2"/>
+          <path class="bezier-wire" d="M 240 280 C 330 280, 330 520, 420 520" fill="none" stroke="url(#w2)" stroke-width="2.2"/>
+          <path class="bezier-wire" d="M 590 100 C 670 100, 670 240, 740 240" fill="none" stroke="url(#w3)" stroke-width="2.2"/>
+          <path class="bezier-wire" d="M 590 350 C 670 350, 670 270, 740 270" fill="none" stroke="url(#w3)" stroke-width="2"/>
+          <path class="bezier-wire" d="M 590 530 C 670 530, 670 300, 740 300" fill="none" stroke="url(#w3)" stroke-width="2"/>
+          <path class="bezier-wire" d="M 910 270 C 950 270, 950 270, 980 270" fill="none" stroke="url(#w4)" stroke-width="2.2"/>
+          <path class="bezier-wire" d="M 1150 270 C 1190 270, 1190 270, 1220 270" fill="none" stroke="url(#w5)" stroke-width="2.2"/>
+        </svg>
+        <div class="absolute left-[660px] top-[175px] z-10 -translate-x-1/2 -translate-y-1/2 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded text-[9.5px] font-mono">4 находок</div>
+
+        <div class="absolute left-10 top-16 w-52 rounded-lg bg-[#0e1626]/95 border-2 border-amber-500/50 z-10">
+          <div class="px-2.5 py-1.5 border-b border-amber-500/30 bg-amber-500/10 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-amber-300 font-bold">⚡ ТРИГГЕР</span><span class="text-[9px] font-mono text-amber-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">Manual trigger</div><div class="font-mono text-[9px] text-amber-400/80">trigger.manual</div></div>
+        </div>
+        <div class="absolute left-10 top-56 w-52 rounded-lg bg-[#0e1626]/95 border-2 border-cyan-400/50 z-10">
+          <div class="px-2.5 py-1.5 border-b border-cyan-400/30 bg-cyan-500/10 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-cyan-300 font-bold">📂 ИСТОЧНИК</span><span class="text-[9px] font-mono text-cyan-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">NEVZ-main (2)</div><div class="font-mono text-[9px] text-cyan-400/90">source.upload</div><div class="mt-2 text-[10px] bg-slate-900/80 p-1.5 rounded border border-cyan-400/20 font-mono">13334 файлов · 491.5 MiB</div></div>
+        </div>
+        <div class="absolute left-[420px] top-10 w-64 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/60 z-10">
+          <div class="px-2.5 py-1.5 border-b border-emerald-500/30 bg-emerald-500/15 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-emerald-300 font-bold">🛡️ SECURITY</span><span class="text-[9px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5 space-y-2"><div class="font-semibold text-slate-100 text-xs">Secrets scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.secrets</div><div class="p-2 rounded bg-slate-900/90 border border-emerald-500/30 text-[10px] flex justify-between"><span>Проверка завершена</span><span class="text-amber-300 font-mono">найдено: 4</span></div></div>
+        </div>
+        <div class="absolute left-[420px] top-64 w-64 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/40 z-10">
+          <div class="px-2.5 py-1.5 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-emerald-300 font-bold">📦 SECURITY</span><span class="text-[9px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">Dependency scanner</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sca</div><div class="mt-2 p-2 rounded bg-slate-900/90 border border-slate-800 text-[10px] flex justify-between"><span>Проверка завершена</span><span class="text-emerald-400 font-mono">0</span></div></div>
+        </div>
+        <div class="absolute left-[420px] top-[460px] w-64 rounded-lg bg-[#0e1626]/95 border-2 border-emerald-500/40 z-10">
+          <div class="px-2.5 py-1.5 border-b border-emerald-500/30 bg-emerald-500/10 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-emerald-300 font-bold">🛡️ SECURITY</span><span class="text-[9px] font-mono text-emerald-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">Kotlin SAST</div><div class="font-mono text-[9px] text-emerald-400/90">scan.sast</div><div class="mt-2 p-2 rounded bg-slate-900/90 border border-slate-800 text-[10px] flex justify-between"><span>Проверка завершена</span><span class="text-emerald-400 font-mono">0</span></div></div>
+        </div>
+        <div class="absolute left-[740px] top-48 w-56 rounded-lg bg-[#0e1626]/95 border-2 border-purple-500/50 z-10">
+          <div class="px-2.5 py-1.5 border-b border-purple-500/30 bg-purple-500/10 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-purple-300 font-bold">🔀 MERGE</span><span class="text-[9px] font-mono text-purple-300">ЗАВЕРШЁН</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">Merge findings</div><div class="font-mono text-[9px] text-purple-400/90">findings.merge</div><div class="mt-2 p-2 rounded bg-slate-900/90 border border-purple-500/20 text-[10px]">Уникальных: <span class="text-amber-400 font-bold">4</span></div></div>
+        </div>
+        <div class="absolute left-[980px] top-48 w-56 rounded-lg bg-[#0e1626]/95 border-2 border-pink-500/50 z-10">
+          <div class="px-2.5 py-1.5 border-b border-pink-500/30 bg-pink-500/15 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-pink-300 font-bold">✨ AI</span><span class="text-[9px] font-mono text-pink-300">ГОТОВО</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">AI Explanation</div><div class="font-mono text-[9px] text-pink-400/90">ai.explain</div><div class="mt-2 p-2 rounded bg-slate-900/90 border border-pink-500/20 text-[10px] font-mono">Резюме по 4 секретам</div></div>
+        </div>
+        <div class="absolute left-[1220px] top-48 w-56 rounded-lg bg-[#0e1626]/95 border-2 border-rose-500/50 z-10">
+          <div class="px-2.5 py-1.5 border-b border-rose-500/30 bg-rose-500/15 rounded-t-lg flex justify-between"><span class="text-[9.5px] font-mono text-rose-300 font-bold">🚦 GATE</span><span class="text-[9px] font-mono text-rose-300">STOP PR</span></div>
+          <div class="p-2.5"><div class="font-semibold text-slate-100 text-xs">Quality PR Gate</div><div class="font-mono text-[9px] text-rose-400/90">ci.gate</div><div class="mt-2 p-2 rounded bg-slate-900/90 border border-rose-500/20 text-[10px] text-rose-300 font-mono">Отклонить PR</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="absolute bottom-12 left-4 flex flex-col space-y-1 bg-[#090e18]/90 border border-cyberBorder p-1 rounded-lg z-20">
+      <button class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-800 text-slate-300 font-bold">+</button>
+      <button class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-800 text-slate-300 font-bold">−</button>
+    </div>
+    <div class="absolute bottom-12 right-6 w-44 h-28 bg-[#090e18]/95 border border-cyberBorder rounded-lg p-2 z-20">
+      <div class="text-[9px] font-mono text-slate-500 uppercase mb-1">Minimap</div>
+      <div class="relative w-full h-20 bg-slate-950/70 rounded border border-slate-800/80"></div>
+    </div>
+
+    <footer class="h-8 border-t border-cyberBorder bg-[#080d17] px-3.5 flex items-center justify-between text-[11px] text-slate-400 shrink-0 z-20">
+      <span class="flex items-center space-x-1.5 text-emerald-400 font-medium">ГРАФ ЗАВЕРШЁН · 7/7 шагов</span>
+      <button class="px-2 py-0.5 rounded bg-slate-800/90 text-slate-200 border border-slate-700">Запуски <span class="font-mono text-emerald-400">3</span></button>
+    </footer>
+  </main>
+
+  <aside class="w-[360px] max-w-[360px] bg-[#090d16] border-l border-cyberBorder flex flex-col shrink-0 min-h-0 z-20">
+    <div class="p-3 border-b border-cyberBorder flex items-center justify-between shrink-0">
+      <div>
+        <div class="text-[9.5px] font-mono uppercase tracking-wider text-slate-500">INSPECTOR / CONTEXT</div>
+        <div class="font-semibold text-slate-100 mt-0.5 text-xs">Инспектор</div>
+      </div>
+    </div>
+    <div class="flex border-b border-cyberBorder px-3 pt-2 space-x-4 text-xs font-medium text-slate-400 shrink-0">
+      <button class="pb-2 border-b-2 border-transparent hover:text-slate-200">Свойства</button>
+      <button class="pb-2 border-b-2 border-emerald-500 text-emerald-400 flex items-center space-x-1.5 font-semibold">Findings <span class="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono">4</span></button>
+      <button class="pb-2 border-b-2 border-transparent hover:text-slate-200">Telemetry</button>
+    </div>
+
+    <div class="flex-1 scroll-y p-3 space-y-3.5">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-slate-200">Результаты безопасности</span>
+        <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-mono text-[11px] font-bold">4</span>
+      </div>
+      <div class="grid grid-cols-12 gap-1.5">
+        <div class="col-span-5"><input class="w-full bg-[#0d1424] border border-cyberBorder rounded px-2 py-1 text-[11px] text-slate-200" placeholder="Поиск..." type="text"/></div>
+        <div class="col-span-3"><select class="w-full bg-[#0d1424] border border-cyberBorder rounded px-1.5 py-1 text-[11px] text-slate-300"><option>Все</option><option>Critical</option><option>High</option><option>Medium</option></select></div>
+        <div class="col-span-2"><select class="w-full bg-[#0d1424] border border-cyberBorder rounded px-1 py-1 text-[11px] text-slate-300"><option>Все</option><option>Open</option></select></div>
+        <div class="col-span-2 flex items-center justify-end font-mono text-[10.5px] text-slate-400">4 / 4</div>
+      </div>
+      <div class="flex flex-wrap gap-1.5 font-mono text-[10px]">
+        <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold">4 открыто</span>
+        <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400">0 риск</span>
+        <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400">0 исправлено</span>
+        <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400">0 FP</span>
+      </div>
+
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
+        <div class="px-2.5 py-1.5 bg-[#0e172a] border-b border-cyberBorder font-mono text-[10px] text-slate-400 flex justify-between gap-2">
+          <span class="truncate min-w-0"></> NEVZ-main/EVA/manufacturing-optimizer/el...</span>
+          <span class="text-amber-400 shrink-0">2 находок</span>
+        </div>
+        <div class="p-2.5 space-y-2">
+          <div class="flex items-center space-x-2"><span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 font-semibold text-xs">generic_assignment</span></div>
+          <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-800">Возможный секрет (generic_assignment); значение токена обнаружено в репозитории.</div>
+        </div>
+      </div>
+
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
+        <div class="px-2.5 py-1.5 bg-[#0e172a] border-b border-cyberBorder font-mono text-[10px] text-slate-400 flex justify-between gap-2">
+          <span class="truncate min-w-0"></> NEVZ-main/EVA/manufacturing-optimizer/el...</span>
+          <span class="text-amber-400 shrink-0">2 находок</span>
+        </div>
+        <div class="p-2.5 space-y-2">
+          <div class="flex items-center space-x-2"><span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 font-semibold text-xs">generic_assignment</span></div>
+          <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-800">Возможный секрет; значение пароля или приватного ключа.</div>
+        </div>
+      </div>
+
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
+        <div class="px-2.5 py-1.5 bg-[#0e172a] border-b border-cyberBorder font-mono text-[10px] text-slate-400 flex justify-between gap-2">
+          <span class="truncate min-w-0"></> NEVZ-main/config/application.yml</span>
+          <span class="text-rose-400 shrink-0">1 находка</span>
+        </div>
+        <div class="p-2.5 space-y-2">
+          <div class="flex items-center space-x-2"><span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[9px] font-mono font-bold">HIGH</span><span class="font-mono text-slate-200 font-semibold text-xs">aws_access_key</span></div>
+          <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-800">Обнаружен AWS Access Key ID в конфигурации. Вынести в secrets store.</div>
+        </div>
+      </div>
+
+      <div class="border border-cyberBorder rounded-lg bg-[#0c1322] overflow-hidden">
+        <div class="px-2.5 py-1.5 bg-[#0e172a] border-b border-cyberBorder font-mono text-[10px] text-slate-400 flex justify-between gap-2">
+          <span class="truncate min-w-0"></> NEVZ-main/src/main/resources/...</span>
+          <span class="text-amber-400 shrink-0">1 находка</span>
+        </div>
+        <div class="p-2.5 space-y-2">
+          <div class="flex items-center space-x-2"><span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold">MEDIUM</span><span class="font-mono text-slate-200 font-semibold text-xs">private_key_block</span></div>
+          <div class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2 rounded border border-slate-800">Блок приватного ключа в исходниках. Не храните PEM в репозитории.</div>
+        </div>
+      </div>
+
+      <div class="space-y-1.5 pt-1">
+        <div class="text-[10px] font-mono uppercase text-slate-400">Последний ответ API</div>
+        <div class="p-2 rounded bg-black/50 border border-cyberBorder font-mono text-[10.5px] text-emerald-400">Проверка завершена · completed · 4 находок</div>
+      </div>
+
+      <div class="p-3 rounded-lg border border-emerald-500/20 bg-emerald-950/10 flex items-start space-x-2.5 mb-2">
+        <div class="text-emerald-400 shrink-0 mt-0.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="text-[10.5px] text-slate-400 leading-relaxed">
+          <div class="text-slate-200 font-medium mb-0.5">Изолированный анализ</div>
+          Проект не запускается. ZIP проверяется, Git ограничен allowlist. Секреты маскируются.
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<footer class="h-6 bg-[#04060b] border-t border-cyberBorder/60 px-3 flex items-center justify-between text-[10px] font-mono text-slate-500 shrink-0 z-30">
+  <div class="flex items-center space-x-2"><span class="text-slate-400 font-semibold tracking-wider">INVEST</span><span>•</span><span>AI SECURITY WORKFLOW</span></div>
+  <span>EDITOR · 0.7.0</span>
+</footer>
 </body>
 </html>
