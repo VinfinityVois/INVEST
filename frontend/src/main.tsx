@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles.css";
 import "./design-system.css";
 import "./edge-flow-hotfix.css";
+import "./ui-polish.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
