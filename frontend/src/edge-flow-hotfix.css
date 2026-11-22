@@ -1,4 +1,4 @@
-/* INVEST UI hotfixes v5 — page locked; palette + inspector scroll internally */
+/* INVEST UI hotfixes v6 — force Findings + palette internal scroll */
 
 html, body, #root {
   height: 100% !important;
@@ -15,10 +15,6 @@ html, body, #root {
   overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
-  padding-left: 18px !important;
-  padding-right: 18px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
   box-sizing: border-box !important;
 }
 
@@ -26,23 +22,15 @@ html, body, #root {
   flex: 0 0 auto !important;
   overflow: visible !important;
   z-index: 60 !important;
-  min-height: 52px !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
 }
 
 .shell .layout {
   flex: 1 1 0% !important;
   min-height: 0 !important;
-  max-height: 100% !important;
-  height: auto !important;
   overflow: hidden !important;
-  align-items: stretch !important;
   display: grid !important;
   grid-template-rows: minmax(0, 1fr) !important;
-  padding-top: 12px !important;
-  padding-bottom: 12px !important;
+  align-items: stretch !important;
   box-sizing: border-box !important;
 }
 
@@ -50,75 +38,79 @@ html, body, #root {
   min-height: 0 !important;
   max-height: 100% !important;
   height: 100% !important;
-  align-self: stretch !important;
   overflow: hidden !important;
 }
 
-/* LEFT: WORKFLOW BUILDER scrolls inside */
-.shell .panel.palette,
-.shell aside.panel.palette {
-  min-height: 0 !important;
-  max-height: 100% !important;
-  height: 100% !important;
-  padding: 0 !important;
-}
-
+/* LEFT palette scrolls */
+.shell aside.panel.palette:not(.is-collapsed),
 .shell .panel.palette:not(.is-collapsed) {
   display: block !important;
   overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-y: scroll !important;
   overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch;
   padding: 14px !important;
+  box-sizing: border-box !important;
 }
 
-.shell .panel.palette.is-collapsed {
-  overflow: hidden !important;
-  display: flex !important;
-}
-
-/* RIGHT: INSPECTOR scrolls inside tab panel */
-.shell .panel.inspector,
-.shell aside.panel.inspector {
+/* RIGHT inspector: ONLY tab-panel scrolls */
+.shell aside.panel.inspector:not(.is-collapsed),
+.shell .panel.inspector:not(.is-collapsed) {
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-  min-height: 0 !important;
-  max-height: 100% !important;
-  height: 100% !important;
   padding: 0 !important;
+  box-sizing: border-box !important;
 }
 
 .shell .panel.inspector > .inspector-top,
 .shell .panel.inspector > .inspector-tabs,
 .shell .panel.inspector > .result-section {
   flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 .shell .panel.inspector > .inspector-tab-panel {
   flex: 1 1 0% !important;
+  flex-grow: 1 !important;
+  flex-shrink: 1 !important;
+  flex-basis: 0 !important;
   min-height: 0 !important;
+  height: 0 !important;
+  max-height: none !important;
   overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-y: scroll !important;
   overscroll-behavior: contain !important;
   -webkit-overflow-scrolling: touch;
   padding: 12px 13px !important;
-  touch-action: pan-y;
+  box-sizing: border-box !important;
+  touch-action: pan-y !important;
 }
 
 .shell .panel.inspector > .inspector-tab-panel[hidden] {
   display: none !important;
-  flex: 0 !important;
+  flex: 0 0 0 !important;
   height: 0 !important;
+  min-height: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
+  border: 0 !important;
 }
 
 .shell .panel.inspector .result-section {
-  max-height: 120px !important;
+  max-height: 110px !important;
   overflow: auto !important;
+  flex-shrink: 0 !important;
 }
 
-/* Findings stacked */
+.shell .panel.inspector .findings-head,
+.shell .panel.inspector .finding-browser,
+.shell .panel.inspector .finding-file-group {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
 .shell .finding-detail {
   display: flex !important;
   flex-direction: column !important;
@@ -126,28 +118,31 @@ html, body, #root {
   gap: 10px !important;
   width: 100% !important;
   min-width: 0 !important;
-  max-height: min(50vh, 480px) !important;
+  max-height: min(48vh, 440px) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
   overscroll-behavior: contain !important;
 }
+
 .shell .finding-detail > * {
   width: 100% !important;
   min-width: 0 !important;
   grid-column: auto !important;
-  box-sizing: border-box !important;
 }
+
 .shell .finding-detail > .finding-explanation,
 .shell .finding-detail > .finding-remediation {
   display: block !important;
   height: auto !important;
 }
+
 .shell .finding-detail > .finding-ai-explanation {
   display: flex !important;
   flex-direction: column !important;
   gap: 8px !important;
   grid-template-columns: none !important;
 }
+
 .shell .finding-explanation p,
 .shell .finding-remediation p,
 .shell .finding-ai-explanation p {
@@ -176,12 +171,11 @@ html, body, #root {
   stroke: #34d399 !important; stroke-width: 3.2px !important;
   stroke-dasharray: 12 8 !important;
   animation: invest-wire-flow 0.65s linear infinite !important;
-  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.9)) !important;
   opacity: 1 !important;
 }
 .shell .react-flow__edge.edge-completed .react-flow__edge-path {
   stroke: #10b981 !important; stroke-width: 2.7px !important;
-  stroke-dasharray: none !important; animation: none !important; opacity: 1 !important;
+  stroke-dasharray: none !important; opacity: 1 !important;
 }
 .shell .react-flow__edge.edge-idle .react-flow__edge-path {
   stroke-width: 2.5px !important; opacity: 0.95 !important;
@@ -204,16 +198,12 @@ html, body, #root {
     max-height: 100vh !important;
     overflow: hidden !important;
   }
-  .shell .layout {
-    overflow: hidden !important;
-    min-height: 0 !important;
-  }
-  .shell .panel.palette:not(.is-collapsed) {
-    overflow-y: auto !important;
-    max-height: 100% !important;
-  }
-  .shell .panel.inspector {
-    overflow: hidden !important;
-    max-height: 100% !important;
+  .shell .layout { overflow: hidden !important; min-height: 0 !important; }
+  .shell .panel.palette:not(.is-collapsed) { overflow-y: scroll !important; }
+  .shell .panel.inspector:not(.is-collapsed) { overflow: hidden !important; }
+  .shell .panel.inspector > .inspector-tab-panel {
+    overflow-y: scroll !important;
+    height: 0 !important;
+    flex: 1 1 0% !important;
   }
 }
