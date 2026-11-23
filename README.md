@@ -2,15 +2,13 @@
 
 **Визуальная платформа автоматизации проверок безопасности кода**
 
-Кейс Банка «Центр-инвест» · [CyberGarden 2026](https://cybergarden.ru)
+Кейс Банка «Центр-инвест» · [CyberGarden 2026](https://cybergarden.ru) команда G.A.Z.A.
 
 Репозиторий: [github.com/VinfinityVois/INVEST](https://github.com/VinfinityVois/INVEST)
 
 ## Публичный доступ
 
 **Временная ссылка на веб-интерфейс:** https://conditional-carlo-kitchen-globe.trycloudflare.com
-тест-логин  sever_vv304ubk@mail.ru
-тест-пароль  1234567890ART!@
 
 Ссылка создана через Cloudflare Quick Tunnel и доступна, пока локальный frontend INVEST и процесс `cloudflared` запущены на компьютере разработчика. После остановки туннеля или его повторного запуска адрес может перестать работать или измениться. Это временный демонстрационный адрес, не постоянный production-домен.
 
