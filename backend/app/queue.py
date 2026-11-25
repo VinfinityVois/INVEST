@@ -115,6 +115,7 @@ def process_run(run_id: str, worker_id: str) -> None:
         if run is None or run.status not in {"running", "cancelling"} or run.locked_by != worker_id:
             return
         graph_snapshot = run.graph_snapshot
+        run_source = run.source
         workflow = session.get(Workflow, run.workflow_id) if run.workflow_id else None
         workspace_id = workflow.workspace_id if workflow is not None else None
         integration_settings = {
@@ -203,10 +204,21 @@ def process_run(run_id: str, worker_id: str) -> None:
 
         def is_cancel_requested() -> bool:
             with SessionLocal() as cancel_session:
-                current_status = cancel_session.scalar(
-                    select(WorkflowRun.status).where(WorkflowRun.id == UUID(run_id))
+                current_state = cancel_session.execute(
+                    select(WorkflowRun.status, WorkflowRun.locked_by).where(
+                        WorkflowRun.id == UUID(run_id)
+                    )
+                ).one_or_none()
+
+                if current_state is None:
+                    return True
+
+                current_status, current_owner = current_state
+                return (
+                    current_status in {"cancelling", "cancelled"}
+                    or current_status != "running"
+                    or current_owner != worker_id
                 )
-                return current_status in {"cancelling", "cancelled"}
 
         def report_progress(snapshot: dict) -> None:
             try:
@@ -224,7 +236,8 @@ def process_run(run_id: str, worker_id: str) -> None:
             except Exception:
                 logger.exception("Could not persist progress for run %s", run_id)
 
-        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan, force_node_ids=force_node_ids, cache_metadata=cache_metadata, integration_settings=integration_settings)
+        active_trigger_type = {"ui": "trigger.manual", "schedule": "trigger.schedule"}.get(run_source)
+        result = execute_graph(graph, registry, on_progress=report_progress, finding_states=finding_states, should_cancel=is_cancel_requested, target_node_ids=target_node_ids, cache_entries=cache_entries, force_full_scan=force_full_scan, force_node_ids=force_node_ids, cache_metadata=cache_metadata, integration_settings=integration_settings, active_trigger_type=active_trigger_type)
         final_status = result.get("status", "failed")
         error = None
     except Exception as exc:

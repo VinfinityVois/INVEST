@@ -579,6 +579,47 @@ def test_schedule_trigger_executes_as_workflow_event():
 
 
 
+def _two_trigger_graph():
+    return WorkflowGraph(
+        nodes=[
+            {"id": "manual", "type": "trigger.manual"},
+            {"id": "schedule", "type": "trigger.schedule", "config": {"cron": "*/5 * * * *", "timezone": "UTC"}},
+            {"id": "manual_branch", "type": "source.upload", "config": {}},
+            {"id": "schedule_branch", "type": "source.upload", "config": {}},
+        ],
+        edges=[
+            {"id": "manual_edge", "source": "manual", "target": "manual_branch"},
+            {"id": "schedule_edge", "source": "schedule", "target": "schedule_branch"},
+        ],
+    )
+
+
+def test_manual_run_skips_schedule_trigger_branch():
+    result = execute_graph(_two_trigger_graph(), registry, active_trigger_type="trigger.manual")
+
+    assert result["outputs"]["manual"]["status"] == "completed"
+    assert result["outputs"]["schedule"]["status"] == "skipped"
+    assert result["outputs"]["manual_branch"]["status"] == "configuration_required"
+    assert result["outputs"]["schedule_branch"]["status"] == "skipped"
+
+
+def test_schedule_run_skips_manual_trigger_branch():
+    result = execute_graph(_two_trigger_graph(), registry, active_trigger_type="trigger.schedule")
+
+    assert result["outputs"]["manual"]["status"] == "skipped"
+    assert result["outputs"]["schedule"]["status"] == "completed"
+    assert result["outputs"]["manual_branch"]["status"] == "skipped"
+    assert result["outputs"]["schedule_branch"]["status"] == "configuration_required"
+
+
+def test_trigger_execution_without_active_type_remains_backward_compatible():
+    result = execute_graph(_two_trigger_graph(), registry)
+
+    assert result["outputs"]["manual"]["status"] == "completed"
+    assert result["outputs"]["schedule"]["status"] == "completed"
+    assert result["outputs"]["manual_branch"]["status"] == "configuration_required"
+    assert result["outputs"]["schedule_branch"]["status"] == "configuration_required"
+
 def test_git_source_scans_only_safe_configured_subdirectory(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     repository = workspace / "git-test"

@@ -1,3 +1,4 @@
+import app.workflows.presets as presets_module
 from app.rules_loader import rule_packs
 from app.workflows.presets import list_presets, load_preset
 from app.workflows.registry import registry
@@ -59,3 +60,20 @@ def test_builtin_pr_gate_clone_gets_fresh_graph_ids():
         {node["id"] for node in source["nodes"]}
     )
     assert len({edge["id"] for edge in cloned["edges"]}) == len(cloned["edges"])
+
+
+def test_preset_root_skips_empty_preferred_directory(tmp_path):
+    preferred = tmp_path / "backend" / "presets"
+    fallback = tmp_path / "presets"
+    preferred.mkdir(parents=True)
+    fallback.mkdir()
+
+    (fallback / "manifest.json").write_text(
+        '{"formatVersion": 1, "presets": []}',
+        encoding="utf-8",
+    )
+
+    selected = presets_module._select_preset_root((preferred, fallback))
+
+    assert selected == fallback
+    assert presets_module.list_presets(selected) == []

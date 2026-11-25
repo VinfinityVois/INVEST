@@ -467,7 +467,7 @@ def resolve_execution_scope(graph: WorkflowGraph, target_node_ids: list[str]) ->
     return [node_id for node_id in order if node_id in included]
 
 
-def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None, integration_settings=None):
+def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None, finding_states=None, should_cancel=None, target_node_ids=None, cache_entries=None, force_full_scan=False, force_node_ids=None, cache_metadata=None, integration_settings=None, active_trigger_type=None):
     validation = validate_graph(graph, registry)
     if not validation.valid:
         raise WorkflowExecutionError(
@@ -625,7 +625,10 @@ def execute_graph(graph: WorkflowGraph, registry: NodeRegistry, on_progress=None
                 # A successful conditional node selected another output handle.
                 output = {"status": "skipped"}
         elif node.type in {"trigger.manual", "trigger.schedule"}:
-            output = {"status": "completed", "triggered": True}
+            if active_trigger_type and node.type != active_trigger_type:
+                output = {"status": "skipped"}
+            else:
+                output = {"status": "completed", "triggered": True}
         elif node.type == "source.upload":
             relative_path = node.config.get("path")
             if not isinstance(relative_path, str) or not relative_path.strip():

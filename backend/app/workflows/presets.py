@@ -11,7 +11,21 @@ _MODULE_PATH = Path(__file__).resolve()
 # In the repository, presets/ is next to backend/. In the Docker image,
 # Dockerfile copies presets/ into /app/presets beside the application package.
 _PRESET_ROOT_CANDIDATES = (_MODULE_PATH.parents[2] / "presets", _MODULE_PATH.parents[3] / "presets")
-PRESETS_ROOT = next((candidate for candidate in _PRESET_ROOT_CANDIDATES if candidate.is_dir()), _PRESET_ROOT_CANDIDATES[0])
+
+
+def _select_preset_root(candidates: tuple[Path, ...]) -> Path:
+    return next(
+        (
+            candidate
+            for candidate in candidates
+            if (candidate / "manifest.json").is_file()
+            and not (candidate / "manifest.json").is_symlink()
+        ),
+        candidates[0],
+    )
+
+
+PRESETS_ROOT = _select_preset_root(_PRESET_ROOT_CANDIDATES)
 _PRESET_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 _MAX_MANIFEST_BYTES = 128_000
 _MAX_PRESET_BYTES = 512_000

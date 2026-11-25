@@ -43,10 +43,26 @@ def extract_project_archive(
     ):
         raise ArchiveValidationError("Invalid extraction destination")
     destination = root.joinpath(*relative_destination.parts)
-    if destination.exists() or destination.is_symlink():
-        raise ArchiveValidationError("Extraction destination already exists")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.mkdir(mode=0o700)
+
+    # Resolve existing symlinks before creating anything below the parent.
+    # This prevents a workspace subdirectory symlink from redirecting uploads
+    # outside the configured workspace root.
+    try:
+        resolved_parent = destination.parent.resolve()
+        if not resolved_parent.is_relative_to(root):
+            raise ArchiveValidationError("Extraction destination escapes the workspace")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        resolved_parent = destination.parent.resolve(strict=True)
+        if not resolved_parent.is_relative_to(root):
+            raise ArchiveValidationError("Extraction destination escapes the workspace")
+        if destination.exists() or destination.is_symlink():
+            raise ArchiveValidationError("Extraction destination already exists")
+        destination.mkdir(mode=0o700)
+        if not destination.resolve(strict=True).is_relative_to(root):
+            shutil.rmtree(destination, ignore_errors=True)
+            raise ArchiveValidationError("Extraction destination escapes the workspace")
+    except (OSError, RuntimeError) as exc:
+        raise ArchiveValidationError("Invalid extraction destination") from exc
 
     try:
         stream.seek(0, 2)

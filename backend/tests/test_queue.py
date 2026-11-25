@@ -304,3 +304,137 @@ def test_claim_finalizes_stale_cancellation_without_heartbeat(monkeypatch):
             assert finalized.error == "Cancellation finalized after worker heartbeat expired"
     finally:
         engine.dispose()
+
+
+def _run_process_and_capture_cancel(monkeypatch, mutate_run=None, fail_status_read=False):
+    from app.models import WorkflowRun
+    import app.queue as queue
+
+    engine, factory = _sqlite_queue_session(monkeypatch)
+    worker_id = "original-worker"
+    with factory() as session:
+        run = WorkflowRun(
+            status="running",
+            source="ui",
+            graph_snapshot={"name": "lease test", "nodes": [], "edges": []},
+            locked_by=worker_id,
+            started_at=datetime.now(timezone.utc),
+            heartbeat_at=datetime.now(timezone.utc),
+        )
+        session.add(run)
+        session.commit()
+        run_id = str(run.id)
+
+    observed = {}
+    real_session_local = queue.SessionLocal
+    session_calls = {"count": 0}
+
+    if fail_status_read:
+        def session_local_with_transient_failure():
+            session_calls["count"] += 1
+            if session_calls["count"] == 2:
+                raise RuntimeError("temporary database failure")
+            return real_session_local()
+        monkeypatch.setattr(queue, "SessionLocal", session_local_with_transient_failure)
+
+    def fake_execute_graph(_graph, _registry, **kwargs):
+        if mutate_run is not None:
+            with factory() as session:
+                current = session.get(WorkflowRun, run.id)
+                mutate_run(current)
+                session.commit()
+        try:
+            observed["cancel"] = kwargs["should_cancel"]()
+        except Exception as exc:
+            observed["exception"] = exc
+            # execute_graph deliberately ignores transient callback errors.
+        return {"status": "completed", "outputs": {}}
+
+    monkeypatch.setattr(queue, "execute_graph", fake_execute_graph)
+    try:
+        queue.process_run(run_id, worker_id)
+        with factory() as session:
+            final_run = session.get(WorkflowRun, run.id)
+            observed["final_status"] = final_run.status
+            observed["final_owner"] = final_run.locked_by
+        return observed
+    finally:
+        engine.dispose()
+
+
+def test_process_run_stops_when_lease_owner_changes(monkeypatch):
+    def change_owner(run):
+        run.locked_by = "replacement-worker"
+
+    observed = _run_process_and_capture_cancel(monkeypatch, change_owner)
+
+    assert observed["cancel"] is True
+    assert observed["final_status"] == "running"
+    assert observed["final_owner"] == "replacement-worker"
+
+
+def test_process_run_stops_when_run_is_cancelled(monkeypatch):
+    def request_cancellation(run):
+        run.status = "cancelling"
+
+    observed = _run_process_and_capture_cancel(monkeypatch, request_cancellation)
+
+    assert observed["cancel"] is True
+    assert observed["final_status"] == "cancelled"
+    assert observed["final_owner"] is None
+
+
+def test_process_run_continues_while_worker_owns_lease(monkeypatch):
+    observed = _run_process_and_capture_cancel(monkeypatch)
+
+    assert observed["cancel"] is False
+    assert observed["final_status"] == "completed"
+    assert observed["final_owner"] is None
+
+
+def test_process_run_does_not_treat_transient_database_error_as_cancellation(monkeypatch):
+    from app.models import WorkflowRun
+    import app.queue as queue
+
+    engine, factory = _sqlite_queue_session(monkeypatch)
+    worker_id = "original-worker"
+
+    with factory() as session:
+        run = WorkflowRun(
+            status="running",
+            source="ui",
+            graph_snapshot={
+                "name": "transient lease read test",
+                "nodes": [{"id": "manual", "type": "trigger.manual"}],
+                "edges": [],
+            },
+            locked_by=worker_id,
+            started_at=datetime.now(timezone.utc),
+            heartbeat_at=datetime.now(timezone.utc),
+        )
+        session.add(run)
+        session.commit()
+        run_id = str(run.id)
+
+    real_session_local = queue.SessionLocal
+    session_calls = {"count": 0}
+
+    def session_local_with_transient_failure():
+        session_calls["count"] += 1
+        if session_calls["count"] == 2:
+            raise RuntimeError("temporary database failure")
+        return real_session_local()
+
+    monkeypatch.setattr(queue, "SessionLocal", session_local_with_transient_failure)
+
+    try:
+        queue.process_run(run_id, worker_id)
+
+        with factory() as session:
+            final_run = session.get(WorkflowRun, run.id)
+            assert final_run.status == "completed"
+            assert final_run.result["outputs"]["manual"]["status"] == "completed"
+
+        assert session_calls["count"] >= 3
+    finally:
+        engine.dispose()

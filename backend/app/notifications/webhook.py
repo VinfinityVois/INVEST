@@ -4,8 +4,10 @@ from __future__ import annotations
 import ipaddress
 import json
 import socket
+import time
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
 
 from app.config import settings
@@ -15,43 +17,128 @@ class WebhookDeliveryError(RuntimeError):
     pass
 
 
-def _validate_webhook_url(raw_url: str, allowed_hosts=None) -> str:
+def _normalize_hostname(host: str) -> str:
+    return host.encode("idna").decode("ascii").lower().rstrip(".")
+
+
+def _resolve_webhook_url(raw_url: str, allowed_hosts=None) -> tuple[str, str, tuple[str, ...]]:
     value = raw_url.strip()
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise WebhookDeliveryError("Webhook URL должен использовать HTTPS.")
+        raise WebhookDeliveryError("Webhook URL must use HTTPS.")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
-        raise WebhookDeliveryError("Webhook URL не должен содержать credentials, query или fragment.")
+        raise WebhookDeliveryError("Webhook URL must not contain credentials, query or fragment.")
     try:
         port = parsed.port
     except ValueError as exc:
-        raise WebhookDeliveryError("Webhook URL содержит некорректный порт.") from exc
+        raise WebhookDeliveryError("Webhook URL contains an invalid port.") from exc
     if port not in (None, 443):
-        raise WebhookDeliveryError("Для webhook разрешён только HTTPS-порт 443.")
+        raise WebhookDeliveryError("Only HTTPS port 443 is allowed for webhooks.")
+
     raw_allowed = allowed_hosts if allowed_hosts is not None else settings.webhook_allowed_host_list
-    allowed = {
-        str(host).strip().lower().rstrip(".")
-        for host in raw_allowed
-        if str(host).strip()
-    }
-    host = parsed.hostname.lower().rstrip(".")
-    if host not in allowed:
-        raise WebhookDeliveryError("Домен webhook отсутствует в списке разрешений Настроек платформы (NOTIFY_WEBHOOK_ALLOWED_HOSTS).")
     try:
-        addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        allowed = {
+            _normalize_hostname(str(item).strip())
+            for item in raw_allowed
+            if str(item).strip()
+        }
+        host = _normalize_hostname(parsed.hostname)
+    except (UnicodeError, ValueError) as exc:
+        raise WebhookDeliveryError("Webhook hostname is invalid.") from exc
+
+    if host not in allowed:
+        raise WebhookDeliveryError("Webhook hostname is not in NOTIFY_WEBHOOK_ALLOWED_HOSTS.")
+
+    try:
+        records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise WebhookDeliveryError("Не удалось разрешить DNS-имя webhook.") from exc
-    if not addresses:
-        raise WebhookDeliveryError("Webhook hostname не имеет DNS-адресов.")
-    for address in addresses:
+        raise WebhookDeliveryError("Could not resolve webhook DNS name.") from exc
+    if not records:
+        raise WebhookDeliveryError("Webhook hostname has no DNS addresses.")
+
+    validated = []
+    seen = set()
+    for record in records:
         try:
-            ip = ipaddress.ip_address(address[4][0])
-        except ValueError as exc:
-            raise WebhookDeliveryError("DNS webhook вернул некорректный IP-адрес.") from exc
+            ip = ipaddress.ip_address(record[4][0])
+        except (IndexError, TypeError, ValueError) as exc:
+            raise WebhookDeliveryError("Webhook DNS returned an invalid IP address.") from exc
         if not ip.is_global:
-            raise WebhookDeliveryError("Webhook hostname разрешается в непубличный IP; запрос заблокирован.")
+            raise WebhookDeliveryError("Webhook hostname resolves to a non-public IP; request blocked.")
+        normalized_ip = str(ip)
+        if normalized_ip not in seen:
+            seen.add(normalized_ip)
+            validated.append(normalized_ip)
+
+    if not validated:
+        raise WebhookDeliveryError("Webhook hostname has no usable DNS addresses.")
+    return value, host, tuple(validated)
+
+
+def _validate_webhook_url(raw_url: str, allowed_hosts=None) -> str:
+    value, _host, _addresses = _resolve_webhook_url(raw_url, allowed_hosts)
     return value
 
+
+class _PinnedIPNetworkBackend(httpcore.NetworkBackend):
+    """Connect only to IPs validated before the HTTP request."""
+
+    def __init__(self, hostname: str, addresses: tuple[str, ...], backend=None):
+        self._hostname = hostname
+        self._addresses = addresses
+        self._backend = backend or httpcore.SyncBackend()
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        requested_host = host.decode("ascii") if isinstance(host, bytes) else str(host)
+        try:
+            normalized_host = _normalize_hostname(requested_host)
+        except (UnicodeError, ValueError) as exc:
+            raise httpcore.ConnectError("Unexpected webhook connection hostname.") from exc
+
+        if normalized_host != self._hostname or port != 443:
+            raise httpcore.ConnectError("Unexpected webhook connection destination.")
+
+        last_error = None
+        for address in self._addresses:
+            try:
+                return self._backend.connect_tcp(
+                    host=address,
+                    port=443,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                last_error = exc
+
+        raise httpcore.ConnectError(
+            "Could not connect to any validated webhook IP address."
+        ) from last_error
+
+    def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raise httpcore.ConnectError("Unix sockets are not allowed for webhook delivery.")
+
+    def sleep(self, seconds):
+        time.sleep(seconds)
+
+
+class _PinnedIPTransport(httpx.HTTPTransport):
+    """HTTPX transport whose TCP connections use the previously validated IPs."""
+
+    def __init__(self, hostname: str, addresses: tuple[str, ...]):
+        super().__init__(trust_env=False)
+        original_pool = self._pool
+        ssl_context = original_pool._ssl_context
+        original_pool.close()
+
+        limits = httpx.Limits()
+        self._pool = httpcore.ConnectionPool(
+            ssl_context=ssl_context,
+            max_connections=limits.max_connections,
+            max_keepalive_connections=limits.max_keepalive_connections,
+            keepalive_expiry=limits.keepalive_expiry,
+            network_backend=_PinnedIPNetworkBackend(hostname, addresses),
+        )
 
 def _safe_findings(findings: list[dict], limit: int = 10) -> list[dict]:
     field_limits = {
@@ -115,23 +202,34 @@ def build_notification_payload(report: dict, findings: list[dict] | None = None)
 
 
 def deliver_webhook(url: str, payload: dict, allowed_hosts=None) -> dict:
-    endpoint = _validate_webhook_url(url, allowed_hosts=allowed_hosts)
+    endpoint, hostname, addresses = _resolve_webhook_url(url, allowed_hosts)
+    transport = _PinnedIPTransport(hostname, addresses)
     try:
-        with httpx.Client(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(
+            transport=transport,
+            timeout=httpx.Timeout(10.0, connect=4.0),
+            follow_redirects=False,
+            trust_env=False,
+        ) as client:
             response = client.post(
                 endpoint,
                 json=payload,
                 headers={"User-Agent": "INVEST-Security-Workflow/1.0"},
             )
         if response.is_redirect:
-            raise WebhookDeliveryError("Webhook вернул redirect; переход по перенаправлениям запрещён.")
+            raise WebhookDeliveryError("Webhook returned a redirect; redirects are disabled.")
         response.raise_for_status()
     except WebhookDeliveryError:
         raise
     except httpx.TimeoutException as exc:
-        raise WebhookDeliveryError("Webhook не ответил за 10 секунд.") from exc
+        raise WebhookDeliveryError("Webhook did not respond within 10 seconds.") from exc
     except httpx.HTTPStatusError as exc:
-        raise WebhookDeliveryError(f"Webhook вернул HTTP {exc.response.status_code}.") from exc
+        raise WebhookDeliveryError(f"Webhook returned HTTP {exc.response.status_code}.") from exc
     except httpx.HTTPError as exc:
-        raise WebhookDeliveryError("Не удалось доставить webhook; проверьте endpoint и сетевое соединение.") from exc
+        raise WebhookDeliveryError(
+            "Webhook delivery failed; check the endpoint and network connection."
+        ) from exc
+    finally:
+        transport.close()
+
     return {"http_status": response.status_code, "delivered": True}
